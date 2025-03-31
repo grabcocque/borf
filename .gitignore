@@ -1,0 +1,39 @@
+# Rust compiled files
+*.so
+*.dylib
+*.dll
+*.rs~
+*.rs#
+*.scm~
+*.scm#
+*.fasl
+*.wpo
+*.c
+*.o
+*.db
+*.ext
+
+# Cargo build files
+build/
+_build/
+Cargo-build*/
+CargoFiles/
+CargoCache.txt
+Cargo_install.Cargo
+CTestTestfile.Cargo
+Makefile
+compile_commands.json
+CargoUserPresets.json
+Testing/
+DartConfiguration.tcl
+_deps/
+
+# Potential editor/IDE files
+.vscode/
+.idea/
+*~
+.DS_Store
+
+# Added by cargo
+
+/target

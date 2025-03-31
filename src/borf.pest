@@ -1,0 +1,51 @@
+// interaction_calculus.pest
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+COMMENT = _{ "//" ~ (!"\n" ~ ANY)* ~ "\n" | "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+
+// Identifiers
+identifier = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
+// Type system
+type = { 
+    dyn_type | simple_type | union_type | intersection_type | parametric_type
+}
+dyn_type = { "Dyn" }
+simple_type = { identifier }
+union_type = { type ~ "|" ~ type }
+intersection_type = { type ~ "&" ~ type }
+parametric_type = { identifier ~ "<" ~ type ~ ("," ~ type)* ~ ">" }
+
+// Agent definition
+agent_def = { 
+    "agent" ~ identifier ~ 
+    ("<" ~ type_params ~ ">")?  ~ 
+    "(" ~ port_def ~ ("," ~ port_def)* ~ ")" ~
+    (":" ~ type)? ~ ";"
+}
+type_params = { identifier ~ ("," ~ identifier)* }
+port_def = { identifier ~ (":" ~ type)? }
+
+// Net structure
+net = { "net" ~ identifier ~ "{" ~ (connection | agent_instance)* ~ "}" }
+agent_instance = { 
+    identifier ~ 
+    ("<" ~ type ~ ("," ~ type)* ~ ">")?  ~ 
+    "(" ~ port_binding ~ ("," ~ port_binding)* ~ ")" ~ ";"
+}
+port_binding = { identifier ~ ("=" ~ wire)? }
+wire = { identifier ~ "." ~ identifier | free_port }
+free_port = { identifier }
+
+// Connection
+connection = { wire ~ "<->" ~ wire ~ ";" }
+
+// Reduction rules
+rule = { 
+    "rule" ~ identifier ~ ":" ~ 
+    pattern ~ "=>" ~ replacement ~ ";"
+}
+pattern = { agent_instance ~ "<->" ~ agent_instance }
+replacement = { "{" ~ (connection | agent_instance)* ~ "}" }
+
+// Program
+program = { SOI ~ (agent_def | rule | net)* ~ EOI }

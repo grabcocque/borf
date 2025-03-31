@@ -1,0 +1,13 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+
+# At the end of a conversation or workflow, before your final summary:
+
+- In a loop until everything is good:
+    - Run `cargo clippy` and fix any issues
+    - Run `cargo test` and fix any issues
+    - Run `cargo test --doc` and fix any issues
+    - Run `pre-commit run -a` and fix any issues

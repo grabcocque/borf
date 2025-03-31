@@ -1,0 +1,31 @@
+[package]
+name = "borf-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.borf]
+path = ".."
+
+[[bin]]
+name = "fuzz_target_1"
+path = "fuzz_targets/fuzz_target_1.rs"
+test = false
+doc = false
+bench = false
+
+# Add dependency on the main borf crate
+borf = { path = "..", features = ["fuzzing"] }
+
+[features]
+# Optional: Define features if needed for fuzzing specific parts
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]

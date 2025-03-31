@@ -1,0 +1,29 @@
+[package]
+name = "borf"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "borf"
+path = "src/lib.rs"
+
+[[bin]]
+name = "borf"
+path = "src/main.rs"
+
+[dependencies]
+pest = "2.7.10"
+pest_derive = "2.7.10"
+
+# Error handling
+thiserror = "1.0"
+miette = { version = "7.2.0", features = ["fancy"] }
+
+# Dependencies for fuzzing
+libfuzzer-sys = { version = "0.4", optional = true }
+arbitrary = { version = "1", features = ["derive"], optional = true }
+
+[features]
+fuzzing = ["dep:libfuzzer-sys", "dep:arbitrary"]
