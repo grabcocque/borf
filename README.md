@@ -85,54 +85,54 @@ The main challenge lies in designing efficient and manageable encodings and ensu
 ### Phase 1: Project Setup and Robust Foundation (Weeks 1-2)
 
 1. **Initial Project Configuration**
-   * [ ] Create a new Rust project with Cargo
-   * [ ] Set up the directory structure
-   * [ ] Add core dependencies:
-     * [ ] `pest` and `pest_derive` for parsing
-     * [ ] `thiserror` for ergonomic error handling
-     * [ ] `miette` for rich diagnostic reporting
-     * [ ] `libfuzzer-sys` and `arbitrary` for fuzzing
+   * [x] Create a new Rust project with Cargo
+   * [x] Set up the directory structure
+   * [x] Add core dependencies:
+     * [x] `pest` and `pest_derive` for parsing
+     * [x] `thiserror` for ergonomic error handling
+     * [x] `miette` for rich diagnostic reporting
+     * [x] `libfuzzer-sys` and `arbitrary` for fuzzing
    * [ ] Configure test environment (unit tests, integration tests)
-   * [ ] Set up fuzzing infrastructure with cargo-fuzz
+   * [~] Set up fuzzing infrastructure with cargo-fuzz
    * [ ] Create CI/CD pipeline that includes fuzzing runs
 
 2. **Error Handling Infrastructure**
-   * [ ] Design the error hierarchy using `thiserror`
-     * [ ] Parser errors (syntax, unexpected tokens)
-     * [ ] Semantic errors (type mismatches, undefined symbols)
-     * [ ] Runtime errors (execution failures)
-   * [ ] Set up `miette` for rich diagnostic output
-     * [ ] Configure source code snippets in error messages
+   * [x] Design the error hierarchy using `thiserror`
+     * [~] Parser errors (syntax, unexpected tokens) - *Basic placeholders exist*
+     * [~] Semantic errors (type mismatches, undefined symbols) - *Basic placeholders exist*
+     * [~] Runtime errors (execution failures) - *Basic placeholders exist*
+   * [x] Set up `miette` for rich diagnostic output
+     * [~] Configure source code snippets in error messages - *Basic setup in `BorfError`*
      * [ ] Add syntax highlighting for error locations
      * [ ] Include helpful suggestions for common mistakes
 
 3. **Define the Core Data Structures**
-   * [ ] Implement the basic Rust-native Catlab.jl-style ACSets-inspired graph representation
-     * [ ] `InteractionNet` struct and associated data types
-     * [ ] Agent and port representations
-     * [ ] Connection representation
-   * [ ] Implement the type system core
-     * [ ] Define `Type` enum with variants for all type constructs
-     * [ ] Create `TypeContext` for tracking type annotations and inferences
+   * [x] Implement the basic Rust-native Catlab.jl-style ACSets-inspired graph representation
+     * [x] `InteractionNet` struct and associated data types
+     * [x] Agent and port representations
+     * [x] Connection representation
+   * [x] Implement the type system core
+     * [x] Define `Type` enum with variants for all type constructs
+     * [x] Create `TypeContext` for tracking type annotations and inferences
    * [ ] Implement `Arbitrary` trait for all core data structures to support fuzzing
 
 ### Phase 2: Parser Development with Robust Error Handling (Weeks 3-5)
 
 4. **Create the Pest Grammar**
-   * [ ] Define the grammar for the interaction calculus
-     * [ ] Agent definitions
-     * [ ] Net structure
-     * [ ] Connection syntax
-     * [ ] Type annotations
-     * [ ] Reduction rules
+   * [x] Define the grammar for the interaction calculus
+     * [x] Agent definitions
+     * [x] Net structure
+     * [x] Connection syntax
+     * [x] Type annotations
+     * [x] Reduction rules
    * [ ] Test the grammar with sample inputs
    * [ ] Add detailed error labels and hints in the Pest grammar
-   * [ ] Create fuzz targets for the grammar to discover edge cases
+   * [~] Create fuzz targets for the grammar to discover edge cases - *One general parser target exists*
 
 5. **Build the AST Processor with Rich Diagnostics**
-   * [ ] Implement functions to traverse the Pest parse tree
-   * [ ] Convert parse tree nodes to internal data structures
-   * [ ] Integrate miette for detailed error reporting:
+   * [ ] Implement functions to traverse the Pest parse tree - *Placeholder in `parser.rs`*
+   * [ ] Convert parse tree nodes to internal data structures - *TODO in `parser.rs`*
+   * [~] Integrate miette for detailed error reporting: - *Basic setup via `BorfError`*
      * [ ] Source spans for precise error locations
      * [ ] Contextual help messages
      * [ ] Visual error indicators in terminal output
@@ -140,7 +140,7 @@ The main challenge lies in designing efficient and manageable encodings and ensu
    * [ ] Test with increasingly complex examples
 
 6. **Parser Fuzzing and Hardening**
-   * [ ] Create comprehensive fuzz targets using `arbitrary` and `libfuzzer-sys`
+   * [~] Create comprehensive fuzz targets using `arbitrary` and `libfuzzer-sys` - *One target exists*
      * [ ] Target syntax edge cases
      * [ ] Target input length extremes
      * [ ] Target complex nested structures
@@ -151,26 +151,26 @@ The main challenge lies in designing efficient and manageable encodings and ensu
 ### Phase 3: Type System Implementation (Weeks 6-7)
 
 7. **Implement the Gradual Type System**
-   * [ ] Develop the core type checking infrastructure
-   * [ ] Implement set-theoretic types (union, intersection)
-   * [ ] Build the type inference engine for connected ports
+   * [~] Develop the core type checking infrastructure - *Structs exist*
+   * [~] Implement set-theoretic types (union, intersection) - *Enum variants exist*
+   * [~] Build the type inference engine for connected ports - *Basic `infer_types` method exists*
    * [ ] Implement subtyping relationship and consistency checks
-   * [ ] Add detailed type error reporting with miette
+   * [~] Add detailed type error reporting with miette - *Placeholders exist in `BorfError`*
      * [ ] Show relevant type constraints
      * [ ] Provide suggestions for fixing type errors
 
 8. **Type Unification**
-   * [ ] Implement unification for primitive types
-   * [ ] Add support for unifying parametric types
-   * [ ] Implement unification for union and intersection types
-   * [ ] Handle the `Dyn` type and gradual typing features
+   * [~] Implement unification for primitive types - *Handles `Dyn`, `Simple`*
+   * [~] Add support for unifying parametric types - *Handles basic parametric matching*
+   * [ ] Implement unification for union and intersection types - *TODO in `unify_types`*
+   * [~] Handle the `Dyn` type and gradual typing features - *`unify_types` handles `Dyn`*
    * [ ] Create fuzz targets for the type unification system
    * [ ] Test with complex type scenarios
 
 ### Phase 4: Graph Representation and Rewriting (Weeks 8-10)
 
 9. **Complete the Rust-native Catlab.jl-style ACSets Graph Implementation**
-   * [ ] Finalize the graph representation optimized for rewrites
+   * [~] Finalize the graph representation optimized for rewrites - *Basic structures exist*
    * [ ] Implement efficient querying mechanisms
    * [ ] Build serialization/deserialization for graph states
    * [ ] Add visualization capabilities for debugging
@@ -186,8 +186,8 @@ The main challenge lies in designing efficient and manageable encodings and ensu
     * [ ] Fuzz the pattern matching engine for robustness
 
 11. **Implement Graph Rewriting Rules**
-    * [ ] Create the framework for defining rewrite rules
-    * [ ] Implement rule application logic
+    * [~] Create the framework for defining rewrite rules - *Placeholders exist*
+    * [ ] Implement rule application logic - *Placeholder `apply_reduction` exists*
     * [ ] Ensure preservation of connections during rewrites
     * [ ] Add support for standard Lafont combinators
       * [ ] Duplicator
@@ -198,7 +198,7 @@ The main challenge lies in designing efficient and manageable encodings and ensu
 ### Phase 5: Reduction Engine (Weeks 11-12)
 
 12. **Build the Execution Engine**
-    * [ ] Implement the redex detection algorithm
+    * [~] Implement the redex detection algorithm - *`find_redexes` exists*
     * [ ] Create the reduction strategy (eager vs. lazy options)
     * [ ] Build step-by-step and normalization execution modes
     * [ ] Ensure deterministic reduction when multiple redexes exist
@@ -206,7 +206,7 @@ The main challenge lies in designing efficient and manageable encodings and ensu
     * [ ] Create fuzz targets for the execution engine
 
 13. **Type Propagation During Reduction**
-    * [ ] Implement type inference propagation after rewrites
+    * [~] Implement type inference propagation after rewrites - *`infer_types` exists, not integrated with reduction*
     * [ ] Ensure type consistency is maintained during reduction
     * [ ] Add runtime type checking (optional, for debugging)
     * [ ] Handle type errors gracefully with informative messages
