@@ -1,14 +1,16 @@
-struct InteractionEngine {
+use crate::evaluator::{InteractionNet, ReductionRules};
+
+pub struct InteractionEngine {
     net: InteractionNet,
     rules: ReductionRules,
 }
 
 impl InteractionEngine {
-    fn new(net: InteractionNet, rules: ReductionRules) -> Self {
+    pub fn new(net: InteractionNet, rules: ReductionRules) -> Self {
         Self { net, rules }
     }
 
-    fn normalize(&mut self) -> Result<(), String> {
+    pub fn normalize(&mut self) -> Result<(), String> {
         // Run until no more reductions are possible
         loop {
             let redexes = self.net.find_redexes();
@@ -27,7 +29,7 @@ impl InteractionEngine {
         Ok(())
     }
 
-    fn step(&mut self) -> Result<bool, String> {
+    pub fn step(&mut self) -> Result<bool, String> {
         // Perform a single reduction step if possible
         let redexes = self.net.find_redexes();
         if let Some(redex) = redexes.first() {

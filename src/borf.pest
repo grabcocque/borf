@@ -5,20 +5,18 @@ COMMENT = _{ "//" ~ (!"\n" ~ ANY)* ~ "\n" | "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
 // Identifiers
 identifier = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
-// Type system
-type = { 
-    dyn_type | simple_type | union_type | intersection_type | parametric_type
-}
+// Type system using Pratt parser to handle recursive type expressions
+type = { type_term ~ (type_op ~ type_term)* }
+type_term = _{ dyn_type | parametric_type | simple_type | "(" ~ type ~ ")" }
+type_op = _{ "|" | "&" }
 dyn_type = { "Dyn" }
 simple_type = { identifier }
-union_type = { type ~ "|" ~ type }
-intersection_type = { type ~ "&" ~ type }
 parametric_type = { identifier ~ "<" ~ type ~ ("," ~ type)* ~ ">" }
 
 // Agent definition
-agent_def = { 
-    "agent" ~ identifier ~ 
-    ("<" ~ type_params ~ ">")?  ~ 
+agent_def = {
+    "agent" ~ identifier ~
+    ("<" ~ type_params ~ ">")?  ~
     "(" ~ port_def ~ ("," ~ port_def)* ~ ")" ~
     (":" ~ type)? ~ ";"
 }
@@ -27,9 +25,9 @@ port_def = { identifier ~ (":" ~ type)? }
 
 // Net structure
 net = { "net" ~ identifier ~ "{" ~ (connection | agent_instance)* ~ "}" }
-agent_instance = { 
-    identifier ~ 
-    ("<" ~ type ~ ("," ~ type)* ~ ">")?  ~ 
+agent_instance = {
+    identifier ~
+    ("<" ~ type ~ ("," ~ type)* ~ ">")?  ~
     "(" ~ port_binding ~ ("," ~ port_binding)* ~ ")" ~ ";"
 }
 port_binding = { identifier ~ ("=" ~ wire)? }
@@ -40,8 +38,8 @@ free_port = { identifier }
 connection = { wire ~ "<->" ~ wire ~ ";" }
 
 // Reduction rules
-rule = { 
-    "rule" ~ identifier ~ ":" ~ 
+rule = {
+    "rule" ~ identifier ~ ":" ~
     pattern ~ "=>" ~ replacement ~ ";"
 }
 pattern = { agent_instance ~ "<->" ~ agent_instance }

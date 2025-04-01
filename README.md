@@ -452,7 +452,7 @@ enum ParserError {
         span: miette::SourceSpan,
         expected: String,
     },
-    
+
     #[error("Undefined agent")]
     #[diagnostic(
         code(parser::undefined_agent),
@@ -465,7 +465,7 @@ enum ParserError {
         span: miette::SourceSpan,
         name: String,
     },
-    
+
     // Other error variants...
 }
 ```
@@ -483,7 +483,7 @@ COMMENT = _{ "//" ~ (!"\n" ~ ANY)* ~ "\n" | "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
 identifier = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
 // Type system
-type = { 
+type = {
     dyn_type | simple_type | union_type | intersection_type | parametric_type
 }
 dyn_type = { "Dyn" }
@@ -493,9 +493,9 @@ intersection_type = { type ~ "&" ~ type }
 parametric_type = { identifier ~ "<" ~ type ~ ("," ~ type)* ~ ">" }
 
 // Agent definition with error recovery
-agent_def = { 
-    "agent" ~ identifier ~ 
-    ("<" ~ type_params ~ ">")?  ~ 
+agent_def = {
+    "agent" ~ identifier ~
+    ("<" ~ type_params ~ ">")?  ~
     "(" ~ (port_def ~ ("," ~ port_def)*)? ~ ")" ~
     (":" ~ type)? ~ ";"
 }
@@ -593,7 +593,7 @@ impl InteractionEngine {
     fn normalize(&mut self) -> Result<(), ReductionError> {
         // Reduction logic here
     }
-    
+
     fn step(&mut self) -> Result<bool, ReductionError> {
         // Single-step reduction
     }

@@ -1,7 +1,8 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
-struct InteractionNet {
+#[allow(dead_code)]
+pub struct InteractionNet {
     // ACSets-inspired structure
     agents: HashMap<AgentId, Agent>,
     ports: HashMap<PortId, Port>,
@@ -16,7 +17,8 @@ type PortId = usize;
 type ConnectionId = usize;
 
 #[derive(Debug, Clone)]
-struct Agent {
+#[allow(dead_code)]
+pub struct Agent {
     id: AgentId,
     name: String,
     principal_port: PortId,
@@ -25,7 +27,8 @@ struct Agent {
 }
 
 #[derive(Debug, Clone)]
-struct Port {
+#[allow(dead_code)]
+pub struct Port {
     id: PortId,
     name: String,
     agent: AgentId,
@@ -34,7 +37,8 @@ struct Port {
 }
 
 #[derive(Debug, Clone)]
-struct Connection {
+#[allow(dead_code)]
+pub struct Connection {
     id: ConnectionId,
     port1: PortId,
     port2: PortId,
@@ -42,7 +46,8 @@ struct Connection {
 
 // Gradual type system
 #[derive(Debug, Clone, PartialEq)]
-enum Type {
+#[allow(dead_code)]
+pub enum Type {
     Dyn,
     Simple(String),
     Union(Box<Type>, Box<Type>),
@@ -50,13 +55,15 @@ enum Type {
     Parametric(String, Vec<Type>),
 }
 
-struct TypeContext {
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct TypeContext {
     port_types: HashMap<PortId, Type>,
     inferred_types: HashMap<PortId, Type>,
 }
 
 impl InteractionNet {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             agents: HashMap::new(),
             ports: HashMap::new(),
@@ -70,7 +77,7 @@ impl InteractionNet {
 
     // Methods for adding agents, connecting ports, etc.
 
-    fn find_redexes(&self) -> Vec<(AgentId, AgentId)> {
+    pub fn find_redexes(&self) -> Vec<(AgentId, AgentId)> {
         // Find pairs of agents connected by their principal ports
         let mut redexes = Vec::new();
 
@@ -86,10 +93,10 @@ impl InteractionNet {
         redexes
     }
 
-    fn apply_reduction(
+    pub fn apply_reduction(
         &mut self,
-        redex: (AgentId, AgentId),
-        rules: &ReductionRules,
+        _redex: (AgentId, AgentId),
+        _rules: &ReductionRules,
     ) -> Result<(), String> {
         // Apply a reduction rule to a redex
         // 1. Find matching rule
@@ -102,7 +109,7 @@ impl InteractionNet {
         Ok(())
     }
 
-    fn infer_types(&mut self) {
+    pub fn infer_types(&mut self) {
         // Propagate type information through connections
         // Starting from annotated ports, push types through the net
 
@@ -180,18 +187,29 @@ fn unify_types(t1: &Type, t2: &Type) -> Option<Type> {
     }
 }
 
-struct ReductionRules {
+#[allow(dead_code)]
+pub struct ReductionRules {
     rules: Vec<ReductionRule>,
 }
 
-struct ReductionRule {
+impl ReductionRules {
+    pub fn new() -> Self {
+        Self { rules: Vec::new() }
+    }
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct ReductionRule {
     name: String,
     left_agent: String,
     right_agent: String,
     replacement: Vec<ReplacementAction>,
 }
 
-enum ReplacementAction {
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub enum ReplacementAction {
     CreateAgent {
         name: String,
         ports: Vec<String>,
@@ -200,4 +218,16 @@ enum ReplacementAction {
         port1: (String, String),
         port2: (String, String),
     },
+}
+
+impl Default for InteractionNet {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Default for ReductionRules {
+    fn default() -> Self {
+        Self::new()
+    }
 }

@@ -1,17 +1,18 @@
+use crate::evaluator::{InteractionNet, ReductionRules};
 use pest::Parser;
 use pest_derive::Parser;
 
 #[derive(Parser)]
 #[grammar = "borf.pest"]
-struct InteractionCalculusParser;
+pub struct InteractionCalculusParser;
 
-fn parse_program(input: &str) -> Result<InteractionNet, Box<dyn std::error::Error>> {
-    let parsed = InteractionCalculusParser::parse(Rule::program, input)?
+pub fn parse_program(input: &str) -> Result<InteractionNet, Box<dyn std::error::Error>> {
+    let _parsed = InteractionCalculusParser::parse(Rule::program, input)?
         .next()
         .unwrap();
 
-    let mut net = InteractionNet::new();
-    let mut rules = ReductionRules { rules: Vec::new() };
+    let net = InteractionNet::new();
+    let _rules = ReductionRules::new();
 
     // Process the parsed AST to build our interaction net
     // This would involve walking the parse tree and converting
@@ -21,3 +22,5 @@ fn parse_program(input: &str) -> Result<InteractionNet, Box<dyn std::error::Erro
 
     Ok(net)
 }
+
+// Helper functions to parse various parts of the syntax could go here
