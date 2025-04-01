@@ -12,8 +12,8 @@ pub struct InteractionNet {
     type_context: TypeContext,
 }
 
-type AgentId = usize;
-type PortId = usize;
+pub type AgentId = usize;
+pub type PortId = usize;
 type ConnectionId = usize;
 
 #[derive(Debug, Clone)]

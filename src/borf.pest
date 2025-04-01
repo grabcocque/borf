@@ -1,49 +1,74 @@
-// interaction_calculus.pest
+// borf.pest - Grammar for the Borf language
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
-COMMENT = _{ "//" ~ (!"\n" ~ ANY)* ~ "\n" | "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+COMMENT = _{ ("#" | ";;") ~ (!"\n" ~ ANY)* ~ "\n" | "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
 
 // Identifiers
 identifier = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
-// Type system using Pratt parser to handle recursive type expressions
-type = { type_term ~ (type_op ~ type_term)* }
-type_term = _{ dyn_type | parametric_type | simple_type | "(" ~ type ~ ")" }
-type_op = _{ "|" | "&" }
-dyn_type = { "Dyn" }
-simple_type = { identifier }
-parametric_type = { identifier ~ "<" ~ type ~ ("," ~ type)* ~ ">" }
+// Basic types
+int = @{ ASCII_DIGIT+ }
+float = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* | "." ~ ASCII_DIGIT+ }
+string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
-// Agent definition
-agent_def = {
-    "agent" ~ identifier ~
-    ("<" ~ type_params ~ ">")?  ~
-    "(" ~ port_def ~ ("," ~ port_def)* ~ ")" ~
-    (":" ~ type)? ~ ";"
+// Set literals for mapping to
+set_literal = { "{" ~ int ~ ("," ~ int)* ~ "}" }
+
+// ACSet and type definitions - Note we're making ":" optional to handle both formats
+acset_def = { "@ACSet" ~ ":"? ~ "{" ~ acset_content ~ "}" }
+acset_content = _{ (object_decl ~ ";" | mapping_decl ~ ";" | comment_line)*  }
+
+object_decl = { identifier ~ ("," ~ identifier)* }
+mapping_decl = { identifier ~ ":" ~ identifier ~ "." ~ mapping_type ~ (identifier | set_literal) }
+mapping_type = { "to" | "subseteq" | "<=>" }
+comment_line = @{ ("#" | ";;") ~ (!"\n" ~ ANY)* }
+
+// Wire diagram definition
+wire_diagram_def = { "@WireDgm" ~ "<" ~ identifier ~ ">" ~ ":"? ~ "{" ~ wire_diagram_content ~ "}" }
+wire_diagram_content = _{ (object_decl ~ ";" | mapping_decl ~ ";" | law_decl ~ ";" | comment_line)* }
+
+// Interaction net definition
+inet_def = { "@INet" ~ "<" ~ identifier ~ ">" ~ ":"? ~ "{" ~ inet_content ~ "}" }
+inet_content = _{ (object_decl ~ ";" | mapping_decl ~ ";" | law_decl ~ ";" | comment_line)* }
+
+// Laws and constraints
+law_decl = { (identifier ~ "." ~ "circ" ~ identifier ~ "." ~ law_op ~ identifier) |
+             ("." ~ "forall" ~ forall_expr) }
+
+law_op = { "equiv" | "circ" }
+
+forall_expr = {
+    identifier ~ ("," ~ identifier)* ~ "." ~ "in" ~ identifier ~ ":" ~
+    constraint_expr
 }
-type_params = { identifier ~ ("," ~ identifier)* }
-port_def = { identifier ~ (":" ~ type)? }
 
-// Net structure
-net = { "net" ~ identifier ~ "{" ~ (connection | agent_instance)* ~ "}" }
-agent_instance = {
-    identifier ~
-    ("<" ~ type ~ ("," ~ type)* ~ ">")?  ~
-    "(" ~ port_binding ~ ("," ~ port_binding)* ~ ")" ~ ";"
+constraint_expr = {
+    constraint_term ~ (constraint_op ~ constraint_term)*
 }
-port_binding = { identifier ~ ("=" ~ wire)? }
-wire = { identifier ~ "." ~ identifier | free_port }
-free_port = { identifier }
 
-// Connection
-connection = { wire ~ "<->" ~ wire ~ ";" }
-
-// Reduction rules
-rule = {
-    "rule" ~ identifier ~ ":" ~
-    pattern ~ "=>" ~ replacement ~ ";"
+constraint_term = _{
+    int |
+    set_expr |
+    function_app |
+    identifier |
+    "(" ~ constraint_expr ~ ")"
 }
-pattern = { agent_instance ~ "<->" ~ agent_instance }
-replacement = { "{" ~ (connection | agent_instance)* ~ "}" }
+
+constraint_op = _{ "=" | ".land" | ".>=" | ".>" | ".<=" | ".<" | ".>=>"}
+
+set_expr = {
+    "{" ~ set_element ~ ("|" ~ set_condition)? ~ "}" |
+    identifier ~ "*" ~ identifier
+}
+
+set_element = { identifier ~ ("," ~ identifier)* }
+set_condition = { identifier ~ "(" ~ identifier ~ ")" ~ ("." ~ "land" ~ identifier ~ "(" ~ identifier ~ ")")? }
+
+function_app = { identifier ~ "(" ~ identifier ~ ")" }
+
+// Processing expressions
+pipe_expr = { identifier ~ ("|>" ~ identifier)+ }
+app_expr = { ">" ~ identifier ~ "(" ~ (app_expr | identifier) ~ ")" }
+composition_expr = { identifier ~ "=" ~ identifier ~ ("." ~ "circ" ~ identifier)+ ~ "(" ~ identifier ~ ")" }
 
 // Program
-program = { SOI ~ (agent_def | rule | net)* ~ EOI }
+program = { SOI ~ (acset_def | wire_diagram_def | inet_def | pipe_expr | app_expr | composition_expr)* ~ EOI }

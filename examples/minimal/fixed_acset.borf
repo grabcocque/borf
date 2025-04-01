@@ -1,0 +1,6 @@
+@ACSet{
+  N;
+  E;
+  s:E.to N;
+  t:E.to N;
+}
