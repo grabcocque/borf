@@ -42,10 +42,24 @@
   - Maps s,t assign source and target nodes to each edge
   - Decorations lN,lE assign labels/attributes to nodes and edges
 ]]
-@ACSet: {
+@ACSet<Category>: {
   N;E;                --[[ N: set of nodes, E: set of edges ]]
   s:E $to N; t:E $to N; --[[ s: source map, t: target map ]]
-  lN:N $to X; lE:E $to X --[[ lN: node decoration, lE: edge decoration, X: attribute type ]]
+  lN:N $to X; lE:E $to X; --[[ lN: node decoration, lE: edge decoration, X: attribute type ]]
+  id:N $to E;         --[[ id: identity edge for each node ]]
+  comp:E * E $to E;  --[[ comp: edge composition ]]
+
+  --[[ Category structure mapping ]]
+  O = N;              --[[ Objects are nodes ]]
+  M = E;              --[[ Morphisms are edges ]]
+  dom = s;            --[[ Domain is source ]]
+  cod = t;            --[[ Codomain is target ]]
+
+  --[[ Identity laws ]]
+  $forall n $in N: s(id(n)) = t(id(n)) = n;  --[[ Identity edges loop on their node ]]
+
+  --[[ Composition law ]]
+  $forall e1,e2 $in E: t(e1) = s(e2) => s(comp(e2,e1)) = s(e1) $and t(comp(e2,e1)) = t(e2);
 }
 
 --[[
@@ -59,7 +73,17 @@
   B;P;                --[[ B: set of boxes, P: set of ports ]]
   b:P $to B;           --[[ b: assigns each port to its parent box ]]
   w:P<->P;            --[[ w: wiring relation, connects ports (symmetric) ]]
-  tP:P $to X; tB:B $to X --[[ tP: port types, tB: box types ]]
+  tP:P $to X; tB:B $to X; --[[ tP: port types, tB: box types ]]
+
+  --[[ ACSet structure mapping ]]
+  N = B + P;          --[[ Nodes are boxes and ports (disjoint union) ]]
+  E = {(p,q) | w(p)=q}; --[[ Edges are the wiring connections ]]
+  s((p,q)) = p;       --[[ Source is first port in the wiring ]]
+  t((p,q)) = q;       --[[ Target is second port in the wiring ]]
+  lN(x) = match x with --[[ Node decoration depends on node type ]]
+    | b $in B -> tB(b)
+    | p $in P -> tP(p);
+  lE((p,q)) = (tP(p), tP(q)); --[[ Edge decoration is pair of port types ]]
 
   w $comp w === id;  --[[ Law: wiring is an involution (self-inverse) ]]
 }
@@ -75,11 +99,22 @@
   p:P $to {0,1};        --[[ p: principal port flag (1=principal, 0=auxiliary) ]]
   R:{L $subseteq (B * B)} $to {S $subseteq (B * B)}; --[[ R: reduction rules mapping patterns to replacements ]]
 
+  --[[ WireDgm structure mapping ]]
+  B = B;                --[[ Boxes are preserved ]]
+  P = P;                --[[ Ports are preserved but annotated with principal/auxiliary flag ]]
+  b = b;                --[[ Box assignment is preserved ]]
+  w = w;                --[[ Wiring relation is preserved but gains active pair semantics ]]
+  tB = tB;              --[[ Box types are preserved ]]
+  tP = tP;              --[[ Port types are preserved ]]
+
+  --[[ Additional structure ]]
+  active(p,q) = w(p)=q $and p(p)=1 $and p(q)=1; --[[ Active pairs definition ]]
+
   --[[ Law: Each box has exactly one principal port ]]
-  $forall b $in B: |{p $in P | b(p) $and p(p)}| = 1;
+  $forall b $in B: |{p $in P | b(p) $and p(p)=1}| = 1;
 
   --[[ Law: Connected principal ports form active pairs (reduction sites) ]]
-  $forall p,q $in P: (w(p)=q $and p(p) $and p(q)) => active(p,q);
+  $forall p,q $in P: (w(p)=q $and p(p)=1 $and p(q)=1) => active(p,q);
 }
 
 --[[
@@ -92,6 +127,18 @@
   --[[ Additional structure for rewriting systems ]]
   match:{Pattern} $to {Subgraph};  --[[ Pattern matching function ]]
   rewrite:{Active} $to {Replacement};  --[[ Rewriting function ]]
+
+  --[[ INet structure mapping ]]
+  B = B;                --[[ Boxes are preserved across rewrites ]]
+  P = P;                --[[ Ports are preserved but may be reconnected ]]
+  b = b;                --[[ Box-port association is preserved ]]
+  w = w;                --[[ Wiring is preserved outside of rewritten regions ]]
+  p = p;                --[[ Principal port flags are preserved ]]
+  R(L) = {(a,b) | match(Pattern(a,b)) => rewrite(active(a,b))}; --[[ Reduction rules are implemented via match/rewrite ]]
+
+  --[[ Pattern and Replacement structures ]]
+  Pattern(a,b) = subnet({a,b} $cup neighborhood(a,b)); --[[ Patterns include active pairs and their neighborhoods ]]
+  Replacement(s) = result(rewrite(s));  --[[ Replacements are the result of rewriting ]]
 
   --[[ Laws for rewriting ]]
   $forall a $in Active: consistent(rewrite(a));  --[[ Rewriting preserves consistency ]]
@@ -108,6 +155,15 @@
   step:{Net} $to {Net};  --[[ Single reduction step ]]
   strategy:{Net} $to {Active};  --[[ Strategy for selecting active pairs ]]
   history:{Net} $to {Trace};  --[[ Reduction history ]]
+
+  --[[ Rewriting structure mapping ]]
+  match = match;         --[[ Pattern matching is preserved ]]
+  rewrite = rewrite;     --[[ Rewriting function is preserved ]]
+
+  --[[ Operational semantics ]]
+  step(n) = apply(rewrite(strategy(n)), n); --[[ Step applies rewriting to selected active pair ]]
+  reduce(n) = if normal(n) then n else reduce(step(n)); --[[ Full reduction to normal form ]]
+  Trace(n) = [n, step(n), step(step(n)), ...]; --[[ Reduction trace is sequence of nets ]]
 }
 
 --[[
@@ -119,6 +175,16 @@
   normal:{Net} $to {Bool};  --[[ Normal form predicate ]]
   terminates:{Net} $to {Bool};  --[[ Termination predicate ]]
   cycles:{Trace} $to {Cycles};  --[[ Cycle detection ]]
+
+  --[[ Reduction structure mapping ]]
+  step = step;           --[[ Reduction step is preserved ]]
+  strategy = strategy;   --[[ Reduction strategy is preserved ]]
+  history = history;     --[[ Reduction history is preserved ]]
+
+  --[[ Termination analysis ]]
+  normal(n) = strategy(n) = {}; --[[ Normal form has no available active pairs ]]
+  terminates(n) = exists k: normal(step^k(n)) $or cyclic(history(n)); --[[ Either reaches normal form or cycles ]]
+  cyclic(t) = exists i,j: i < j $and t[i] = t[j]; --[[ Trace contains a cycle ]]
 }
 
 --[[
