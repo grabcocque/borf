@@ -169,46 +169,46 @@ The main challenge lies in designing efficient and manageable encodings and ensu
 ### Phase 1: Project Setup and Robust Foundation (Weeks 1-2)
 
 1. **Initial Project Configuration**
-   * [x] Create a new Rust project with Cargo
-   * [x] Set up the directory structure
-   * [x] Add core dependencies:
-     * [x] `pest` and `pest_derive` for parsing
-     * [x] `thiserror` for ergonomic error handling
-     * [x] `miette` for rich diagnostic reporting
-     * [x] `libfuzzer-sys` and `arbitrary` for fuzzing
+   * [ ] Create a new Rust project with Cargo
+   * [ ] Set up the directory structure
+   * [ ] Add core dependencies:
+     * [ ] `pest` and `pest_derive` for parsing
+     * [ ] `thiserror` for ergonomic error handling
+     * [ ] `miette` for rich diagnostic reporting
+     * [ ] `libfuzzer-sys` and `arbitrary` for fuzzing
    * [ ] Configure test environment (unit tests, integration tests)
    * [~] Set up fuzzing infrastructure with cargo-fuzz
    * [ ] Create CI/CD pipeline that includes fuzzing runs
 
 2. **Error Handling Infrastructure**
-   * [x] Design the error hierarchy using `thiserror`
+   * [ ] Design the error hierarchy using `thiserror`
      * [~] Parser errors (syntax, unexpected tokens) - *Basic placeholders exist*
      * [~] Semantic errors (type mismatches, undefined symbols) - *Basic placeholders exist*
      * [~] Runtime errors (execution failures) - *Basic placeholders exist*
-   * [x] Set up `miette` for rich diagnostic output
+   * [ ] Set up `miette` for rich diagnostic output
      * [~] Configure source code snippets in error messages - *Basic setup in `BorfError`*
      * [ ] Add syntax highlighting for error locations
      * [ ] Include helpful suggestions for common mistakes
 
 3. **Define the Core Data Structures**
-   * [x] Implement the basic Rust-native Catlab.jl-style ACSets-inspired graph representation
-     * [x] `InteractionNet` struct and associated data types
-     * [x] Agent and port representations
-     * [x] Connection representation
-   * [x] Implement the type system core
-     * [x] Define `Type` enum with variants for all type constructs
-     * [x] Create `TypeContext` for tracking type annotations and inferences
+   * [ ] Implement the basic Rust-native Catlab.jl-style ACSets-inspired graph representation
+     * [ ] `InteractionNet` struct and associated data types
+     * [ ] Agent and port representations
+     * [ ] Connection representation
+   * [ ] Implement the type system core
+     * [ ] Define `Type` enum with variants for all type constructs
+     * [ ] Create `TypeContext` for tracking type annotations and inferences
    * [ ] Implement `Arbitrary` trait for all core data structures to support fuzzing
 
 ### Phase 2: Parser Development with Robust Error Handling (Weeks 3-5)
 
 4. **Create the Pest Grammar**
-   * [x] Define the grammar for the interaction calculus
-     * [x] Agent definitions
-     * [x] Net structure
-     * [x] Connection syntax
-     * [x] Type annotations
-     * [x] Reduction rules
+   * [ ] Define the grammar for the interaction calculus
+     * [ ] Agent definitions
+     * [ ] Net structure
+     * [ ] Connection syntax
+     * [ ] Type annotations
+     * [ ] Reduction rules
    * [ ] Test the grammar with sample inputs
    * [ ] Add detailed error labels and hints in the Pest grammar
    * [~] Create fuzz targets for the grammar to discover edge cases - *One general parser target exists*

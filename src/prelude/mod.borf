@@ -50,7 +50,7 @@
 ]]
 @INet<WireDgm>: {
   p:P $to {0,1};        --[[ p: principal port flag (1=principal, 0=auxiliary) ]]
-  R:L $subseteq B×B $to S $subseteq B×B; --[[ R: reduction rules mapping patterns to replacements ]]
+  R:L $subseteq B*B $to S $subseteq B*B; --[[ R: reduction rules mapping patterns to replacements ]]
 
   --[[ Law: Each box has exactly one principal port ]]
   $forall b $in B:|{p $in P|b(p) $land p(p)}|=1;

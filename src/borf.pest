@@ -16,26 +16,25 @@ string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 set_literal = { "{" ~ (int | identifier) ~ ("," ~ (int | identifier))* ~ "}" }
 
 // --- Category Definitions ---
-category_def = { "@" ~ identifier ~ ("<" ~ identifier ~ ">")? ~ ":" ~ "{" ~ (!("}") ~ ANY)* ~ "}" }
+category_def = { "@" ~ identifier ~ ("<" ~ identifier ~ ">")? ~ ":" ~ "{" ~ category_content ~ "}" }
+// Define as zero or more groups of (declaration followed by ';'). Non-atomic.
+category_content = { (declaration ~ ";")* }
 
-element = _{ declaration+ }
+// Semicolon is mandatory terminator for the group, not the declaration itself
 declaration = _{ object_decl | mapping_decl | law_decl }
 
-// Accept either a comma-separated list of identifiers or a single identifier
-object_decl = {
-    (identifier ~ ("," ~ identifier)* ~ ";")
-}
+// Object declaration: one or more identifiers separated by semicolons
+object_decl = { identifier ~ (";" ~ identifier)* }
 
-// Handle mapping declarations
-mapping_decl = {
-    identifier ~ ":" ~ identifier ~ mapping_type ~ (identifier | set_literal) ~ ";"
-}
+// Mapping declaration
+mapping_decl = { identifier ~ ":" ~ identifier ~ mapping_type ~ (identifier | set_literal) }
 
 mapping_type = { "$to" | "$subseteq" | "<->" }
 
 // --- Laws and constraints ---
-law_decl = { ((identifier ~ "$circ" ~ identifier ~ "$equiv" ~ identifier) |
-             ("$forall" ~ forall_expr)) ~ ";" } // Semicolon mandatory
+// Law declaration
+law_decl = { (identifier ~ "$circ" ~ identifier ~ "$equiv" ~ identifier) |
+             ("$forall" ~ forall_expr) }
 
 forall_expr = {
     identifier ~ ("," ~ identifier)* ~ "$in" ~ identifier ~ ":" ~
