@@ -1,4 +1,8 @@
-use crate::error::BorfError;
+#![allow(unused_doc_comments)]
+
+use crate::error::{
+    convert_pest_error, make_span, BorfError, NamedSource, SourceSpan, SyntaxError,
+};
 use pest::iterators::Pair;
 use pest::Parser;
 use pest_derive::Parser;
@@ -7,20 +11,56 @@ use pest_derive::Parser;
 #[grammar = "borf.pest"]
 pub struct BorfParser;
 
-// Main entry point for parsing a borf program
-pub fn parse_program(input: &str) -> Result<Vec<TopLevelItem>, BorfError> {
-    let mut parsed = BorfParser::parse(Rule::program, input)
-        .map_err(|e| BorfError::ParserError(format!("Pest parsing error: {}", e)))?;
+/// Global source cache for tracking file contents
+thread_local! {
+    static CURRENT_SOURCE: std::cell::RefCell<Option<(String, String)>> = const { std::cell::RefCell::new(None) };
+}
 
-    let program_pair = parsed
-        .next()
-        .ok_or_else(|| BorfError::ParserError("No 'program' rule found".to_string()))?;
+/// Set the current source for better error reporting
+pub fn set_current_source(name: &str, content: String) {
+    CURRENT_SOURCE.with(|cell| {
+        *cell.borrow_mut() = Some((name.to_string(), content));
+    });
+}
+
+/// Get the current source name and content
+pub fn get_current_source() -> Option<(String, String)> {
+    CURRENT_SOURCE.with(|cell| cell.borrow().clone())
+}
+
+/// Parses the entire Borf program input into a vector of top-level items.
+pub fn parse_program(input: &str) -> Result<Vec<TopLevelItem>, Box<BorfError>> {
+    // Store the input for error reporting
+    set_current_source("input.borf", input.to_string());
+
+    let mut parsed = BorfParser::parse(Rule::program, input)
+        .map_err(|e| Box::new(convert_pest_error(e, "input.borf", input)))?;
+
+    let program_pair = parsed.next().ok_or_else(|| {
+        let src = NamedSource::new("input.borf", input.to_string());
+        let span = make_span(0, 1); // Point to start of file
+        Box::new(BorfError::SyntaxError(SyntaxError::new(
+            "No 'program' rule found",
+            src,
+            span,
+            "Ensure the input contains valid Borf code",
+            "Expected program here",
+        )))
+    })?;
 
     if program_pair.as_rule() != Rule::program {
-        return Err(BorfError::ParserError(format!(
-            "Expected 'program' rule, found {:?}",
-            program_pair.as_rule()
-        )));
+        let src = NamedSource::new("input.borf", input.to_string());
+        let span = make_span(0, 1); // Point to start of file
+        return Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
+            &format!(
+                "Expected 'program' rule, found {:?}",
+                program_pair.as_rule()
+            ),
+            src,
+            span,
+            "The parser expected a full program",
+            "Expected program here",
+        ))));
     }
 
     let mut items = Vec::new();
@@ -49,15 +89,39 @@ pub fn parse_program(input: &str) -> Result<Vec<TopLevelItem>, BorfError> {
             }
             Rule::EOI => (),
             _ => {
-                return Err(BorfError::ParserError(format!(
-                    "Unexpected top-level element: {:?}",
-                    element.as_rule()
-                )))
+                // Create a better error with source location
+                let rule_str = format!("{:?}", element.as_rule());
+                let span = pair_to_span(&element);
+                let src = get_named_source(input);
+
+                return Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
+                    &format!("Unexpected top-level element: {}", rule_str),
+                    src,
+                    span,
+                    "Only category, pipeline, pipe, application, composition, and export statements are allowed at the top level",
+                    &format!("Unexpected {} here", rule_str)
+                ))));
             }
         }
     }
 
     Ok(items)
+}
+
+// Helper function to create a span from a Pair
+fn pair_to_span(pair: &Pair<Rule>) -> SourceSpan {
+    let start = pair.as_span().start();
+    let end = pair.as_span().end();
+    make_span(start, end)
+}
+
+// Helper function to get a named source from the current input
+fn get_named_source(input: &str) -> NamedSource<String> {
+    if let Some((name, _)) = get_current_source() {
+        NamedSource::new(&name, input.to_string())
+    } else {
+        NamedSource::new("input.borf", input.to_string())
+    }
 }
 
 // --- AST Definitions ---
@@ -236,7 +300,7 @@ pub struct ExportDirective {
 
 // --- Parsing Functions ---
 
-fn parse_category_def(pair: Pair<Rule>) -> Result<CategoryDef, BorfError> {
+fn parse_category_def(pair: Pair<Rule>) -> Result<CategoryDef, Box<BorfError>> {
     let mut inner = pair.into_inner();
     let name = inner.next().unwrap().as_str().to_string();
     let mut base_category = None;
@@ -265,7 +329,7 @@ fn parse_category_def(pair: Pair<Rule>) -> Result<CategoryDef, BorfError> {
     let mut elements = Vec::new();
 
     // Function to process a category_decl pair
-    let process_decl = |decl_pair: Pair<Rule>| -> Result<CategoryElement, BorfError> {
+    let process_decl = |decl_pair: Pair<Rule>| -> Result<CategoryElement, Box<BorfError>> {
         // category_decl has object_decl, mapping_decl, or law_decl inside
         let specific_decl = decl_pair.into_inner().next().unwrap();
         match specific_decl.as_rule() {
@@ -276,10 +340,10 @@ fn parse_category_def(pair: Pair<Rule>) -> Result<CategoryDef, BorfError> {
                 specific_decl,
             )?)),
             Rule::law_decl => Ok(CategoryElement::LawDecl(parse_law(specific_decl)?)),
-            _ => Err(BorfError::ParserError(format!(
+            _ => Err(Box::new(BorfError::ParserError(format!(
                 "Unexpected rule inside category_decl: {:?}",
                 specific_decl.as_rule()
-            ))),
+            )))),
         }
     };
 
@@ -291,10 +355,10 @@ fn parse_category_def(pair: Pair<Rule>) -> Result<CategoryDef, BorfError> {
         && current_pair.as_rule() != Rule::EOI
     {
         // Handle unexpected rule if it's not the first decl, whitespace, comment, or end
-        return Err(BorfError::ParserError(format!(
+        return Err(Box::new(BorfError::ParserError(format!(
             "Expected first category declaration, whitespace, comment, or end, found {:?}",
             current_pair.as_rule()
-        )));
+        ))));
     }
 
     // Now loop through the rest of the pairs from the main iterator
@@ -306,10 +370,10 @@ fn parse_category_def(pair: Pair<Rule>) -> Result<CategoryDef, BorfError> {
             Rule::WHITESPACE | Rule::COMMENT => { /* Ignore */ }
             // Rule::EOI? Pest should stop iteration before EOI/EOF based on parent rule structure.
             _ => {
-                return Err(BorfError::ParserError(format!(
+                return Err(Box::new(BorfError::ParserError(format!(
                     "Expected subsequent category declaration, whitespace, or comment, found rule: {:?}",
                     decl_pair.as_rule()
-                )));
+                ))));
             }
         }
     }
@@ -322,7 +386,7 @@ fn parse_category_def(pair: Pair<Rule>) -> Result<CategoryDef, BorfError> {
 }
 
 // Updated to handle potentially multiple identifiers from the grammar change
-fn parse_object_decl(pair: Pair<Rule>) -> Result<ObjectDecl, BorfError> {
+fn parse_object_decl(pair: Pair<Rule>) -> Result<ObjectDecl, Box<BorfError>> {
     let mut names = Vec::new();
 
     // The first identifier is directly inside the object_decl pair
@@ -343,16 +407,16 @@ fn parse_object_decl(pair: Pair<Rule>) -> Result<ObjectDecl, BorfError> {
     }
 
     if names.is_empty() {
-        Err(BorfError::ParserError(
+        Err(Box::new(BorfError::ParserError(
             "Object declaration rule matched, but found no identifiers".to_string(),
-        ))
+        )))
     } else {
         Ok(ObjectDecl { names })
     }
 }
 
 // No change needed, it already parsed without trailing ';' and inner() stops before it
-fn parse_mapping_decl(pair: Pair<Rule>) -> Result<MappingDecl, BorfError> {
+fn parse_mapping_decl(pair: Pair<Rule>) -> Result<MappingDecl, Box<BorfError>> {
     let mut inner = pair.into_inner();
     let name = inner.next().unwrap().as_str().to_string();
 
@@ -375,10 +439,10 @@ fn parse_mapping_decl(pair: Pair<Rule>) -> Result<MappingDecl, BorfError> {
             DomainType::SetComprehension,
         ),
         _ => {
-            return Err(BorfError::ParserError(format!(
+            return Err(Box::new(BorfError::ParserError(format!(
                 "Unexpected domain type: {:?}",
                 domain_part.as_rule()
-            )))
+            ))));
         }
     };
 
@@ -388,10 +452,10 @@ fn parse_mapping_decl(pair: Pair<Rule>) -> Result<MappingDecl, BorfError> {
     let codomain = match codomain_part.as_rule() {
         Rule::ident | Rule::set_literal => codomain_part.as_str().to_string(),
         _ => {
-            return Err(BorfError::ParserError(format!(
+            return Err(Box::new(BorfError::ParserError(format!(
                 "Unexpected codomain type: {:?}",
                 codomain_part.as_rule()
-            )))
+            ))));
         }
     };
 
@@ -401,10 +465,10 @@ fn parse_mapping_decl(pair: Pair<Rule>) -> Result<MappingDecl, BorfError> {
         "<->" => MappingType::Bidirectional,
         "*" => MappingType::Times,
         _ => {
-            return Err(BorfError::ParserError(format!(
+            return Err(Box::new(BorfError::ParserError(format!(
                 "Unknown mapping type: {}",
                 mapping_type_str
-            )))
+            ))));
         }
     };
 
@@ -418,7 +482,7 @@ fn parse_mapping_decl(pair: Pair<Rule>) -> Result<MappingDecl, BorfError> {
 }
 
 // parse_law needs to be reverted as well, as the pair passed is the content before the ';'
-pub(crate) fn parse_law(pair: Pair<Rule>) -> Result<Law, BorfError> {
+pub(crate) fn parse_law(pair: Pair<Rule>) -> Result<Law, Box<BorfError>> {
     // The pair passed here is the rule matched within category_decl: law_decl
     // Need to get the inner actual law rule (composition_law or forall_law)
     let inner_law = pair.into_inner().next().unwrap();
@@ -442,15 +506,15 @@ pub(crate) fn parse_law(pair: Pair<Rule>) -> Result<Law, BorfError> {
             let forall_expr_pair = inner_law.into_inner().next().unwrap();
             parse_forall_expr(forall_expr_pair)
         }
-        _ => Err(BorfError::ParserError(format!(
+        _ => Err(Box::new(BorfError::ParserError(format!(
             "Unexpected rule inside law_decl: {:?}",
             inner_law.as_rule()
-        ))),
+        )))),
     }
 }
 
 // Parse a forall expression into a Law::ForAll variant
-pub(crate) fn parse_forall_expr(pair: Pair<Rule>) -> Result<Law, BorfError> {
+pub(crate) fn parse_forall_expr(pair: Pair<Rule>) -> Result<Law, Box<BorfError>> {
     // Parse the forall_expr which contains variables, domain and a constraint
     let mut vars = Vec::new();
     let mut domain = String::new();
@@ -499,14 +563,16 @@ pub(crate) fn parse_forall_expr(pair: Pair<Rule>) -> Result<Law, BorfError> {
 }
 
 // Parse a primary constraint term (ident, int, set, func_app, or parenthesized expr)
-fn parse_primary_constraint_term(pair: Pair<Rule>) -> Result<ConstraintExpr, BorfError> {
+fn parse_primary_constraint_term(pair: Pair<Rule>) -> Result<ConstraintExpr, Box<BorfError>> {
     // Match directly on the rule of the pair received
     match pair.as_rule() {
         Rule::int => {
-            let value = pair
-                .as_str()
-                .parse::<i64>()
-                .map_err(|e| BorfError::ParserError(format!("Failed to parse integer: {}", e)))?;
+            let value = pair.as_str().parse::<i64>().map_err(|e| {
+                Box::new(BorfError::ParserError(format!(
+                    "Failed to parse integer: {}",
+                    e
+                )))
+            })?;
             Ok(ConstraintExpr::Integer(value))
         }
         Rule::ident => Ok(ConstraintExpr::Identifier(pair.as_str().to_string())),
@@ -549,35 +615,37 @@ fn parse_primary_constraint_term(pair: Pair<Rule>) -> Result<ConstraintExpr, Bor
             // Capture string before potential move
             let pair_str = pair.as_str();
             let inner_specific_pair = pair.into_inner().next().ok_or_else(|| {
-                BorfError::ParserError(format!(
+                Box::new(BorfError::ParserError(format!(
                     "Empty inner primary_constraint_term rule: '{}'",
                     pair_str
-                ))
+                )))
             })?;
             // Recursively call ourselves with the inner specific pair
             parse_primary_constraint_term(inner_specific_pair)
         }
-        _ => Err(BorfError::ParserError(format!(
+        _ => Err(Box::new(BorfError::ParserError(format!(
             "Unexpected rule type in parse_primary_constraint_term: {:?}",
             pair.as_rule()
-        ))),
+        )))),
     }
 }
 
 // Parse a constraint expression (handles binary operators left-associatively)
-pub(crate) fn parse_constraint_expr(pair: Pair<Rule>) -> Result<Constraint, BorfError> {
+pub(crate) fn parse_constraint_expr(pair: Pair<Rule>) -> Result<Constraint, Box<BorfError>> {
     if pair.as_rule() != Rule::constraint_expr {
-        return Err(BorfError::ParserError(format!(
+        return Err(Box::new(BorfError::ParserError(format!(
             "Expected constraint_expr, got {:?}",
             pair.as_rule()
-        )));
+        ))));
     }
 
     let mut inner_pairs = pair.into_inner();
 
     // First part MUST be a primary_constraint_term (or a direct term that primary_constraint_term would accept)
     let initial_term_pair = inner_pairs.next().ok_or_else(|| {
-        BorfError::ParserError("Constraint expression cannot be empty".to_string())
+        Box::new(BorfError::ParserError(
+            "Constraint expression cannot be empty".to_string(),
+        ))
     })?;
 
     // Check if it's a valid term type (either primary_constraint_term or one of its components)
@@ -588,11 +656,11 @@ pub(crate) fn parse_constraint_expr(pair: Pair<Rule>) -> Result<Constraint, Borf
         || initial_term_pair.as_rule() == Rule::function_app;
 
     if !is_valid_term {
-        return Err(BorfError::ParserError(format!(
+        return Err(Box::new(BorfError::ParserError(format!(
             "Expected a valid constraint term (primary_constraint_term, ident, int, etc.), got {:?}: '{}'",
             initial_term_pair.as_rule(),
             initial_term_pair.as_str()
-        )));
+        ))));
     }
 
     // Call parse_primary_constraint_term to handle either primary_constraint_term or any of its components
@@ -601,17 +669,20 @@ pub(crate) fn parse_constraint_expr(pair: Pair<Rule>) -> Result<Constraint, Borf
     // Process following (op, term) pairs
     if let Some(op_pair) = inner_pairs.next() {
         if op_pair.as_rule() != Rule::constraint_op {
-            return Err(BorfError::ParserError(format!(
+            return Err(Box::new(BorfError::ParserError(format!(
                 "Expected constraint_op, got {:?}: '{}'",
                 op_pair.as_rule(),
                 op_pair.as_str()
-            )));
+            ))));
         }
         let op = op_pair.as_str();
 
-        let rhs_term_pair = inner_pairs
-            .next()
-            .ok_or_else(|| BorfError::ParserError(format!("Missing RHS for operator '{}'", op)))?;
+        let rhs_term_pair = inner_pairs.next().ok_or_else(|| {
+            Box::new(BorfError::ParserError(format!(
+                "Missing RHS for operator '{}'",
+                op
+            )))
+        })?;
 
         // Check if it's a valid term type (either primary_constraint_term or one of its components)
         let is_valid_term = rhs_term_pair.as_rule() == Rule::primary_constraint_term
@@ -621,11 +692,11 @@ pub(crate) fn parse_constraint_expr(pair: Pair<Rule>) -> Result<Constraint, Borf
             || rhs_term_pair.as_rule() == Rule::function_app;
 
         if !is_valid_term {
-            return Err(BorfError::ParserError(format!(
+            return Err(Box::new(BorfError::ParserError(format!(
                 "Expected a valid constraint term (primary_constraint_term, ident, int, etc.) after operator, got {:?}: '{}'",
                 rhs_term_pair.as_rule(),
                 rhs_term_pair.as_str()
-            )));
+            ))));
         }
 
         let rhs = parse_primary_constraint_term(rhs_term_pair)?;
@@ -660,10 +731,10 @@ pub(crate) fn parse_constraint_expr(pair: Pair<Rule>) -> Result<Constraint, Borf
                 rhs: Box::new(rhs),
             },
             _ => {
-                return Err(BorfError::ParserError(format!(
+                return Err(Box::new(BorfError::ParserError(format!(
                     "Unknown constraint operator: {}",
                     op
-                )))
+                ))));
             }
         };
 
@@ -678,9 +749,12 @@ pub(crate) fn parse_constraint_expr(pair: Pair<Rule>) -> Result<Constraint, Borf
 }
 
 // Uncommented and improved implementation
-fn parse_set_expr(pair: Pair<Rule>) -> Result<ConstraintExpr, BorfError> {
+fn parse_set_expr(pair: Pair<Rule>) -> Result<ConstraintExpr, Box<BorfError>> {
     let set_expr_content = pair.clone().into_inner().next().ok_or_else(|| {
-        BorfError::ParserError(format!("Empty set expression: '{}'", pair.as_str()))
+        Box::new(BorfError::ParserError(format!(
+            "Empty set expression: '{}'",
+            pair.as_str()
+        )))
     })?;
 
     match set_expr_content.as_rule() {
@@ -751,7 +825,11 @@ fn parse_set_expr(pair: Pair<Rule>) -> Result<ConstraintExpr, BorfError> {
             // Get the rhs
             let rhs = product_parts
                 .next()
-                .ok_or_else(|| BorfError::ParserError("Missing right side of product".to_string()))?
+                .ok_or_else(|| {
+                    Box::new(BorfError::ParserError(
+                        "Missing right side of product".to_string(),
+                    ))
+                })?
                 .as_str()
                 .to_string();
 
@@ -761,14 +839,14 @@ fn parse_set_expr(pair: Pair<Rule>) -> Result<ConstraintExpr, BorfError> {
             }))
         }
 
-        _ => Err(BorfError::ParserError(format!(
+        _ => Err(Box::new(BorfError::ParserError(format!(
             "Unexpected rule in set expression: {:?}",
             set_expr_content.as_rule()
-        ))),
+        )))),
     }
 }
 
-fn parse_pipe_expr(pair: Pair<Rule>) -> Result<PipeExpr, BorfError> {
+fn parse_pipe_expr(pair: Pair<Rule>) -> Result<PipeExpr, Box<BorfError>> {
     let mut inner = pair.into_inner();
     let start = inner.next().unwrap().as_str().to_string();
     let mut steps = Vec::new();
@@ -778,7 +856,7 @@ fn parse_pipe_expr(pair: Pair<Rule>) -> Result<PipeExpr, BorfError> {
     Ok(PipeExpr { start, steps })
 }
 
-fn parse_app_expr(pair: Pair<Rule>) -> Result<AppExpr, BorfError> {
+fn parse_app_expr(pair: Pair<Rule>) -> Result<AppExpr, Box<BorfError>> {
     let mut inner = pair.into_inner();
     let func = inner.next().unwrap().as_str().to_string();
     let arg_pair = inner.next().unwrap();
@@ -786,10 +864,10 @@ fn parse_app_expr(pair: Pair<Rule>) -> Result<AppExpr, BorfError> {
         Rule::app_statement => AppExprArg::AppExpr(Box::new(parse_app_expr(arg_pair)?)),
         Rule::ident => AppExprArg::Identifier(arg_pair.as_str().to_string()),
         _ => {
-            return Err(BorfError::ParserError(format!(
+            return Err(Box::new(BorfError::ParserError(format!(
                 "Unexpected argument type in app_expr: {:?}",
                 arg_pair.as_rule()
-            )))
+            ))));
         }
     };
     Ok(AppExpr {
@@ -798,7 +876,7 @@ fn parse_app_expr(pair: Pair<Rule>) -> Result<AppExpr, BorfError> {
     })
 }
 
-fn parse_composition_expr(pair: Pair<Rule>) -> Result<CompositionExpr, BorfError> {
+fn parse_composition_expr(pair: Pair<Rule>) -> Result<CompositionExpr, Box<BorfError>> {
     let mut inner = pair.into_inner();
     let result = inner.next().unwrap().as_str().to_string();
     let mut functions = Vec::new();
@@ -811,9 +889,9 @@ fn parse_composition_expr(pair: Pair<Rule>) -> Result<CompositionExpr, BorfError
                     // If we haven't seen the argument yet
                     functions.push(id);
                 } else {
-                    return Err(BorfError::ParserError(
+                    return Err(Box::new(BorfError::ParserError(
                         "Argument must be the last part of composition".to_string(),
-                    ));
+                    )));
                 }
             }
             Rule::app_statement => {
@@ -821,10 +899,10 @@ fn parse_composition_expr(pair: Pair<Rule>) -> Result<CompositionExpr, BorfError
                 arg = part.into_inner().next().unwrap().as_str().to_string(); // Simplified: get the identifier inside () for now
             }
             _ => {
-                return Err(BorfError::ParserError(format!(
+                return Err(Box::new(BorfError::ParserError(format!(
                     "Unexpected part in composition: {:?}",
                     part.as_rule()
-                )))
+                ))));
             }
         }
     }
@@ -835,9 +913,9 @@ fn parse_composition_expr(pair: Pair<Rule>) -> Result<CompositionExpr, BorfError
     }
 
     if arg.is_empty() {
-        return Err(BorfError::ParserError(
+        return Err(Box::new(BorfError::ParserError(
             "Missing argument in composition expression".to_string(),
-        ));
+        )));
     }
 
     Ok(CompositionExpr {
@@ -847,7 +925,7 @@ fn parse_composition_expr(pair: Pair<Rule>) -> Result<CompositionExpr, BorfError
     })
 }
 
-fn parse_pipeline_def(pair: Pair<Rule>) -> Result<PipelineDef, BorfError> {
+fn parse_pipeline_def(pair: Pair<Rule>) -> Result<PipelineDef, Box<BorfError>> {
     let mut inner = pair.into_inner();
     let name = inner.next().unwrap().as_str().to_string();
 
@@ -922,7 +1000,7 @@ fn parse_pipeline_def(pair: Pair<Rule>) -> Result<PipelineDef, BorfError> {
     })
 }
 
-fn parse_export_directive(pair: Pair<Rule>) -> Result<ExportDirective, BorfError> {
+fn parse_export_directive(pair: Pair<Rule>) -> Result<ExportDirective, Box<BorfError>> {
     let mut identifiers = Vec::new();
 
     // In the export directive, the transform_identifiers are direct descendants
@@ -949,16 +1027,16 @@ mod tests {
     use pest::Parser;
 
     // Helper function to create and test AST nodes
-    fn parse_test_input(input: &str) -> Result<Vec<TopLevelItem>, BorfError> {
+    fn parse_test_input(input: &str) -> Result<Vec<TopLevelItem>, Box<BorfError>> {
         parse_program(input)
     }
 
     // For test purposes only - directly parse a forall expression string
-    fn parse_test_forall(forall_expr_str: &str) -> Result<Law, BorfError> {
+    fn parse_test_forall(forall_expr_str: &str) -> Result<Law, Box<BorfError>> {
         // Parse the input string directly using the forall_expr rule
         // This rule now includes the leading '$forall'
         let pairs = BorfParser::parse(Rule::forall_expr, forall_expr_str)
-            .map_err(|e| BorfError::ParserError(format!("Pest parsing error: {}", e)))?;
+            .map_err(|e| Box::new(BorfError::ParserError(format!("Pest parsing error: {}", e))))?;
 
         // Get the single forall_expr pair
         let forall_expr_pair = pairs.into_iter().next().unwrap();
@@ -968,9 +1046,9 @@ mod tests {
     }
 
     // For test purposes only - directly parse a constraint
-    fn parse_test_constraint(constraint_str: &str) -> Result<Constraint, BorfError> {
+    fn parse_test_constraint(constraint_str: &str) -> Result<Constraint, Box<BorfError>> {
         let pairs = BorfParser::parse(Rule::constraint_expr, constraint_str)
-            .map_err(|e| BorfError::ParserError(format!("Pest parsing error: {}", e)))?;
+            .map_err(|e| Box::new(BorfError::ParserError(format!("Pest parsing error: {}", e))))?;
 
         let constraint_expr_pair = pairs.into_iter().next().unwrap();
 

@@ -1,5 +1,6 @@
 // Use the library crate
-use borf::parser::{self, BorfParser, Rule, TopLevelItem};
+use borf::error::format_error;
+use borf::parser::{self, set_current_source, BorfParser, Rule, TopLevelItem};
 use pest::Parser;
 use std::env;
 use std::fs;
@@ -18,7 +19,10 @@ fn test_direct_parse(input: &str, rule: Rule) -> bool {
             true
         }
         Err(e) => {
-            println!("Failed: {:?}", e);
+            // Create pretty error for display
+            set_current_source("test.borf", input.to_string());
+            let error = borf::error::convert_pest_error(e, "test.borf", input);
+            println!("Failed: {}", format_error(error));
             false
         }
     }
@@ -91,6 +95,9 @@ fn load_and_parse_prelude() -> Result<Vec<TopLevelItem>, String> {
                 println!("[{:2}] {}", i + 1, line);
             }
 
+            // Store the source for error reporting
+            set_current_source(PRELUDE_PATH, prelude_content.clone());
+
             // Try to parse the file directly with the BorfParser
             let parse_result = BorfParser::parse(Rule::program, &prelude_content);
 
@@ -102,11 +109,21 @@ fn load_and_parse_prelude() -> Result<Vec<TopLevelItem>, String> {
 
                     // Continue with the normal parsing
                     parser::parse_program(&prelude_content)
-                        .map_err(|e| format!("Prelude parsing failed: {:?}", e))
+                        .map_err(|e| format!("{}", format_error(*e)))
                 }
                 Err(e) => {
-                    println!("PEG grammar parse failed: {:?}", e);
-                    Err(format!("PEG grammar parse failed: {:?}", e))
+                    // Create pretty error display for output
+                    let display_error =
+                        borf::error::convert_pest_error(e.clone(), PRELUDE_PATH, &prelude_content);
+                    println!("PEG grammar parse failed: {}", format_error(display_error));
+
+                    // Create a new error for the return value
+                    let return_error =
+                        borf::error::convert_pest_error(e, PRELUDE_PATH, &prelude_content);
+                    Err(format!(
+                        "PEG grammar parse failed: {}",
+                        format_error(return_error)
+                    ))
                 }
             }
         }
@@ -147,6 +164,9 @@ fn main() {
 
         match fs::read_to_string(file_path) {
             Ok(input) => {
+                // Set the file as the current source for error reporting
+                set_current_source(file_path, input.clone());
+
                 match parser::parse_program(&input) {
                     Ok(user_items) => {
                         println!("Successfully parsed {} user item(s)!", user_items.len());
@@ -174,7 +194,7 @@ fn main() {
                         }
                         // TODO: Combine user_items with prelude_definitions for further processing
                     }
-                    Err(e) => println!("Parse error in {}: {:?}", file_path, e),
+                    Err(e) => println!("Parse error in {}: {}", file_path, format_error(*e)),
                 }
             }
             Err(e) => println!("Error reading file {}: {}", file_path, e),
