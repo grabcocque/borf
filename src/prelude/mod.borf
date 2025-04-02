@@ -1,0 +1,108 @@
+--[[
+  Categorical Type System for Interaction Nets
+
+  This prelude defines a categorical framework for representing and transforming:
+  - Attributed C-Sets (ACSet)
+  - Wiring Diagrams (WireDgm)
+  - Interaction Nets (INet)
+
+  The syntax uses:
+  - $operator for mathematical operators
+  - <-> for bidirectional mappings
+  - => for implications
+  - Lua-style comments
+]]
+
+--[[
+  ACSet: Attributed C-Set - a decorated directed graph
+  - Nodes (N) and Edges (E) form the underlying graph structure
+  - Maps s,t assign source and target nodes to each edge
+  - Decorations lN,lE assign labels/attributes to nodes and edges
+]]
+@ACSet: {
+  N;E;                --[[ N: set of nodes, E: set of edges ]]
+  s:E $to N; t:E $to N; --[[ s: source map, t: target map ]]
+  lN:N $to X; lE:E $to X --[[ lN: node decoration, lE: edge decoration, X: attribute type ]]
+}
+
+--[[
+  WireDgm: Wiring Diagram - extends ACSet with explicit box and port structure
+  - Boxes (B) are components/processes that can be connected
+  - Ports (P) are connection points on boxes
+  - The wiring map (w) defines how ports connect to each other
+  - Inherits structure from ACSet through subtyping
+]]
+@WireDgm<ACSet>: {
+  B;P;                --[[ B: set of boxes, P: set of ports ]]
+  b:P $to B;           --[[ b: assigns each port to its parent box ]]
+  w:P<->P;            --[[ w: wiring relation, connects ports (symmetric) ]]
+  tP:P $to X; tB:B $to X --[[ tP: port types, tB: box types ]]
+
+  w $circ w $equiv id;  --[[ Law: wiring is an involution (self-inverse) - connecting twice gets you back ]]
+}
+
+--[[
+  INet: Interaction Net - specialized wiring diagram with reduction semantics
+  - Distinguishes principal from auxiliary ports
+  - Defines reduction rules for active pairs (connected principal ports)
+  - Enforces structural invariants of interaction nets
+  - Basis for computational interpretation
+]]
+@INet<WireDgm>: {
+  p:P $to {0,1};        --[[ p: principal port flag (1=principal, 0=auxiliary) ]]
+  R:L $subseteq B×B $to S $subseteq B×B; --[[ R: reduction rules mapping patterns to replacements ]]
+
+  --[[ Law: Each box has exactly one principal port ]]
+  $forall b $in B:|{p $in P|b(p) $land p(p)}|=1;
+
+  --[[ Law: Connected principal ports form active pairs (reduction sites) ]]
+  $forall p,q $in P:w(p)=q $land p(p) $land p(q)=>active(p,q)
+}
+
+--[[ Pipeline Definition and Export ]]
+
+--[[
+  Transformation Pipeline
+
+  Defines the chain of projections from WorldState state to termination:
+  - >a: Extract ACSet from WorldState state
+  - >w: Project ACSet to wiring diagram
+  - >i: Interpret wiring diagram as interaction net
+  - >r: Extract rewriting rules
+  - >d: Perform reduction steps
+  - >t: Check termination conditions
+]]
+
+--[[ Define named pipeline operators that can be exported ]]
+@pipeline InteractionNetTransform {
+  input: WorldState;
+  output: InteractionNet;
+  steps: >a | >w | >i;  --[[ ACSet > WireDgm > INet ]]
+}
+
+@pipeline FullReductionPipeline {
+  input: WorldState;
+  output: Termination;
+  steps: >a | >w | >i | >r | >d | >t;
+}
+
+@pipeline CustomReduction<T> {  --[[ Parameterized pipeline ]]
+  input: WireDgm;
+  output: T;
+  steps: >i | >r | custom_rule_filter | >d;  --[[ Can include custom operations ]]
+}
+
+--[[ Export declaration makes pipelines available to callers ]]
+
+@export {
+  --[[ Basic transformation operators ]]
+  >a; >w; >i; >r; >d; >t;
+
+  --[[ Pre-composed pipelines ]]
+  InteractionNetTransform;
+  FullReductionPipeline;
+  CustomReduction;
+
+  --[[ Types that callers might need ]]
+  ACSet; WireDgm; INet;
+}

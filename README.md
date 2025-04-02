@@ -11,8 +11,8 @@ This project aims to implement a gradually typed language based on the interacti
     *   Parses basic object declarations (`N; E;`) and mapping declarations (`s:E.to N;`, `p:P.to{0,1};`).
     *   Parses basic law declarations (`w.circ w.equiv id;`, `.forall b.in B: ...;`).
     *   Parses processing expressions:
-        *   Pipe-like: `world |> a |> w`
-        *   Function application: `>i(>w(>a(world)))`
+        *   Pipe-like: `WorldState |> a |> w`
+        *   Function application: `>i(>w(>a(WorldState)))`
         *   Composition: `T = t.circ d.circ a(W)`
     *   Handles comments starting with `#` or `;;`.
     *   Includes a suite of unit tests (`src/parser.rs`) verifying the parser logic.

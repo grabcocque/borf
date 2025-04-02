@@ -1,0 +1,21 @@
+--[[
+  Example Usage Patterns
+
+  1. Nested application - explicit transformation order:
+]]
+net = >i(>w(>a(WorldState)))
+
+--[[
+  2. Pipeline syntax - data flowing through transformations:
+]]
+WorldState | >a | >w | >i | >r | >d | >t
+
+--[[
+  Implementation Notes:
+
+  - ACSet maps to graph structure in memory
+  - Wiring diagrams represent connections between computational components
+  - Interaction nets provide semantics for graph reduction
+  - The transformation pipeline enables compositional reasoning about complex systems
+  - Reductions capture computational steps as graph transformations
+]]

@@ -1,9 +1,11 @@
 // borf.pest - Grammar for the Borf language
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
-COMMENT = _{ ("#" | ";;") ~ (!"\n" ~ ANY)* ~ "\n" | "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+// Support for Lua-style comments and traditional C-style comments
+COMMENT = _{ "--[[" ~ (!"]]" ~ ANY)* ~ "]]" | "--" ~ (!"\n" ~ ANY)* ~ "\n"? | "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
 
 // Identifiers
 identifier = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+transform_identifier = @{ ">" ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
 // Basic types
 int = @{ ASCII_DIGIT+ }
@@ -11,33 +13,32 @@ float = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* | "." ~ ASCII_DIGIT+ }
 string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
 // Set literals for mapping to
-set_literal = { "{" ~ int ~ ("," ~ int)* ~ "}" }
+set_literal = { "{" ~ (int | identifier) ~ ("," ~ (int | identifier))* ~ "}" }
 
-// ACSet and type definitions - Note we're making ":" optional to handle both formats
-acset_def = { "@ACSet" ~ ":"? ~ "{" ~ acset_content ~ "}" }
-acset_content = _{ (object_decl ~ ";" | mapping_decl ~ ";" | comment_line)*  }
+// --- Category Definitions ---
+category_def = { "@" ~ identifier ~ ("<" ~ identifier ~ ">")? ~ ":" ~ "{" ~ (!("}") ~ ANY)* ~ "}" }
 
-object_decl = { identifier ~ ("," ~ identifier)* }
-mapping_decl = { identifier ~ ":" ~ identifier ~ "." ~ mapping_type ~ (identifier | set_literal) }
-mapping_type = { "to" | "subseteq" | "<=>" }
-comment_line = @{ ("#" | ";;") ~ (!"\n" ~ ANY)* }
+element = _{ declaration+ }
+declaration = _{ object_decl | mapping_decl | law_decl }
 
-// Wire diagram definition
-wire_diagram_def = { "@WireDgm" ~ "<" ~ identifier ~ ">" ~ ":"? ~ "{" ~ wire_diagram_content ~ "}" }
-wire_diagram_content = _{ (object_decl ~ ";" | mapping_decl ~ ";" | law_decl ~ ";" | comment_line)* }
+// Accept either a comma-separated list of identifiers or a single identifier
+object_decl = {
+    (identifier ~ ("," ~ identifier)* ~ ";")
+}
 
-// Interaction net definition
-inet_def = { "@INet" ~ "<" ~ identifier ~ ">" ~ ":"? ~ "{" ~ inet_content ~ "}" }
-inet_content = _{ (object_decl ~ ";" | mapping_decl ~ ";" | law_decl ~ ";" | comment_line)* }
+// Handle mapping declarations
+mapping_decl = {
+    identifier ~ ":" ~ identifier ~ mapping_type ~ (identifier | set_literal) ~ ";"
+}
 
-// Laws and constraints
-law_decl = { (identifier ~ "." ~ "circ" ~ identifier ~ "." ~ law_op ~ identifier) |
-             ("." ~ "forall" ~ forall_expr) }
+mapping_type = { "$to" | "$subseteq" | "<->" }
 
-law_op = { "equiv" | "circ" }
+// --- Laws and constraints ---
+law_decl = { ((identifier ~ "$circ" ~ identifier ~ "$equiv" ~ identifier) |
+             ("$forall" ~ forall_expr)) ~ ";" } // Semicolon mandatory
 
 forall_expr = {
-    identifier ~ ("," ~ identifier)* ~ "." ~ "in" ~ identifier ~ ":" ~
+    identifier ~ ("," ~ identifier)* ~ "$in" ~ identifier ~ ":" ~
     constraint_expr
 }
 
@@ -53,22 +54,37 @@ constraint_term = _{
     "(" ~ constraint_expr ~ ")"
 }
 
-constraint_op = _{ "=" | ".land" | ".>=" | ".>" | ".<=" | ".<" | ".>=>"}
+constraint_op = _{ "=" | "$land" | "=>" | ">" | "<=" | "<" | ">" }
 
 set_expr = {
     "{" ~ set_element ~ ("|" ~ set_condition)? ~ "}" |
-    identifier ~ "*" ~ identifier
+    identifier ~ "×" ~ identifier  // Using the proper mathematical symbol for product
 }
 
 set_element = { identifier ~ ("," ~ identifier)* }
-set_condition = { identifier ~ "(" ~ identifier ~ ")" ~ ("." ~ "land" ~ identifier ~ "(" ~ identifier ~ ")")? }
+set_condition = { identifier ~ "(" ~ identifier ~ ")" ~ ("$land" ~ identifier ~ "(" ~ identifier ~ ")")? }
 
 function_app = { identifier ~ "(" ~ identifier ~ ")" }
 
-// Processing expressions
-pipe_expr = { identifier ~ ("|>" ~ identifier)+ }
+// --- Processing expressions ---
+pipe_expr = { identifier ~ ("|" ~ ">" ~ identifier)+ }
 app_expr = { ">" ~ identifier ~ "(" ~ (app_expr | identifier) ~ ")" }
-composition_expr = { identifier ~ "=" ~ identifier ~ ("." ~ "circ" ~ identifier)+ ~ "(" ~ identifier ~ ")" }
+composition_expr = { identifier ~ "=" ~ identifier ~ ("$circ" ~ identifier)+ ~ "(" ~ identifier ~ ")" }
 
-// Program
-program = { SOI ~ (acset_def | wire_diagram_def | inet_def | pipe_expr | app_expr | composition_expr)* ~ EOI }
+// --- Pipeline and Export Directives ---
+pipeline_def = { "@pipeline" ~ identifier ~ ("<" ~ identifier ~ ">")? ~ "{" ~
+                 pipeline_content ~ "}" }
+
+pipeline_content = {
+    "input" ~ ":" ~ identifier ~ ";" ~
+    "output" ~ ":" ~ identifier ~ ";" ~
+    "steps" ~ ":" ~ pipe_steps ~ ";"
+}
+
+pipe_steps = { identifier ~ ("|" ~ identifier)* | transform_identifier ~ ("|" ~ transform_identifier)* }
+
+export_directive = { "@export" ~ "{" ~ ((identifier | transform_identifier) ~ ";")* ~ "}" }
+
+// --- Program ---
+// Rely on implicit WHITESPACE/COMMENT skipping after SOI
+program = { SOI ~ (category_def | pipeline_def | pipe_expr | app_expr | composition_expr | export_directive)* ~ EOI }

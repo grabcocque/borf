@@ -1,0 +1,21 @@
+--[[ Extending existing pipelines ]]
+@pipeline MyExtendedPipeline<InteractionNetTransform> {
+  --[[ Add post-processing steps ]]
+  steps: super.steps | my_analyzer | result_formatter;
+}
+
+--[[ Pipeline composition ]]
+@pipeline CompositePipeline {
+  steps: PreprocessPipeline | CoreTransformPipeline | OutputPipeline;
+}
+
+--[[ Pipeline with internal branching ]]
+@pipeline BranchingPipeline {
+  input: Source;
+  output: Result;
+  steps: preprocessor | branch {
+    condition: $exists active_pair;
+    true_branch: >r | >d;
+    false_branch: identity;
+  } | postprocessor;
+}
