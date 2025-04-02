@@ -32,20 +32,27 @@ set_literal = { "{" ~ (int | ident) ~ ("," ~ (int | ident))* ~ "}" }
 set_comprehension = { "{" ~ ident ~ "$in" ~ ident ~ ("," ~ ident ~ "$in" ~ ident)* ~ ("|" ~ constraint_expr)? ~ "}" }
 
 // --- Category Definitions ---
-category_statement = { "@" ~ ident ~ ":" ~ "{" ~ (category_decl)* ~ "}" }
+category_statement = { "@" ~ ident ~ ("<" ~ ident ~ ">")? ~ ":" ~ "{" ~ (WHITESPACE* ~ category_decl)* ~ "}" }
 
-category_decl = { object_decl | mapping_decl | law_decl }
+category_decl = { WHITESPACE* ~ (object_decl | mapping_decl | law_decl) }
 
-object_decl = { ident ~ ";" ~ WHITESPACE* }
-mapping_decl = { ident ~ ":" ~ ident ~ mapping_type ~ ident ~ ";" }
+object_decl = { ident ~ ";" ~ WHITESPACE* ~ COMMENT? }
+mapping_decl = { ident ~ WHITESPACE* ~ ":" ~ WHITESPACE* ~ domain_expr ~ WHITESPACE* ~ mapping_type ~ WHITESPACE* ~ ident ~ ";" ~ WHITESPACE* ~ COMMENT? }
 
-mapping_type = { "$to" | "$subseteq" | "<->" | "$times" }
+// New rule for domain expressions
+domain_expr = {
+    ident |
+    "(" ~ ident ~ WHITESPACE* ~ "*" ~ WHITESPACE* ~ ident ~ ")" |  // Parenthesized product
+    ident ~ WHITESPACE* ~ "*" ~ WHITESPACE* ~ ident                // Direct product
+}
+
+mapping_type = { "$to" | "$subseteq" | "<->" | "*" }
 
 // --- Laws and constraints ---
 // Law declaration
-law_decl = { composition_law | forall_law }
+law_decl = { (composition_law | forall_law) ~ WHITESPACE* ~ COMMENT? }
 
-composition_law = { ident ~ "$circ" ~ ident ~ "$equiv" ~ ident ~ ";" }
+composition_law = { ident ~ WHITESPACE* ~ "$comp" ~ WHITESPACE* ~ ident ~ WHITESPACE* ~ ("=" ~ "==" ~ "===" | "===") ~ WHITESPACE* ~ ident ~ ";" }
 forall_law = { forall_expr ~ ";" }
 
 forall_expr = {
@@ -57,7 +64,7 @@ forall_expr = {
 constraint_expr = { primary_constraint_term ~ (constraint_op ~ primary_constraint_term)* }
 
 // constraint_op remains atomic and explicit
-constraint_op = @{ "=" | "$and" | "=>" | ">" | "<=" | "<" | ">=" | "$equiv" }
+constraint_op = @{ "=" | "$and" | "=>" | ">" | "<=" | "<" | ">=" | "=" ~ "==" ~ "===" }
 
 // Primary terms (silent for implicit whitespace handling)
 primary_constraint_term = _{ int | set_expr | function_app | ident | "(" ~ constraint_expr ~ ")" | "|" ~ set_expr ~ "|" }
@@ -65,8 +72,8 @@ primary_constraint_term = _{ int | set_expr | function_app | ident | "(" ~ const
 set_expr = {
     "{" ~ set_element ~ ("|" ~ set_condition)? ~ "}" |
     ident ~ "×" ~ ident |  // Using the proper mathematical symbol for product
-    ident ~ "$times" ~ ident |  // Using $times as an alternative for product
-    "(" ~ ident ~ "$times" ~ ident ~ ")"  // Parenthesized product
+    ident ~ "*" ~ ident |  // Using * as an alternative for product
+    "(" ~ ident ~ "*" ~ ident ~ ")"  // Parenthesized product
 }
 
 set_element = { ident ~ ("," ~ ident)* }
@@ -78,7 +85,7 @@ function_app = { ident ~ "(" ~ (ident | constraint_expr) ~ ")" }
 pipe_statement = { ident ~ ("|" ~ transform_ident)+ }
 app_statement = { transform_ident ~ "(" ~ (app_arg) ~ ")" }
 app_arg = _{ app_statement | ident }
-composition_statement = { ident ~ "=" ~ ident ~ ("$circ" ~ ident)+ ~ ("(" ~ ident ~ ")")? }
+composition_statement = { ident ~ "=" ~ ident ~ ("$comp" ~ ident)+ ~ ("(" ~ ident ~ ")")? }
 
 // --- Pipeline and Export Directives ---
 pipeline_statement = { "@pipeline" ~ ident ~ ("<" ~ ident ~ ">")? ~ "{" ~

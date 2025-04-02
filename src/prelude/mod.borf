@@ -26,10 +26,10 @@
   O;M;                --[[ O: set of objects, M: set of morphisms ]]
   dom:M $to O; cod:M $to O; --[[ dom: domain map, cod: codomain map ]]
   id:O $to M;         --[[ id: identity morphism map ]]
-  comp:M $times M $to M;  --[[ comp: composition operation ]]
+  comp:M * M $to M;  --[[ comp: composition operation ]]
 
   --[[ Laws for categories ]]
-  comp $circ id $equiv id;  --[[ Law: identity acts as unit for composition ]]
+  comp $comp id === id;  --[[ Law: identity acts as unit for composition ]]
   $forall f $in M: dom(id(cod(f))) = cod(f);  --[[ Law: codomain typing ]]
   $forall f $in M: cod(id(dom(f))) = dom(f);  --[[ Law: domain typing ]]
   $forall f,g $in M: cod(f) = dom(g) => dom(comp(g,f)) = dom(f);  --[[ Law: composition domain ]]
@@ -61,7 +61,7 @@
   w:P<->P;            --[[ w: wiring relation, connects ports (symmetric) ]]
   tP:P $to X; tB:B $to X --[[ tP: port types, tB: box types ]]
 
-  w $circ w $equiv id;  --[[ Law: wiring is an involution (self-inverse) ]]
+  w $comp w === id;  --[[ Law: wiring is an involution (self-inverse) ]]
 }
 
 --[[
@@ -73,7 +73,7 @@
 ]]
 @INet<WireDgm>: {
   p:P $to {0,1};        --[[ p: principal port flag (1=principal, 0=auxiliary) ]]
-  R:{L $subseteq (B $times B)} $to {S $subseteq (B $times B)}; --[[ R: reduction rules mapping patterns to replacements ]]
+  R:{L $subseteq (B * B)} $to {S $subseteq (B * B)}; --[[ R: reduction rules mapping patterns to replacements ]]
 
   --[[ Law: Each box has exactly one principal port ]]
   $forall b $in B: |{p $in P | b(p) $and p(p)}| = 1;
@@ -146,7 +146,7 @@
   >a; >w; >i; >r; >d; >t;
 
   --[[ Common compositional operators ]]
-  $circ;  --[[ Function composition: (f $circ g)(x) = f(g(x)) ]]
+  $comp;  --[[ Function composition: (f $comp g)(x) = f(g(x)) ]]
   pipe = |;  --[[ Pipeline operator: x | f | g = g(f(x)) ]]
 
   --[[ Common pipeline patterns ]]
@@ -155,7 +155,7 @@
   FullReduction = >a | >w | >i | >r | >d | >t;  --[[ Complete pipeline ]]
 
   --[[ Mathematical operators ]]
-  $to; $in; $and; $forall; $times; $subseteq; $equiv;
+  $to; $in; $and; $forall; *; $subseteq; ===;
 }
 
 --[[
@@ -164,7 +164,7 @@
   Expresses the complete workflow as function composition
   (Apply a first, then w, etc. - right-to-left composition)
 ]]
-FullPipeline = t $circ d $circ r $circ i $circ w $circ a;
+FullPipeline = t $comp d $comp r $comp i $comp w $comp a;
 
 --[[
   Implementation Notes:

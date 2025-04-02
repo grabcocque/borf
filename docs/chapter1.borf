@@ -60,12 +60,12 @@ Laws define the properties and constraints that apply within a category. They ex
 ]]
 
 -- Composition law
-f $circ g $equiv h;
+f $comp g === h;
 
 --[[
 This law states that the composition of morphisms f and g is equivalent to morphism h. In category theory, composition is a fundamental operation that combines two compatible morphisms into a new one.
 
-The `$circ` operator denotes function composition, where (f $circ g)(x) = g(f(x)). The `$equiv` operator asserts that the expressions on both sides are equivalent.
+The `$comp` operator denotes function composition, where (f $comp g)(x) = g(f(x)). The `===` operator asserts that the expressions on both sides are equivalent.
 ]]
 
 -- Universal quantifier with constraint
@@ -123,10 +123,10 @@ The result is assigned to the variable `net`. This nested application style is u
 
 3. Composition expressions define new functions via composition:
 ]]
-result = f $circ g $circ h(input)
+result = f $comp g $comp h(input)
 
 --[[
-This expression composes functions `f`, `g`, and `h` and then applies the composed function to `input`. The composition `f $circ g $circ h` creates a new function that applies `h`, then `g`, and then `f` to its argument.
+This expression composes functions `f`, `g`, and `h` and then applies the composed function to `input`. The composition `f $comp g $comp h` creates a new function that applies `h`, then `g`, and then `f` to its argument.
 
 Composition is a fundamental operation in category theory and provides a way to build complex transformations from simpler ones.
 
@@ -331,7 +331,7 @@ Let's put together a simple Borf program to demonstrate the concepts we've learn
   toComplex: Real $to Complex;
 
   -- Law: composition of toReal and toComplex
-  toReal $circ toComplex $equiv natToComplex;
+  toReal $comp toComplex === natToComplex;
 
   -- Law: all natural numbers are positive
   $forall n $in Nat: n > 0;
