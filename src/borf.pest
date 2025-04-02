@@ -1,12 +1,12 @@
 // borf.pest - Grammar for the Borf language
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 // Support for Lua-style comments and traditional C-style comments
-COMMENT = _{ "--[[" ~ (!"]]" ~ ANY)* ~ "]]" | "--" ~ (!"\n" ~ ANY)* ~ "\n"? | "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+COMMENT = _{ "--[[" ~ (!"]" ~ ANY)* ~ "]]" | "--" ~ (!"\n" ~ ANY)* ~ "\n"? | "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
 
 // --- Program Structure ---
 program = { SOI ~ statement* ~ EOI }
 
-// Top-level statements
+// Top-level statements (silent)
 statement = _{
     category_statement |
     pipeline_statement |

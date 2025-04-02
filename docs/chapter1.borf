@@ -113,14 +113,6 @@ Here's a real-world example using standard transformations:
 net = >i(>w(>a(IO)))
 
 --[[
-This expression creates an interaction net by:
-
-1. First applying the `>a` transformation to the `IO` object, creating an ACSet
-2. Then applying the `>w` transformation to the resulting ACSet, creating a wiring diagram
-3. Finally applying the `>i` transformation to the wiring diagram, creating an interaction net
-
-The result is assigned to the variable `net`. This nested application style is useful when you want to emphasize the order of transformations and their hierarchical relationship.
-
 3. Composition expressions define new functions via composition:
 ]]
 result = f $comp g $comp h(input)

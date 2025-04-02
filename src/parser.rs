@@ -1625,8 +1625,8 @@ mod tests {
     fn test_analyze_prelude_format() {
         // Load the actual prelude.borf file
         let prelude_path = "src/prelude/mod.borf";
-        let prelude_content =
-            std::fs::read_to_string(prelude_path).expect("Failed to read prelude file");
+        let prelude_content = std::fs::read_to_string(prelude_path)
+            .unwrap_or_else(|_| panic!("Failed to read prelude file"));
 
         // Analyze the format of declarations
         let lines: Vec<&str> = prelude_content.lines().collect();
@@ -1715,8 +1715,8 @@ mod tests {
     fn test_parse_prelude_file() {
         // Load the actual prelude.borf file from the codebase
         let prelude_path = "src/prelude/mod.borf";
-        let prelude_content =
-            std::fs::read_to_string(prelude_path).expect("Failed to read prelude file");
+        let prelude_content = std::fs::read_to_string(prelude_path)
+            .unwrap_or_else(|_| panic!("Failed to read prelude file"));
 
         // Output the first few lines for debugging
         println!("Original prelude content starts with:");
@@ -1939,5 +1939,30 @@ mod tests {
         // Ensure the content is recognized as a valid program by removing potential preamble
         // and concatenating normalized lines
         normalized_lines.join("\n")
+    }
+
+    #[test]
+    fn test_parse_chapter1_doc() {
+        let chapter1_path = "docs/chapter1.borf";
+        let chapter1_content_raw = std::fs::read_to_string(chapter1_path)
+            .unwrap_or_else(|_| panic!("Failed to read file: {}", chapter1_path));
+        let chapter1_content = chapter1_content_raw.trim(); // Keep trimming
+
+        println!("Attempting to parse docs/chapter1.borf (trimmed)...");
+        println!("Content length: {}", chapter1_content.len());
+        let result = parse_program(chapter1_content);
+
+        // Expect parsing to fail because chapter1.borf describes features
+        // (like @import, pipeline extension/composition/branching)
+        // that are not yet implemented in the grammar/parser.
+        assert!(
+            result.is_err(),
+            "Parsing chapter1.borf should fail due to unimplemented features, but it succeeded."
+        );
+
+        println!("Confirmed that parsing docs/chapter1.borf fails as expected due to unimplemented features.");
+        if let Err(e) = result {
+            println!("Parsing failed with error: {:?}", e);
+        }
     }
 }

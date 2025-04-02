@@ -27,6 +27,13 @@ This project aims to implement a gradually typed language based on the interacti
     *   Implement parsing for the full constraint language within `forall` laws.
     *   Handle more complex `mapping_decl` targets (e.g., `B*B`).
     *   Improve error reporting with more specific `miette` diagnostics.
+    *   **Parse features needed for `docs/chapter1.borf`:**
+        *   Parse `@import` statements.
+        *   Parse pipeline extension syntax (`@pipeline Name<Base> { ... }`).
+        *   Parse pipeline composition syntax (`steps: PipelineA | PipelineB;`).
+        *   Parse conditional branching within pipelines (`branch { ... }`).
+        *   Allow integer/other literals at the start of `pipe_statement` expressions (e.g., `5 |> ...`).
+        *   Allow top-level assignments (e.g., `net = >i(...)`).
 2.  **Semantic Analysis:**
     *   Build a semantic analysis phase to check for correctness beyond syntax (e.g., undefined identifiers, type consistency based on definitions).
     *   Implement the gradual type system logic (type checking, inference).
