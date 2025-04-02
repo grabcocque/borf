@@ -9,11 +9,11 @@ This project aims to implement a gradually typed language based on the interacti
     *   Supports Wire Diagram definitions (`@WireDgm<Base> { ... }`).
     *   Supports Interaction Net definitions (`@INet<Base> { ... }`).
     *   Parses basic object declarations (`N; E;`) and mapping declarations (`s:E.to N;`, `p:P.to{0,1};`).
-    *   Parses basic law declarations (`w.circ w.equiv id;`, `.forall b.in B: ...;`).
+    *   Parses basic law declarations (`w.comp w.equiv id;`, `.forall b.in B: ...;`).
     *   Parses processing expressions:
-        *   Pipe-like: `WorldState |> a |> w`
-        *   Function application: `>i(>w(>a(WorldState)))`
-        *   Composition: `T = t.circ d.circ a(W)`
+        *   Pipe-like: `IO |> a |> w`
+        *   Function application: `>i(>w(>a(IO)))`
+        *   Composition: `T = t.comp d.comp a(W)`
     *   Handles comments starting with `#` or `;;`.
     *   Includes a suite of unit tests (`src/parser.rs`) verifying the parser logic.
 *   **AST:** Data structures representing the parsed elements (ACSetDef, WireDgmDef, INetDef, expressions, etc.) are defined in `src/parser.rs`.
@@ -143,7 +143,7 @@ The **easiest way** to achieve this is through **encoding and syntax sugar**:
     *   The parser translates this high-level syntax (`let x = 5; if y { ... } else { ... }`) into the corresponding low-level interaction net encodings (specific graphs of \(\delta\), \(\epsilon\), constructors, etc.).
     *   Your gradual typing system fits in here, annotating the agents and connections derived from the high-level code.
 
-4.  **Handle I/O (Pragmatic Extension):** Pure interaction nets don't have built-in I/O. The easiest way is to introduce special "magic" agents (e.g., `ReadConsole`, `WriteConsole`) that interact with the outside WorldState. These agents break the pure model slightly but are necessary for practical programming. Their interaction rules would trigger system calls or other side effects.
+4.  **Handle I/O (Pragmatic Extension):** Pure interaction nets don't have built-in I/O. The easiest way is to introduce special "magic" agents (e.g., `ReadConsole`, `WriteConsole`) that interact with the outside IO. These agents break the pure model slightly but are necessary for practical programming. Their interaction rules would trigger system calls or other side effects.
 
 **Why is this the "easiest" way?**
 
@@ -308,7 +308,7 @@ The main challenge lies in designing efficient and manageable encodings and ensu
 15. **Develop Example Programs**
     * [ ] Create simple illustrative examples
     * [ ] Implement classic algorithms using interaction nets
-    * [ ] Build larger case studies showing real-WorldState applications
+    * [ ] Build larger case studies showing real-IO applications
     * [ ] Add examples showing the benefits of the type system
     * [ ] Create tutorial documentation with detailed error explanations
 
@@ -354,7 +354,7 @@ The main challenge lies in designing efficient and manageable encodings and ensu
       * [ ] Real-time rendering of interaction net structure in Lafont's style
       * [ ] Animated transitions for reduction steps
       * [ ] Highlighting of active pairs (redexes)
-      * [ ] Multiple visualization layouts (tree, graph, circular)
+      * [ ] Multiple visualization layouts (tree, graph, compular)
       * [ ] User-configurable rendering styles
       * [ ] Recording and playback of reduction sequences
       * [ ] Export to SVG/PNG/GIF formats for documentation
@@ -405,7 +405,7 @@ The main challenge lies in designing efficient and manageable encodings and ensu
     * [ ] Create bindings to popular Rust libraries
     * [ ] Build standard data structure implementations optimized for interaction nets
     * [ ] Implement I/O and system interaction primitives
-    * [ ] Create example real-WorldState applications showcasing language capabilities
+    * [ ] Create example real-IO applications showcasing language capabilities
 
 26. **Academic and Research Value**
     * [ ] Formalize type safety proofs

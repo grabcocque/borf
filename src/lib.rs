@@ -1,3 +1,5 @@
+//! Core library for the Borf language
+
 pub mod error;
 pub mod evaluator;
 pub mod integration;

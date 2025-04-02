@@ -1,10 +1,80 @@
 // Use the library crate
-use borf::parser::{self, TopLevelItem};
+use borf::parser::{self, BorfParser, Rule, TopLevelItem};
+use pest::Parser;
 use std::env;
 use std::fs;
 use std::path::Path;
 
 const PRELUDE_PATH: &str = "src/prelude/mod.borf";
+
+// Simple function to test direct parse
+fn test_direct_parse(input: &str, rule: Rule) -> bool {
+    println!("Testing direct parse of rule {:?}", rule);
+    println!("Input: {}", input);
+    let result = BorfParser::parse(rule, input);
+    match result {
+        Ok(_) => {
+            println!("Success!");
+            true
+        }
+        Err(e) => {
+            println!("Failed: {:?}", e);
+            false
+        }
+    }
+}
+
+fn test_category_parsing() {
+    println!("\n--- Testing Category Parsing ---");
+
+    // Test just the object declaration first
+    println!("Testing object_decl parsing:");
+    let test_obj = "A";
+    test_direct_parse(test_obj, Rule::object_decl);
+
+    // Test mapping declaration
+    println!("Testing mapping_decl parsing:");
+    let test_mapping = "f: A $to B";
+    test_direct_parse(test_mapping, Rule::mapping_decl);
+
+    // Test declaration with semicolon
+    println!("Testing declaration parsing:");
+    let test_decl = "A;";
+    test_direct_parse(test_decl, Rule::object_decl);
+
+    // Test category content (now as part of a minimal statement)
+    println!("Testing category content parsing:");
+    let test_content = "@Test: { A; B; f: A $to B; }";
+    test_direct_parse(test_content, Rule::category_statement);
+
+    // Test very simple category
+    println!("Testing minimal category parsing:");
+    let test_category = "@Simple: {}";
+    test_direct_parse(test_category, Rule::category_statement);
+
+    // Now test a category with some content
+    println!("Testing simple category statement parsing:");
+    let simple_category = "@Category: { A; B; f: A $to B; }";
+    if test_direct_parse(simple_category, Rule::category_statement) {
+        println!("Simple category parses correctly!");
+    } else {
+        println!("Simple category fails to parse!");
+    }
+
+    // Test in a full program context
+    println!("Testing simple category in a program context:");
+    if test_direct_parse(simple_category, Rule::statement) {
+        println!("Simple category statement parses correctly!");
+    } else {
+        println!("Simple category statement fails to parse as a statement!");
+    }
+
+    if test_direct_parse(simple_category, Rule::program) {
+        println!("Simple category program parses correctly!");
+    } else {
+        println!("Simple category program fails to parse!");
+    }
+}
 
 fn load_and_parse_prelude() -> Result<Vec<TopLevelItem>, String> {
     println!("Loading prelude from: {}", PRELUDE_PATH);
@@ -13,8 +83,32 @@ fn load_and_parse_prelude() -> Result<Vec<TopLevelItem>, String> {
     match fs::read_to_string(file_path) {
         Ok(prelude_content) => {
             println!("Parsing prelude...");
-            parser::parse_program(&prelude_content)
-                .map_err(|e| format!("Prelude parsing failed: {:?}", e))
+
+            // Print the first few lines for debugging
+            let first_few_lines: Vec<&str> = prelude_content.lines().take(30).collect();
+            println!("First 30 lines of prelude:");
+            for (i, line) in first_few_lines.iter().enumerate() {
+                println!("[{:2}] {}", i + 1, line);
+            }
+
+            // Try to parse the file directly with the BorfParser
+            let parse_result = BorfParser::parse(Rule::program, &prelude_content);
+
+            match parse_result {
+                Ok(mut pairs) => {
+                    let program = pairs.next().unwrap();
+                    println!("Successfully parsed with PEG grammar!");
+                    println!("Got program: {:?}", program.as_rule());
+
+                    // Continue with the normal parsing
+                    parser::parse_program(&prelude_content)
+                        .map_err(|e| format!("Prelude parsing failed: {:?}", e))
+                }
+                Err(e) => {
+                    println!("PEG grammar parse failed: {:?}", e);
+                    Err(format!("PEG grammar parse failed: {:?}", e))
+                }
+            }
         }
         Err(e) => Err(format!(
             "Failed to read prelude file {}: {}",
@@ -26,6 +120,9 @@ fn load_and_parse_prelude() -> Result<Vec<TopLevelItem>, String> {
 
 fn main() {
     println!("Hello from Borf binary!");
+
+    // First run our dedicated parsing tests
+    test_category_parsing();
 
     // --- Load and Parse Prelude ---
     let prelude_definitions = match load_and_parse_prelude() {

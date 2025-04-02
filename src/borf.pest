@@ -3,9 +3,22 @@ WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 // Support for Lua-style comments and traditional C-style comments
 COMMENT = _{ "--[[" ~ (!"]]" ~ ANY)* ~ "]]" | "--" ~ (!"\n" ~ ANY)* ~ "\n"? | "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
 
+// --- Program Structure ---
+program = { SOI ~ statement* ~ EOI }
+
+// Top-level statements
+statement = _{
+    category_statement |
+    pipeline_statement |
+    export_statement |
+    pipe_statement |
+    app_statement |
+    composition_statement
+}
+
 // Identifiers
-identifier = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
-transform_identifier = @{ ">" ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+transform_ident = @{ ">" ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
 // Basic types
 int = @{ ASCII_DIGIT+ }
@@ -13,77 +26,70 @@ float = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* | "." ~ ASCII_DIGIT+ }
 string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
 // Set literals for mapping to
-set_literal = { "{" ~ (int | identifier) ~ ("," ~ (int | identifier))* ~ "}" }
+set_literal = { "{" ~ (int | ident) ~ ("," ~ (int | ident))* ~ "}" }
+
+// Set comprehension
+set_comprehension = { "{" ~ ident ~ "$in" ~ ident ~ ("," ~ ident ~ "$in" ~ ident)* ~ ("|" ~ constraint_expr)? ~ "}" }
 
 // --- Category Definitions ---
-category_def = { "@" ~ identifier ~ ("<" ~ identifier ~ ">")? ~ ":" ~ "{" ~ category_content ~ "}" }
-// Define as zero or more groups of (declaration followed by ';'). Non-atomic.
-category_content = { (declaration ~ ";")* }
+category_statement = { "@" ~ ident ~ ":" ~ "{" ~ (category_decl)* ~ "}" }
 
-// Semicolon is mandatory terminator for the group, not the declaration itself
-declaration = _{ object_decl | mapping_decl | law_decl }
+category_decl = { object_decl | mapping_decl | law_decl }
 
-// Object declaration: one or more identifiers separated by semicolons
-object_decl = { identifier ~ (";" ~ identifier)* }
+object_decl = { ident ~ ";" ~ WHITESPACE* }
+mapping_decl = { ident ~ ":" ~ ident ~ mapping_type ~ ident ~ ";" }
 
-// Mapping declaration
-mapping_decl = { identifier ~ ":" ~ identifier ~ mapping_type ~ (identifier | set_literal) }
-
-mapping_type = { "$to" | "$subseteq" | "<->" }
+mapping_type = { "$to" | "$subseteq" | "<->" | "$times" }
 
 // --- Laws and constraints ---
 // Law declaration
-law_decl = { (identifier ~ "$circ" ~ identifier ~ "$equiv" ~ identifier) |
-             ("$forall" ~ forall_expr) }
+law_decl = { composition_law | forall_law }
+
+composition_law = { ident ~ "$circ" ~ ident ~ "$equiv" ~ ident ~ ";" }
+forall_law = { forall_expr ~ ";" }
 
 forall_expr = {
-    identifier ~ ("," ~ identifier)* ~ "$in" ~ identifier ~ ":" ~
+    "$forall" ~ ident ~ ("," ~ ident)* ~ "$in" ~ ident ~ ("," ~ "(" ~ constraint_expr ~ ")")? ~ ":" ~
     constraint_expr
 }
 
-constraint_expr = {
-    constraint_term ~ (constraint_op ~ constraint_term)*
-}
+// Re-introduce binary_constraint rule, make it silent
+constraint_expr = { primary_constraint_term ~ (constraint_op ~ primary_constraint_term)* }
 
-constraint_term = _{
-    int |
-    set_expr |
-    function_app |
-    identifier |
-    "(" ~ constraint_expr ~ ")"
-}
+// constraint_op remains atomic and explicit
+constraint_op = @{ "=" | "$and" | "=>" | ">" | "<=" | "<" | ">=" | "$equiv" }
 
-constraint_op = _{ "=" | "$land" | "=>" | ">" | "<=" | "<" | ">" }
+// Primary terms (silent for implicit whitespace handling)
+primary_constraint_term = _{ int | set_expr | function_app | ident | "(" ~ constraint_expr ~ ")" | "|" ~ set_expr ~ "|" }
 
 set_expr = {
     "{" ~ set_element ~ ("|" ~ set_condition)? ~ "}" |
-    identifier ~ "×" ~ identifier  // Using the proper mathematical symbol for product
+    ident ~ "×" ~ ident |  // Using the proper mathematical symbol for product
+    ident ~ "$times" ~ ident |  // Using $times as an alternative for product
+    "(" ~ ident ~ "$times" ~ ident ~ ")"  // Parenthesized product
 }
 
-set_element = { identifier ~ ("," ~ identifier)* }
-set_condition = { identifier ~ "(" ~ identifier ~ ")" ~ ("$land" ~ identifier ~ "(" ~ identifier ~ ")")? }
+set_element = { ident ~ ("," ~ ident)* }
+set_condition = { ident ~ "(" ~ ident ~ ")" ~ ("$and" ~ ident ~ "(" ~ ident ~ ")")? }
 
-function_app = { identifier ~ "(" ~ identifier ~ ")" }
+function_app = { ident ~ "(" ~ (ident | constraint_expr) ~ ")" }
 
 // --- Processing expressions ---
-pipe_expr = { identifier ~ ("|" ~ ">" ~ identifier)+ }
-app_expr = { ">" ~ identifier ~ "(" ~ (app_expr | identifier) ~ ")" }
-composition_expr = { identifier ~ "=" ~ identifier ~ ("$circ" ~ identifier)+ ~ "(" ~ identifier ~ ")" }
+pipe_statement = { ident ~ ("|" ~ transform_ident)+ }
+app_statement = { transform_ident ~ "(" ~ (app_arg) ~ ")" }
+app_arg = _{ app_statement | ident }
+composition_statement = { ident ~ "=" ~ ident ~ ("$circ" ~ ident)+ ~ ("(" ~ ident ~ ")")? }
 
 // --- Pipeline and Export Directives ---
-pipeline_def = { "@pipeline" ~ identifier ~ ("<" ~ identifier ~ ">")? ~ "{" ~
+pipeline_statement = { "@pipeline" ~ ident ~ ("<" ~ ident ~ ">")? ~ "{" ~
                  pipeline_content ~ "}" }
 
 pipeline_content = {
-    "input" ~ ":" ~ identifier ~ ";" ~
-    "output" ~ ":" ~ identifier ~ ";" ~
+    "input" ~ ":" ~ ident ~ ";" ~
+    "output" ~ ":" ~ ident ~ ";" ~
     "steps" ~ ":" ~ pipe_steps ~ ";"
 }
 
-pipe_steps = { identifier ~ ("|" ~ identifier)* | transform_identifier ~ ("|" ~ transform_identifier)* }
+pipe_steps = { ident ~ ("|" ~ ident)* | transform_ident ~ ("|" ~ transform_ident)* }
 
-export_directive = { "@export" ~ "{" ~ ((identifier | transform_identifier) ~ ";")* ~ "}" }
-
-// --- Program ---
-// Rely on implicit WHITESPACE/COMMENT skipping after SOI
-program = { SOI ~ (category_def | pipeline_def | pipe_expr | app_expr | composition_expr | export_directive)* ~ EOI }
+export_statement = { "@export" ~ "{" ~ ((ident | transform_ident) ~ ";")* ~ "}" }

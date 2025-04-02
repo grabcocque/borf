@@ -1,17 +1,40 @@
 --[[
-  Categorical Type System for Interaction Nets
+  prelude.borf
 
-  This prelude defines a categorical framework for representing and transforming:
-  - Attributed C-Sets (ACSet)
-  - Wiring Diagrams (WireDgm)
-  - Interaction Nets (INet)
+  Categorical Framework for Interaction Nets
 
-  The syntax uses:
-  - $operator for mathematical operators
+  This prelude defines the core categorical structures and transformations for:
+  - Attributed C-Sets (ACSet) - decorated directed graphs
+  - Wiring Diagrams (WireDgm) - boxes connected through ports
+  - Interaction Nets (INet) - specialized wiring diagrams with reduction semantics
+
+  The syntax follows mathematical conventions while being 7-bit ASCII compatible:
+  - $operator for mathematical operators (replacing LaTeX commands)
   - <-> for bidirectional mappings
   - => for implications
-  - Lua-style comments
+  - Proper grouping with () for operations and {} for sets
 ]]
+
+--[[
+  Category: Basic categorical structure
+  - Objects (O) and Morphisms (M) form the underlying structure
+  - dom,cod assign domain and codomain objects to each morphism
+  - id maps each object to its identity morphism
+  - comp defines morphism composition
+]]
+@Category: {
+  O;M;                --[[ O: set of objects, M: set of morphisms ]]
+  dom:M $to O; cod:M $to O; --[[ dom: domain map, cod: codomain map ]]
+  id:O $to M;         --[[ id: identity morphism map ]]
+  comp:M $times M $to M;  --[[ comp: composition operation ]]
+
+  --[[ Laws for categories ]]
+  comp $circ id $equiv id;  --[[ Law: identity acts as unit for composition ]]
+  $forall f $in M: dom(id(cod(f))) = cod(f);  --[[ Law: codomain typing ]]
+  $forall f $in M: cod(id(dom(f))) = dom(f);  --[[ Law: domain typing ]]
+  $forall f,g $in M: cod(f) = dom(g) => dom(comp(g,f)) = dom(f);  --[[ Law: composition domain ]]
+  $forall f,g $in M: cod(f) = dom(g) => cod(comp(g,f)) = cod(g);  --[[ Law: composition codomain ]]
+}
 
 --[[
   ACSet: Attributed C-Set - a decorated directed graph
@@ -38,7 +61,7 @@
   w:P<->P;            --[[ w: wiring relation, connects ports (symmetric) ]]
   tP:P $to X; tB:B $to X --[[ tP: port types, tB: box types ]]
 
-  w $circ w $equiv id;  --[[ Law: wiring is an involution (self-inverse) - connecting twice gets you back ]]
+  w $circ w $equiv id;  --[[ Law: wiring is an involution (self-inverse) ]]
 }
 
 --[[
@@ -50,59 +73,109 @@
 ]]
 @INet<WireDgm>: {
   p:P $to {0,1};        --[[ p: principal port flag (1=principal, 0=auxiliary) ]]
-  R:L $subseteq B*B $to S $subseteq B*B; --[[ R: reduction rules mapping patterns to replacements ]]
+  R:{L $subseteq (B $times B)} $to {S $subseteq (B $times B)}; --[[ R: reduction rules mapping patterns to replacements ]]
 
   --[[ Law: Each box has exactly one principal port ]]
-  $forall b $in B:|{p $in P|b(p) $land p(p)}|=1;
+  $forall b $in B: |{p $in P | b(p) $and p(p)}| = 1;
 
   --[[ Law: Connected principal ports form active pairs (reduction sites) ]]
-  $forall p,q $in P:w(p)=q $land p(p) $land p(q)=>active(p,q)
+  $forall p,q $in P: (w(p)=q $and p(p) $and p(q)) => active(p,q);
 }
-
---[[ Pipeline Definition and Export ]]
 
 --[[
-  Transformation Pipeline
+  Rewriting: Rules for transforming interaction nets
+  - Based on pattern matching and replacement of active pairs
+  - Preserves connectivity while changing network structure
+  - Core of the computational model
+]]
+@Rewriting<INet>: {
+  --[[ Additional structure for rewriting systems ]]
+  match:{Pattern} $to {Subgraph};  --[[ Pattern matching function ]]
+  rewrite:{Active} $to {Replacement};  --[[ Rewriting function ]]
 
-  Defines the chain of projections from WorldState state to termination:
-  - >a: Extract ACSet from WorldState state
-  - >w: Project ACSet to wiring diagram
-  - >i: Interpret wiring diagram as interaction net
-  - >r: Extract rewriting rules
-  - >d: Perform reduction steps
-  - >t: Check termination conditions
+  --[[ Laws for rewriting ]]
+  $forall a $in Active: consistent(rewrite(a));  --[[ Rewriting preserves consistency ]]
+  $forall a $in Active: connected(a) => connected(rewrite(a));  --[[ Preserves connectivity ]]
+}
+
+--[[
+  Reduction: Stepwise application of rewriting rules
+  - Encapsulates the operational semantics
+  - Handles strategy and control flow of reductions
+  - Tracks reduction history
+]]
+@Reduction<Rewriting>: {
+  step:{Net} $to {Net};  --[[ Single reduction step ]]
+  strategy:{Net} $to {Active};  --[[ Strategy for selecting active pairs ]]
+  history:{Net} $to {Trace};  --[[ Reduction history ]]
+}
+
+--[[
+  Termination: Analysis of reduction process completion
+  - Detects normal forms and cyclical reductions
+  - Provides termination conditions and analysis
+]]
+@Termination<Reduction>: {
+  normal:{Net} $to {Bool};  --[[ Normal form predicate ]]
+  terminates:{Net} $to {Bool};  --[[ Termination predicate ]]
+  cycles:{Trace} $to {Cycles};  --[[ Cycle detection ]]
+}
+
+--[[
+  Transformation Operators
+
+  Core operators for transforming between categorical structures:
+  >a: IO -> ACSet (extract decorated graph)
+  >w: ACSet -> WireDgm
+  >i: WireDgm -> INet
+  >r: INet -> Rewriting
+  >d: Rewriting -> Reduction
+  >t: Reduction -> IO (reduction termination result)
 ]]
 
---[[ Define named pipeline operators that can be exported ]]
-@pipeline InteractionNetTransform {
-  input: WorldState;
-  output: InteractionNet;
-  steps: >a | >w | >i;  --[[ ACSet > WireDgm > INet ]]
-}
+--[[
+  Export Declaration
 
-@pipeline FullReductionPipeline {
-  input: WorldState;
-  output: Termination;
-  steps: >a | >w | >i | >r | >d | >t;
-}
-
-@pipeline CustomReduction<T> {  --[[ Parameterized pipeline ]]
-  input: WireDgm;
-  output: T;
-  steps: >i | >r | custom_rule_filter | >d;  --[[ Can include custom operations ]]
-}
-
---[[ Export declaration makes pipelines available to callers ]]
-
+  Items automatically imported into all other Borf modules
+]]
 @export {
+  --[[ Core types ]]
+  Category; ACSet; WireDgm; INet; Rewriting; Reduction; Termination;
+
   --[[ Basic transformation operators ]]
   >a; >w; >i; >r; >d; >t;
 
-  --[[ Pre-composed pipelines ]]
-  InteractionNetTransform;
-  FullReductionPipeline;
-  CustomReduction;
+  --[[ Common compositional operators ]]
+  $circ;  --[[ Function composition: (f $circ g)(x) = f(g(x)) ]]
+  pipe = |;  --[[ Pipeline operator: x | f | g = g(f(x)) ]]
 
-  --[[ Types that callers might need ]]
-  ACSet; WireDgm; INet;
+  --[[ Common pipeline patterns ]]
+  WiringTransform = >a | >w;  --[[ IO to WiringDiagram ]]
+  NetTransform = >a | >w | >i;  --[[ IO to InteractionNet ]]
+  FullReduction = >a | >w | >i | >r | >d | >t;  --[[ Complete pipeline ]]
+
+  --[[ Mathematical operators ]]
+  $to; $in; $and; $forall; $times; $subseteq; $equiv;
 }
+
+--[[
+  Compositional View of Full Transformation Pipeline
+
+  Expresses the complete workflow as function composition
+  (Apply a first, then w, etc. - right-to-left composition)
+]]
+FullPipeline = t $circ d $circ r $circ i $circ w $circ a;
+
+--[[
+  Implementation Notes:
+
+  - ACSet maps to graph structure in memory
+  - Wiring diagrams represent connections between computational components
+  - Interaction nets provide semantics for graph reduction
+  - The transformation pipeline enables compositional reasoning about complex systems
+  - Reductions capture computational steps as graph transformations
+
+  Example usage:
+
+  world | >a | >w | >i | my_rules | >d | analyze_results
+]]
