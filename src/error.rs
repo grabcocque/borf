@@ -121,6 +121,10 @@ pub enum BorfError {
     #[diagnostic(code(borf::semantic::category_structure))]
     CategoryStructureError(#[from] CategoryStructureError),
 
+    #[error(transparent)]
+    #[diagnostic(code(borf::semantic::symbol_error))]
+    SymbolError(#[from] SymbolError),
+
     // Runtime errors
     #[error(transparent)]
     #[diagnostic(code(borf::runtime::reduction_error))]
@@ -413,6 +417,64 @@ impl UndefinedSymbolError {
             self.related.push(related);
         }
         self
+    }
+}
+
+/// Error for symbol literal issues
+#[derive(Error, Debug, Diagnostic)]
+#[error("Symbol error: {message}")]
+#[diagnostic(
+    code(borf::e0014),
+    url("https://docs.borf-lang.org/errors/e0014"),
+    help("{help}")
+)]
+pub struct SymbolError {
+    pub message: String,
+    #[source_code]
+    pub src: NamedSource<String>,
+    #[label("Symbol error")]
+    pub span: SourceSpan,
+    pub help: String,
+    pub label: String,
+    #[related]
+    pub related: Vec<RelatedError>,
+}
+
+impl SymbolError {
+    pub fn new(
+        message: &str,
+        src: NamedSource<String>,
+        span: SourceSpan,
+        help: &str,
+        label: &str,
+    ) -> Self {
+        Self {
+            message: message.to_string(),
+            src,
+            span,
+            help: help.to_string(),
+            label: label.to_string(),
+            related: Vec::new(),
+        }
+    }
+
+    pub fn with_related(mut self, related: Vec<RelatedError>) -> Self {
+        self.related = related;
+        self
+    }
+
+    pub fn invalid_symbol(symbol: &str, src: NamedSource<String>, span: SourceSpan) -> Self {
+        let message = format!("Invalid symbol literal: '{}'", symbol);
+        let help = "Symbol literals must start with ':' followed by a valid identifier";
+        let label = "Invalid symbol literal";
+        Self::new(&message, src, span, help, label)
+    }
+
+    pub fn undeclared_symbol(symbol: &str, src: NamedSource<String>, span: SourceSpan) -> Self {
+        let message = format!("Undeclared symbol: '{}'", symbol);
+        let help = "Ensure the symbol is declared before use, symbols are declared with 'SymName: Sym = :SymbolValue'";
+        let label = "Undeclared symbol";
+        Self::new(&message, src, span, help, label)
     }
 }
 

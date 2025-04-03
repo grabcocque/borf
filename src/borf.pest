@@ -24,13 +24,16 @@ import_statement = { "@import" ~ string ~ ";" }
 ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 transform_ident = @{ ">" ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
+// Symbol literal - new rule for symbol syntax using colon prefix
+symbol_literal = @{ ":" ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
 // Basic types
 int = @{ ASCII_DIGIT+ }
 float = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* | "." ~ ASCII_DIGIT+ }
 string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
 // Set literals for mapping to
-set_literal = { "{" ~ (int | ident) ~ ("," ~ (int | ident))* ~ "}" }
+set_literal = { "{" ~ (int | ident | symbol_literal) ~ ("," ~ (int | ident | symbol_literal))* ~ "}" }
 
 // Set comprehension
 set_comprehension = { "{" ~ ident ~ "$in" ~ ident ~ ("," ~ ident ~ "$in" ~ ident)* ~ ("|" ~ constraint_expr)? ~ "}" }
@@ -44,7 +47,7 @@ category_statement = { "@" ~ ident ~ ("<" ~ ident ~ ">")? ~ ":" ~ "{" ~ (WHITESP
 category_decl = { WHITESPACE* ~ (object_decl | mapping_decl | law_decl | structure_mapping_decl | function_def_decl) }
 
 object_decl = { ident ~ ";" ~ WHITESPACE* ~ COMMENT? }
-mapping_decl = { ident ~ WHITESPACE* ~ ":" ~ WHITESPACE* ~ domain_expr ~ WHITESPACE* ~ mapping_type ~ WHITESPACE* ~ (ident | set_literal) ~ ";" ~ WHITESPACE* ~ COMMENT? }
+mapping_decl = { ident ~ WHITESPACE* ~ ":" ~ WHITESPACE* ~ domain_expr ~ WHITESPACE* ~ mapping_type ~ WHITESPACE* ~ (ident | set_literal | symbol_literal) ~ ";" ~ WHITESPACE* ~ COMMENT? }
 
 // Structure mapping declaration
 structure_mapping_decl = { ident ~ WHITESPACE* ~ "=" ~ WHITESPACE* ~ expr ~ ";" ~ WHITESPACE* ~ COMMENT? }
@@ -60,8 +63,9 @@ expr = {
 term = {
     ident |
     int |
+    symbol_literal |                           // Symbol literal
     set_literal |                              // set literal
-    ident ~ "(" ~ ident ~ ")" |                // function application
+    ident ~ "(" ~ (ident | symbol_literal) ~ ")" |     // function application
     complex_set_expr |                         // set comprehension with expressions
     match_expr                                 // match expression
 }
@@ -72,7 +76,11 @@ match_expr = { "match" ~ ident ~ "with" ~ ("|" ~ ident ~ "$in" ~ ident ~ "->" ~ 
 binary_op = _{
     "+" |                                      // disjoint union
     "=" |                                      // equality
-    "$and"                                     // logical and
+    "$and" |                                   // logical and
+    "$teq" |                                   // type equivalence (new)
+    "$veq" |                                   // value equality (new)
+    "$seq" |                                   // structural equivalence (new)
+    "$ceq"                                     // categorical equivalence (new)
 }
 
 // New rule for domain expressions - simplified to be more robust
@@ -81,7 +89,8 @@ domain_expr = {
     ident                                              // Single identifier
 }
 
-mapping_type = { "$to" | "$subseteq" | "<->" | "*" }
+// Expanded mapping types to include new equivalence relations
+mapping_type = { "$to" | "$subseteq" | "<->" | "*" | "$teq" | "$veq" | "$seq" | "$ceq" | "$omega" }
 
 // --- Laws and constraints ---
 // Law declaration
@@ -104,11 +113,11 @@ exists_expr = {
 // Re-introduce binary_constraint rule, make it silent
 constraint_expr = { primary_constraint_term ~ (constraint_op ~ primary_constraint_term)* }
 
-// constraint_op remains atomic and explicit
-constraint_op = @{ "=" | "$and" | "=>" | ">" | "<=" | "<" | ">=" | "=" ~ "==" ~ "===" }
+// constraint_op remains atomic and explicit - add new equivalence operators
+constraint_op = @{ "=" | "$and" | "=>" | ">" | "<=" | "<" | ">=" | "=" ~ "==" ~ "===" | "$teq" | "$veq" | "$seq" | "$ceq" | "$omega" }
 
 // Primary terms (silent for implicit whitespace handling)
-primary_constraint_term = _{ int | set_expr | function_app | ident | "(" ~ constraint_expr ~ ")" | "|" ~ set_expr ~ "|" }
+primary_constraint_term = _{ int | symbol_literal | set_expr | function_app | ident | "(" ~ constraint_expr ~ ")" | "|" ~ set_expr ~ "|" }
 
 set_expr = {
     "{" ~ set_element ~ ("|" ~ set_condition)? ~ "}" |
@@ -117,10 +126,10 @@ set_expr = {
     "(" ~ ident ~ "*" ~ ident ~ ")"  // Parenthesized product
 }
 
-set_element = { ident ~ ("," ~ ident)* }
-set_condition = { ident ~ "(" ~ ident ~ ")" ~ ("$and" ~ ident ~ "(" ~ ident ~ ")")? }
+set_element = { (ident | symbol_literal) ~ ("," ~ (ident | symbol_literal))* }
+set_condition = { ident ~ "(" ~ (ident | symbol_literal) ~ ")" ~ ("$and" ~ ident ~ "(" ~ (ident | symbol_literal) ~ ")")? }
 
-function_app = { ident ~ "(" ~ (ident | constraint_expr) ~ ")" }
+function_app = { ident ~ "(" ~ (ident | constraint_expr | symbol_literal) ~ ")" }
 
 // --- Processing expressions ---
 pipe_statement = { ident ~ ("|" ~ transform_ident)+ }
