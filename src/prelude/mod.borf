@@ -1,316 +1,499 @@
 --[[
-  prelude.borf
+  prelude.borf - Revised with consistent structural subtyping, clear equivalence domains,
+                 placeholder primitives, formalized iteration, expanded numeric types,
+                 and symbol-based entity classification.
 
-  Categorical Framework for Interaction Nets
+  Categorical Framework for Interaction Nets with Linear IO
 
-  This prelude defines the core categorical structures and transformations for:
-  - Attributed C-Sets (ACSet) - decorated directed graphs
-  - Wiring Diagrams (WireDgm) - boxes connected through ports
-  - Interaction Nets (INet) - specialized wiring diagrams with reduction semantics
+  Core design principles:
+  - Terseness: Compact representation of complex mathematical structures
+  - Syntactic consistency: Uniform notation for similar concepts
+  - Semantic parsimony: Minimal overlapping concepts
+  - Theoretical generality: Abstract structures with broad applicability
+  - Structural subtyping: API compatibility through structure, not inheritance
 
-  The syntax follows mathematical conventions while being 7-bit ASCII compatible:
-  - $operator for mathematical operators (replacing LaTeX commands)
-  - <-> for bidirectional mappings
-  - => for implications
-  - Proper grouping with () for operations and {} for sets
+  Equivalence relation domains:
+  - $teq: Type equivalence (types considered "the same")
+  - $veq: Value equality (basic value comparison)
+  - $seq: Structural equivalence (deep equality of structures)
+  - $ceq: Categorical equivalence (isomorphism in categorical structures)
 ]]
 
+--[[ Placeholder Primitives (Assumed built-in or defined elsewhere) ]]
+@Primitives: {
+  -- Placeholder: Checks if a linear resource has been used exactly once.
+  use_once: !Any -> Bool;
+
+  -- Placeholder: Checks if a pattern matches a given net structure.
+  matches: Pattern*Net -> Bool;
+
+  -- Placeholder: Checks if an active pair involves a specific box.
+  a_uses: $alpha*B -> Bool;
+
+  -- Placeholder: Checks if an IO agent box has completed its operation.
+  processed: B -> Bool;
+
+  -- Placeholder: Extracts string data from a net in normal form.
+  extract_data: Net -> S;
+
+  -- Placeholder: A robust file processing pipeline with error handling.
+  safe_pipeline: S -> Net;
+
+  -- Placeholder: Applies a rewrite rule to a net.
+  apply: $rho*Net -> Net;
+
+  -- Placeholder: Appends an element to a list.
+  $append: [Any]*Any -> [Any];
+
+  -- Placeholder: Checks if a set is non-empty.
+  $ne: {Any} -> Bool;
+};
+
+--[[ Type system foundations ]]
+@T: {  -- Type universe
+  T;                              -- Set of all types
+  <:: T*T->Bool;                  -- Subtyping relation (infix)
+  ~: Any->Bool;                   -- Type predicate
+
+  -- Type equivalence relation
+  $teq: T*T->Bool;                -- Type equivalence (symmetric, reflexive, transitive)
+
+  -- Laws
+  law.refl = $forall t $in T: t<::t;
+  law.trans = $forall a,b,c $in T: a<::b $and b<::c => a<::c;
+
+  -- Equivalence laws
+  law.teq_refl = $forall t $in T: t $teq t;
+  law.teq_symm = $forall a,b $in T: a $teq b => b $teq a;
+  law.teq_trans = $forall a,b,c $in T: a $teq b $and b $teq c => a $teq c;
+
+  -- Base types (Added Sym)
+  U $in T; B $in T; N $in T; Z $in T; Q $in T; R $in T; C $in T; H $in T; S $in T; Sym $in T;
+  -- Unit, Bool, Natural, Int, Rational, Real, Complex, Quaternion, String, Symbol
+
+  -- Type constructors
+  $forall a,b $in T: a*b $in T; a+b $in T; a->b $in T;  -- Product, Sum, Function
+  $forall a $in T: [a] $in T; {a} $in T; ?a $in T; !a $in T; -- List, Set, Maybe, Linear
+
+  -- Type constructor equivalence
+  law.prod_eq = $forall a,b,c,d $in T: a $teq c $and b $teq d => a*b $teq c*d;
+  law.sum_eq = $forall a,b,c,d $in T: a $teq c $and b $teq d => a+b $teq c+d;
+  law.fn_eq = $forall a,b,c,d $in T: a $teq c $and b $teq d => a->b $teq c->d;
+
+  -- Linear type law (Uses placeholder primitive)
+  law.linear = $forall a $in T,x $in !a: Primitives.use_once(x);
+};
+
+@R: {  -- Relation structure
+  rel: T*T->Bool;                  -- Basic relation between types
+  $omega: T*T->Bool;               -- Compatibility relation (symbolic)
+
+  -- Value equality (basic comparison)
+  $veq: Any*Any->Bool;             -- Value equality
+
+  -- Structure equality (deep comparison)
+  $seq: Any*Any->Bool;             -- Structural equivalence
+
+  -- Law for compatibility relation
+  law.symm = $forall a,b $in T: a $omega b => b $omega a;
+
+  -- Equality laws
+  law.veq_refl = $forall x: x $veq x;
+  law.seq_refl = $forall x: x $seq x;
+  law.seq_symm = $forall x,y: x $seq y => y $seq x;
+  law.seq_trans = $forall x,y,z: x $seq y $and y $seq z => x $seq z;
+
+  -- Value vs. structural equality semantics
+  law.veq_vs_seq = $forall x,y: x $seq y => x $veq y;  -- Structural implies value equality
+  law.seq_deeper = $exists x,y: x $veq y $and $not(x $seq y);  -- But not vice versa
+};
+
+--[[ Core categorical structures ]]
+@Cat: {  -- Category
+  O;                              -- Objects
+  M;                              -- Morphisms
+  dom,cod: M->O;                  -- Domain/codomain maps
+  id: O->M;                       -- Identity morphisms
+  .: M*M->M | cod(g) $veq dom(f);  -- Composition (infix), fixed condition syntax
+
+  -- Categorical equivalence (isomorphism)
+  $ceq: O*O->Bool;                -- Categorical equivalence
+
+  -- Laws
+  law.id_type = $forall o $in O: dom(id(o)) $veq o $and cod(id(o)) $veq o;
+  law.id_r = $forall f $in M: id(cod(f)).f $seq f;
+  law.id_l = $forall f $in M: f.id(dom(f)) $seq f;
+  law.assoc = $forall f,g,h $in M | composable(f,g,h): h.(g.f) $seq (h.g).f;
+
+  -- Categorical equivalence laws
+  law.ceq_iso = $forall a,b $in O: a $ceq b $iff
+    ($exists f,g $in M: dom(f) $veq a $and cod(f) $veq b $and
+     dom(g) $veq b $and cod(g) $veq a $and
+     g.f $seq id(a) $and f.g $seq id(b));
+
+  -- Utilities
+  composable: M*M*M->Bool = \f,g,h.cod(g) $veq dom(f) $and cod(h) $veq dom(g);
+  hom: O*O->{M} = \a,b.{f $in M | dom(f) $veq a $and cod(f) $veq b};
+};
+
+@Mod: {  -- Module system
+  E;                             -- Entities
+  $tau: E->Sym;                  -- Type of entities (Now returns a Symbol)
+  $delta: E*E->Bool;             -- Dependency relation
+
+  -- Define specific symbols for entity types
+  TypeSym: Sym = :Type;
+  OpSym: Sym = :Operator;
+  FnSym: Sym = :Function;
+
+  -- Derived classifications (Using symbols for comparison)
+  typ = {e $in E | $tau(e) $veq TypeSym};     -- Type entities
+  op = {e $in E | $tau(e) $veq OpSym};      -- Operator entities
+  fn = {e $in E | $tau(e) $veq FnSym};      -- Function entities
+
+  -- Structural compatibility with Cat
+  O = E;                         -- Objects are entities
+  M = {(a,b) | a $in E $and b $in E $and $delta(a,b)};  -- Morphisms are dependencies
+  dom = \(a,b).b;                -- Domain is the dependency
+  cod = \(a,b).a;                -- Codomain is the dependent
+  id = \e.(e,e);                 -- Identity is self-reference
+  . = \(a,b),(b,c).(a,c);        -- Composition is transitive dependency
+
+  -- Module properties
+  law.acyclic = $forall e $in E: $not($exists p: e->+e);  -- No cycles
+
+  -- Visibility
+  vis: E->Bool;                  -- Entity visibility
+  exp = {e $in E | vis(e)};        -- Exported entities
+};
+
+@Grph: {  -- Graph structure
+  N;                             -- Nodes
+  E;                             -- Edges
+  src,tgt: E->N;                 -- Structure maps
+  $lambdaN: N->X;                -- Node labels
+  $lambdaE: E->X;                -- Edge labels
+
+  -- Structural compatibility with Cat
+  O = N;                         -- Objects are nodes
+  M = E;                         -- Morphisms are edges
+  dom = src;                     -- Domain is source
+  cod = tgt;                     -- Codomain is target
+
+  -- Edge creation helpers
+  loop: N->E;                      -- Create identity/loop edge
+  comp: E*E->E | tgt(e) $veq src(f); -- Create composite edge
+
+  -- Identity and composition
+  id = \n.loop(n);               -- Identity morphism is a loop
+
+  -- Laws
+  law.loop = $forall n $in N: src(loop(n)) $veq tgt(loop(n)) $veq n;
+  law.comp = $forall e,f $in E | tgt(e) $veq src(f):
+    src(comp(e,f)) $veq src(e) $and tgt(comp(e,f)) $veq tgt(f);
+
+  -- Node equivalence
+  node_eq: N*N->Bool = \a,b.$lambdaN(a) $seq $lambdaN(b);
+
+  -- Decoration coherence (Assuming R refers to the relation from @R)
+  law.dec = $forall e,f $in E | tgt(e) $veq src(f):
+    $lambdaE(comp(e,f)) R.rel $lambdaE(e)*$lambdaE(f);
+  law.node_edge = $forall n $in N: $lambdaE(loop(n)) R.rel $lambdaN(n);
+};
+
+@Wire: {  -- Wiring diagram
+  B;                             -- Boxes
+  P;                             -- Ports
+  box: P->B;                     -- Box assignment
+  w: P->P;                       -- Wiring (bijection)
+  $tauP: P->X;                   -- Port types
+  $tauB: B->X;                   -- Box types
+
+  -- Structural compatibility with Grph
+  N = B $cup P;                  -- Nodes are boxes and ports
+  E = {(p,q) | p $in P $and q $in P $and w(p) $veq q}; -- Edges are wirings
+  src = \(p,q).p;                -- Source is first port
+  tgt = \(p,q).q;                -- Target is second port
+  $lambdaN = \x.if x $in B then $tauB(x) else $tauP(x);  -- Node labels
+  $lambdaE = \(p,q).($tauP(p),$tauP(q));                 -- Edge labels
+
+  -- Wiring laws
+  law.inv = $forall p $in P: w(w(p)) $veq p;      -- Involution
+  law.owned = $forall p $in P: $exists! b $in B: box(p) $veq b; -- Port ownership
+  law.compatible = $forall p,q $in P: w(p) $veq q => $tauP(p) R.$omega $tauP(q); -- Type compatibility (using $omega from @R)
+
+  -- Box signatures
+  sig: B->{in:{P},out:{P}};        -- Box signatures
+  law.sig = $forall b $in B,p $in P: box(p) $veq b => p $in sig(b).in $or p $in sig(b).out;
+};
+
+@Net: {  -- Interaction net
+  B;                             -- Boxes
+  P;                             -- Ports
+  box: P->B;                     -- Box assignment
+  w: P->P;                       -- Wiring
+  $tauP: P->X;                   -- Port types
+  $tauB: B->X;                   -- Box types
+  $pi: P->Bool;                  -- Principal port flag
+
+  -- Structural compatibility with Wire
+  sig: B->{in:{P},out:{P}};      -- Box signatures required by Wire
+
+  -- Active pairs (principal ports connected to each other)
+  $alpha = {(p,q) | p $in P $and q $in P $and w(p) $veq q $and $pi(p) $and $pi(q)};
+
+  -- Replacement definition
+  $rho: {B $cup P $cup (P*P)};    -- Replacement subgraph
+
+  -- Reduction rules
+  R: {$alpha*$rho};               -- Set of (active pair, replacement) pairs
+
+  -- Principal port constraint
+  law.principal = $forall b $in B: |{p $in P | box(p) $veq b $and $pi(p)}| $veq 1;
+
+  -- Reduction properties (Uses placeholder primitive)
+  applies: R*$alpha->Bool = \r,a.Primitives.matches(r[0],a);
+  law.deterministic = $forall a $in $alpha: $exists! r $in R: applies(r,a);
+
+  -- Graph preservation properties
+  ports: $alpha->{P} = \a.{p $in P | p $in a};
+  ports: $rho->{P} = \r.{p $in P | p $in r};
+  conn: $alpha->Z = \a.|{(p,q) | p $in ports(a) $and q $in ports(a) $and w(p) $veq q}|;
+  conn: $rho->Z = \r.|{(p,q) | p $in ports(r) $and q $in ports(r) $and w(p) $veq q}|;
+
+  -- Conservation laws
+  law.ports = $forall (a,r) $in R: |ports(a)| $veq |ports(r)|;
+  law.conns = $forall (a,r) $in R: conn(a) $veq conn(r);
+};
+
+@IO: {  -- IO system
+  B;                             -- Boxes
+  P;                             -- Ports
+  box: P->B;                     -- Box assignment
+  w: P->P;                       -- Wiring
+  $pi: P->Bool;                  -- Principal port flag (req for Net compatibility)
+
+  -- IO operations and sources unified
+  Op = {rd,wr,ok,err};           -- Read, write, success, error
+  Src = {file,cons,net};         -- File, console, network
+
+  -- IO agent identification
+  io_agent: B->Bool;             -- Identifies IO agent boxes
+
+  -- Unified IO interface
+  io: Op*Src*S->Net;             -- General IO constructor
+
+  -- Derived operations
+  read = \src,str.io(rd,src,str);     -- Generic read
+  write = \src,str.io(wr,src,str);    -- Generic write
+
+  -- Specific constructors
+  read_file = \file.read(file,file);          -- File reader
+  write_file = \file.write(file,file);        -- File writer
+  read_cons = \prompt.read(cons,prompt);      -- Console input
+  write_cons = \out.write(cons,out);          -- Console output
+
+  -- Linear properties
+  law.linear = $forall b $in {x $in B | io_agent(x)}: b $in !B;
+
+  -- Responses
+  data: S->Net;                   -- Data carrier
+  err: S->Net;                    -- Error information
+
+  -- IO safety properties
+  normal: Net->Bool;              -- Normal form predicate (defined in @Red)
+  unused: Net->{B};               -- Unused IO agents (Implementation needed)
+  law.complete = $forall n $in Net: Red.normal(n) => unused(n) $seq {}; -- Assuming unused needs implementation
+};
+
+@Rewrite: {  -- Transformation rules
+  B; P; $pi: P->Bool; w: P->P;    -- Required for Net compatibility
+  $alpha;                         -- Active pairs from Net
+  $rho;                           -- Replacement from Net
+  R: {$alpha*$rho};               -- Rules (req for Net compatibility)
+
+  match: Pattern->Net;            -- Pattern matcher (Interface/Signature)
+  rewrite: $alpha->$rho;          -- Rewriting function (Interface/Signature)
+
+  -- Pattern structure
+  Pattern = {$alpha};             -- Set of active pairs
+
+  -- Rule construction
+  rules = {(a,rewrite(a)) | a $in $alpha};  -- Rules from rewrite function (separate from R)
+
+  -- Pattern utilities
+  hood: $alpha->{B $cup P $cup (P*P)};     -- Neighborhood extraction (Interface/Signature)
+  pat: $alpha->Pattern = \a.{a} $cup hood(a);  -- Pattern from active pair
+
+  -- Properties
+  consist: $rho->Bool;            -- Consistency check (Interface/Signature)
+  connect: Pattern->Bool;         -- Connectivity check (Interface/Signature)
+  connect: $rho->Bool;            -- Connectivity check (Interface/Signature)
+
+  -- Laws
+  law.consist = $forall a $in $alpha: consist(rewrite(a));
+  law.connect = $forall a $in $alpha: connect(pat(a)) => connect(rewrite(a));
+
+  -- IO rewrites
+  io_rule: $alpha->$rho;          -- IO-specific rules (Interface/Signature)
+  -- Law uses placeholder primitive
+  law.io = $forall a $in $alpha,b $in {x $in B | IO.io_agent(x)}: Primitives.a_uses(a,b) => io_rule(a) $seq rewrite(a);
+};
+
+@Red: {  -- Reduction system
+  B; P; $pi: P->Bool; w: P->P;    -- Required for Net compatibility
+  $alpha;                         -- Active pairs from Net
+  rewrite;                        -- From Rewrite (Interface/Signature)
+
+  step: Net->Net;                 -- Single reduction step (Interface/Signature)
+  strat: Net->$alpha;             -- Strategy function (Interface/Signature)
+  hist: Net->[Net];               -- Reduction history (Interface/Signature)
+
+  -- Step implementation (Uses placeholder primitive 'apply')
+  step = \n.Primitives.apply(Rewrite.rewrite(strat(n)),n);
+
+  -- Full reduction
+  red: Net->Net = \n.normal(n) ? n : red(step(n));
+
+  -- Normal form check
+  normal: Net->Bool = \n.Net.$alpha(n) $seq {};  -- No active pairs
+
+  -- Trace construction (Uses placeholder primitive '$append')
+  hist = \n.let rec build_hist current_n history =
+            if normal(current_n) then Primitives.$append(history, current_n)
+            else build_hist (step current_n) (Primitives.$append(history, current_n))
+          in build_hist n []; -- Recursive definition for history
+
+  -- IO strategy
+  io_first: {$alpha}->$alpha;      -- Prioritize IO-related pairs (Interface/Signature)
+  io_strat: Net->$alpha = \n.io_first(Net.$alpha(n));
+};
+
+@Term: {  -- Termination analysis
+  B; P; $pi: P->Bool; w: P->P;    -- Required for Net compatibility
+  step; red; normal; hist;        -- From Red (Interfaces/Signatures)
+
+  term: Net->Bool;                -- Termination predicate
+  cycles: [Net]->{(Z,Z)};         -- Cycle detection (Interface/Signature)
+
+  -- Helper function for applying 'step' k times
+  apply_k: Z*Net -> Net = \k, n.
+    if k <= 0 then n
+    else apply_k(k-1, Red.step(n));
+
+  -- Definition using helper function
+  term = \n.reaches_normal(n) $or has_cycle(Red.hist(n));
+
+  -- Normal form check using helper function
+  reaches_normal: Net->Bool = \n.$exists k $in Z+: Red.normal(apply_k(k, n));
+
+  -- Cycle detection (Uses placeholder primitive '$ne')
+  has_cycle: [Net]->Bool = \t.Primitives.$ne(cycles(t));
+  cycles = \t.{(i,j) | i $in Z $and j $in Z $and i<j $and t[i] $seq t[j]};
+
+  -- IO termination (Uses placeholder primitive)
+  processed: B->Bool = Primitives.processed; -- Use placeholder
+  unstuck: Net->Bool = \n.$forall b $in {x $in B | IO.io_agent(x)} $in Red.red(n): processed(b);
+  io_term: Net->Bool = \n.term(n) $and unstuck(n);
+};
+
+@Xform: {  -- Transformation framework
+  -- Generic transformation (Interface/Signature)
+  xform: (s,t,f,x)->y | s:Cat $and t:Cat $and f:s->t $and x:s.O $and y:t.O;
+
+  -- Core transforms (Interfaces/Signatures)
+  ~: S->Net;                      -- String to Net (file)
+  #: Net->S;                      -- Net to String (output)
+  g: Grph->Wire;                  -- Graph to Wiring conversion
+  n: Wire->Net;                   -- Wiring to Net conversion
+  r: Net->Rewrite;                -- Net to Rewriting rules
+  d: Rewrite->Red;                -- Rewriting to Reduction
+
+  -- Implementations (Use placeholder primitives)
+  ~ = \file.IO.read_file(file);      -- Read file to Net using IO constructor
+  # = \net.Primitives.extract_data(net);     -- Extract data from Net using placeholder
+
+  -- Compositions
+  w = \f.g(~(f));                        -- String to Wiring
+  i = \f.n(g(~(f)));                     -- String to Net
+  full = \f.#(Red.red(d(r(n(g(~(f)))))));    -- Complete pipeline
+
+  -- Pipeline operator enhanced (Interface/Signature)
+  | : (Net,Net->Net)->Net;
+  >> : (a->b,b->c)->(a->c);       -- Function composition (Assume primitive or needs definition)
+
+  -- Stream processing (Interface/Signature for map)
+  map: (a->b,[a])->[b];
+  -- Uses placeholder primitive
+  files: [S]->[Net] = \fs.map(\f.Primitives.safe_pipeline(f),fs);
+};
+
+@Core: {  -- Core module
+  -- Required for Mod compatibility
+  E;                             -- Entities
+  $tau: E->Sym;                  -- Type of entities (Reflecting change in @Mod)
+  $delta: E*E->Bool;             -- Dependency relation
+  vis: E->Bool;                  -- Entity visibility
+
+  -- Core type sets
+  typ = {T,R,Cat,Mod,Grph,Wire,Net,IO,Rewrite,Red,Term,Xform,Primitives, Sym}; -- Added Sym
+
+  -- Core operators
+  op = {<::,$omega,$teq,$veq,$seq,$ceq,.,->,$cup,$cap,$subseteq,$in,$forall,$exists,$and,$or,$not,=>,|};
+
+  -- Core Symbols (Exporting the symbols defined in @Mod)
+  syms = {Mod.TypeSym, Mod.OpSym, Mod.FnSym};
+
+  -- Core functions (Including placeholders where appropriate)
+  fn = {~,#,g,n,r,d,Red.red,IO.io,IO.read,IO.write,Xform.map,Red.strat,Term.term,
+        Primitives.use_once, Primitives.matches, Primitives.a_uses, Primitives.processed,
+        Primitives.extract_data, Primitives.safe_pipeline, Primitives.apply, Primitives.$append, Primitives.$ne};
+
+  -- Complete export set
+  E = typ $cup op $cup fn $cup syms; -- Added symbols to export set
+
+  -- Dependency graph (concise representation)
+  deps = {
+    (Mod,Cat),(Grph,Cat),(Wire,Grph),(Net,Wire),
+    (IO,Net),(Rewrite,Net),(Red,Rewrite),(Term,Red),
+    (Xform,IO),(Xform,Red),(Xform,Term),
+    (T,Primitives), (Net,Primitives), (Rewrite,Primitives), (Term,Primitives), (Xform,Primitives), (Red, Primitives),
+    (R,$omega), (T,$teq), (Mod, Sym) -- Added Mod dependency on Sym
+  };
+
+  -- Explicitly set dependencies
+  $delta = \a,b.(a,b) $in deps;
+
+  -- All entities are exported by default
+  vis = \e.true;
+};
+
+export Core;
+
 --[[
-  Category: Basic categorical structure
-  - Objects (O) and Morphisms (M) form the underlying structure
-  - dom,cod assign domain and codomain objects to each morphism
-  - id maps each object to its identity morphism
-  - comp defines morphism composition
-]]
-@Category: {
-  O;M;                --[[ O: set of objects, M: set of morphisms ]]
-  dom:M $to O; cod:M $to O; --[[ dom: domain map, cod: codomain map ]]
-  id:O $to M;         --[[ id: identity morphism map ]]
-  comp:M * M $to M;  --[[ comp: composition operation ]]
+  Equivalence Relations in Borf:
 
-  --[[ Laws for categories ]]
-  comp $comp id === id;  --[[ Law: identity acts as unit for composition ]]
-  $forall f $in M: dom(id(cod(f))) = cod(f);  --[[ Law: codomain typing ]]
-  $forall f $in M: cod(id(dom(f))) = dom(f);  --[[ Law: domain typing ]]
-  $forall f,g $in M: cod(f) = dom(g) => dom(comp(g,f)) = dom(f);  --[[ Law: composition domain ]]
-  $forall f,g $in M: cod(f) = dom(g) => cod(comp(g,f)) = cod(g);  --[[ Law: composition codomain ]]
+  This prelude distinguishes between different domains of equivalence:
 
-  --[[ Additional fundamental laws ]]
-  $forall f,g,h $in M: cod(f) = dom(g) $and cod(g) = dom(h) => comp(h,comp(g,f)) = comp(comp(h,g),f);  --[[ Law: associativity of composition ]]
-  $forall f $in M: comp(id(cod(f)),f) = f;  --[[ Law: right identity ]]
-  $forall f $in M: comp(f,id(dom(f))) = f;  --[[ Law: left identity ]]
-  $forall o $in O: dom(id(o)) = o $and cod(id(o)) = o;  --[[ Law: identity morphism type ]]
+  1. $teq: Type Equivalence - Types considered "the same"
+     - Reflexive, symmetric, transitive
+     - Used for determining type compatibility and substitutability
+     - Example: a*b $teq b*a (product types commute)
 
-  --[[ Existential quantifications for composability ]]
-  $exists comp(f,g) $iff cod(g) = dom(f);  --[[ Composition exists if and only if codomain of g equals domain of f ]]
+  2. $veq: Value Equality - Basic value comparison
+     - Simple equality checking (similar to == in other languages)
+     - Tests if values represent the same entity
+     - Example: dom(f) $veq a (domain of f is a)
 
-  --[[ Well-formedness constraints ]]
-  $forall m $in M: dom(m) $in O $and cod(m) $in O;  --[[ Law: all morphisms connect valid objects ]]
-  $forall o $in O: id(o) $in M;  --[[ Law: all objects have identity morphisms ]]
-}
+  3. $seq: Structural Equivalence - Deep equality of structures
+     - Recursively compares all components of structures
+     - Used for laws and invariants where full equivalence matters
+     - Example: f.id(dom(f)) $seq f (left identity law)
 
---[[
-  ACSet: Attributed C-Set - a decorated directed graph
-  - Nodes (N) and Edges (E) form the underlying graph structure
-  - Maps s,t assign source and target nodes to each edge
-  - Decorations lN,lE assign labels/attributes to nodes and edges
-]]
-@ACSet<Category>: {
-  N;E;                --[[ N: set of nodes, E: set of edges ]]
-  s:E $to N; t:E $to N; --[[ s: source map, t: target map ]]
-  lN:N $to X; lE:E $to X; --[[ lN: node decoration, lE: edge decoration, X: attribute type ]]
-  id:N $to E;         --[[ id: identity edge for each node ]]
-  comp:E * E $to E;  --[[ comp: edge composition ]]
+  4. $ceq: Categorical Equivalence - Isomorphism between objects
+     - Two objects are equivalent if they're isomorphic
+     - Defined through the existence of morphisms satisfying certain laws
+     - Example: a $ceq b iff there exist f:a→b, g:b→a with g.f ≅ id_a, f.g ≅ id_b
 
-  --[[ Category structure mapping ]]
-  O = N;              --[[ Objects are nodes ]]
-  M = E;              --[[ Morphisms are edges ]]
-  dom = s;            --[[ Domain is source ]]
-  cod = t;            --[[ Codomain is target ]]
-
-  --[[ Identity laws ]]
-  $forall n $in N: s(id(n)) = t(id(n)) = n;  --[[ Identity edges loop on their node ]]
-
-  --[[ Composition law ]]
-  $forall e1,e2 $in E: t(e1) = s(e2) => s(comp(e2,e1)) = s(e1) $and t(comp(e2,e1)) = t(e2);
-
-  --[[ Additional laws for ACSet coherence ]]
-  $forall e1,e2,e3 $in E: (t(e1) = s(e2) $and t(e2) = s(e3)) => comp(e3,comp(e2,e1)) = comp(comp(e3,e2),e1);  --[[ Law: associativity for edge composition ]]
-  $forall e $in E: comp(id(t(e)),e) = e;  --[[ Law: right identity for edges ]]
-  $forall e $in E: comp(e,id(s(e))) = e;  --[[ Law: left identity for edges ]]
-
-  --[[ Decoration coherence laws ]]
-  $forall e1,e2 $in E: t(e1) = s(e2) => lE(comp(e2,e1)) $related_to (lE(e1),lE(e2));  --[[ Law: edge composition preserves decoration structure ]]
-  $forall n $in N: lE(id(n)) $related_to lN(n);  --[[ Law: identity edge decoration relates to node decoration ]]
-
-  --[[ Existential quantification for attribute compatibility ]]
-  $exists X as TypeSystem;  --[[ There exists a type system for attributes ]]
-  $exists $related_to as TypeRelation(X,X);  --[[ There exists a relation between attribute types ]]
-}
-
---[[
-  WireDgm: Wiring Diagram - extends ACSet with explicit box and port structure
-  - Boxes (B) are components/processes that can be connected
-  - Ports (P) are connection points on boxes
-  - The wiring map (w) defines how ports connect to each other
-  - Inherits structure from ACSet through subtyping
-]]
-@WireDgm<ACSet>: {
-  B;P;                --[[ B: set of boxes, P: set of ports ]]
-  b:P $to B;           --[[ b: assigns each port to its parent box ]]
-  w:P<->P;            --[[ w: wiring relation, connects ports (symmetric) ]]
-  tP:P $to X; tB:B $to X; --[[ tP: port types, tB: box types ]]
-
-  --[[ ACSet structure mapping ]]
-  N = B + P;          --[[ Nodes are boxes and ports (disjoint union) ]]
-  E = {(p,q) | w(p)=q}; --[[ Edges are the wiring connections ]]
-  s((p,q)) = p;       --[[ Source is first port in the wiring ]]
-  t((p,q)) = q;       --[[ Target is second port in the wiring ]]
-  lN(x) = match x with --[[ Node decoration depends on node type ]]
-    | b $in B -> tB(b)
-    | p $in P -> tP(p);
-  lE((p,q)) = (tP(p), tP(q)); --[[ Edge decoration is pair of port types ]]
-
-  w $comp w === id;  --[[ Law: wiring is an involution (self-inverse) ]]
-
-  --[[ Additional laws for wiring diagrams ]]
-  $forall p $in P: $exists! b $in B: b(p) = b;  --[[ Law: each port belongs to exactly one box ]]
-  $forall p,q $in P: w(p) = q => w(q) = p;  --[[ Law: wiring is symmetric ]]
-  $forall p,q $in P: w(p) = q => compatible(tP(p), tP(q));  --[[ Law: connected ports have compatible types ]]
-
-  --[[ Existential quantifications for port compatibility ]]
-  $exists compatible as Relation(X,X);  --[[ There exists a compatibility relation on port types ]]
-  $forall x,y $in X: compatible(x,y) => compatible(y,x);  --[[ Law: compatibility is symmetric ]]
-
-  --[[ Structural invariants ]]
-  $forall p $in P: b(p) = b(w(p)) => p = w(p);  --[[ Law: self-loops only within same box ]]
-  $forall b $in B: $exists type_signature(b) as {InputPorts,OutputPorts};  --[[ Law: boxes have type signatures ]]
-}
-
---[[
-  INet: Interaction Net - specialized wiring diagram with reduction semantics
-  - Distinguishes principal from auxiliary ports
-  - Defines reduction rules for active pairs (connected principal ports)
-  - Enforces structural invariants of interaction nets
-  - Basis for computational interpretation
-]]
-@INet<WireDgm>: {
-  p:P $to {0,1};        --[[ p: principal port flag (1=principal, 0=auxiliary) ]]
-  R:{L $subseteq (B * B)} $to {S $subseteq (B * B)}; --[[ R: reduction rules mapping patterns to replacements ]]
-
-  --[[ WireDgm structure mapping ]]
-  B = B;                --[[ Boxes are preserved ]]
-  P = P;                --[[ Ports are preserved but annotated with principal/auxiliary flag ]]
-  b = b;                --[[ Box assignment is preserved ]]
-  w = w;                --[[ Wiring relation is preserved but gains active pair semantics ]]
-  tB = tB;              --[[ Box types are preserved ]]
-  tP = tP;              --[[ Port types are preserved ]]
-
-  --[[ Additional structure ]]
-  active(p,q) = w(p)=q $and p(p)=1 $and p(q)=1; --[[ Active pairs definition ]]
-
-  --[[ Law: Each box has exactly one principal port ]]
-  $forall b $in B: |{p $in P | b(p) $and p(p)=1}| = 1;
-
-  --[[ Law: Connected principal ports form active pairs (reduction sites) ]]
-  $forall p,q $in P: (w(p)=q $and p(p)=1 $and p(q)=1) => active(p,q);
-
-  --[[ Additional laws for interaction nets ]]
-  $forall p $in P: p(p) $in {0,1};  --[[ Law: each port is either principal or auxiliary ]]
-  $forall a,b $in B: a != b => |{active(p,q) | b(p) = a $and b(q) = b}| <= 1;  --[[ Law: at most one active pair between any two boxes ]]
-
-  --[[ Existential quantifications for reduction rules ]]
-  $exists deterministic_rule as $forall a $in Active: $exists! r $in R: applies(r,a);  --[[ Law: deterministic reduction ]]
-  $exists local_confluence as $forall a,b $in Active: can_reduce(a) $and can_reduce(b) => confluent(reduce(a),reduce(b));  --[[ Law: local confluence property ]]
-
-  --[[ Semantic preservation laws ]]
-  $forall r $in R: preserves_ports(r);  --[[ Law: reduction preserves total number of ports ]]
-  $forall r $in R: preserves_connections(r);  --[[ Law: reduction preserves connection topology ]]
-  $forall r $in R: decreases_active_pairs(r) $or preserves_active_pairs(r);  --[[ Law: reductions do not increase active pairs ]]
-}
-
---[[
-  Rewriting: Rules for transforming interaction nets
-  - Based on pattern matching and replacement of active pairs
-  - Preserves connectivity while changing network structure
-  - Core of the computational model
-]]
-@Rewriting<INet>: {
-  --[[ Additional structure for rewriting systems ]]
-  match:{Pattern} $to {Subgraph};  --[[ Pattern matching function ]]
-  rewrite:{Active} $to {Replacement};  --[[ Rewriting function ]]
-
-  --[[ INet structure mapping ]]
-  B = B;                --[[ Boxes are preserved across rewrites ]]
-  P = P;                --[[ Ports are preserved but may be reconnected ]]
-  b = b;                --[[ Box-port association is preserved ]]
-  w = w;                --[[ Wiring is preserved outside of rewritten regions ]]
-  p = p;                --[[ Principal port flags are preserved ]]
-  R(L) = {(a,b) | match(Pattern(a,b)) => rewrite(active(a,b))}; --[[ Reduction rules are implemented via match/rewrite ]]
-
-  --[[ Pattern and Replacement structures ]]
-  Pattern(a,b) = subnet({a,b} $cup neighborhood(a,b)); --[[ Patterns include active pairs and their neighborhoods ]]
-  Replacement(s) = result(rewrite(s));  --[[ Replacements are the result of rewriting ]]
-
-  --[[ Laws for rewriting ]]
-  $forall a $in Active: consistent(rewrite(a));  --[[ Rewriting preserves consistency ]]
-  $forall a $in Active: connected(a) => connected(rewrite(a));  --[[ Preserves connectivity ]]
-}
-
---[[
-  Reduction: Stepwise application of rewriting rules
-  - Encapsulates the operational semantics
-  - Handles strategy and control flow of reductions
-  - Tracks reduction history
-]]
-@Reduction<Rewriting>: {
-  step:{Net} $to {Net};  --[[ Single reduction step ]]
-  strategy:{Net} $to {Active};  --[[ Strategy for selecting active pairs ]]
-  history:{Net} $to {Trace};  --[[ Reduction history ]]
-
-  --[[ Rewriting structure mapping ]]
-  match = match;         --[[ Pattern matching is preserved ]]
-  rewrite = rewrite;     --[[ Rewriting function is preserved ]]
-
-  --[[ Operational semantics ]]
-  step(n) = apply(rewrite(strategy(n)), n); --[[ Step applies rewriting to selected active pair ]]
-  reduce(n) = if normal(n) then n else reduce(step(n)); --[[ Full reduction to normal form ]]
-  Trace(n) = [n, step(n), step(step(n)), ...]; --[[ Reduction trace is sequence of nets ]]
-}
-
---[[
-  Termination: Analysis of reduction process completion
-  - Detects normal forms and cyclical reductions
-  - Provides termination conditions and analysis
-]]
-@Termination<Reduction>: {
-  normal:{Net} $to {Bool};  --[[ Normal form predicate ]]
-  terminates:{Net} $to {Bool};  --[[ Termination predicate ]]
-  cycles:{Trace} $to {Cycles};  --[[ Cycle detection ]]
-
-  --[[ Reduction structure mapping ]]
-  step = step;           --[[ Reduction step is preserved ]]
-  strategy = strategy;   --[[ Reduction strategy is preserved ]]
-  history = history;     --[[ Reduction history is preserved ]]
-
-  --[[ Termination analysis ]]
-  normal(n) = strategy(n) = {}; --[[ Normal form has no available active pairs ]]
-  terminates(n) = exists k: normal(step^k(n)) $or cyclic(history(n)); --[[ Either reaches normal form or cycles ]]
-  cyclic(t) = exists i,j: i < j $and t[i] = t[j]; --[[ Trace contains a cycle ]]
-}
-
---[[
-  Transformation Operators
-
-  Core operators for transforming between categorical structures:
-  >a: IO -> ACSet (extract decorated graph)
-  >w: ACSet -> WireDgm
-  >i: WireDgm -> INet
-  >r: INet -> Rewriting
-  >d: Rewriting -> Reduction
-  >t: Reduction -> IO (reduction termination result)
-]]
-
---[[
-  Export Declaration
-
-  Items automatically imported into all other Borf modules
-]]
-@export {
-  --[[ Core types ]]
-  Category; ACSet; WireDgm; INet; Rewriting; Reduction; Termination;
-
-  --[[ Basic projection operators ]]
-  >a; >w; >i; >r; >d; >t;
-
-  --[[ Common compositional operators ]]
-  $comp;  --[[ Function composition: (f $comp g)(x) = f(g(x)) ]]
-  pipe = |;  --[[ Pipeline operator: x | f | g = g(f(x)) ]]
-
-  --[[ Common pipeline patterns ]]
-  WiringTransform = >a | >w;  --[[ IO to WiringDiagram ]]
-  NetTransform = >a | >w | >i;  --[[ IO to InteractionNet ]]
-  FullReduction = >a | >w | >i | >r | >d | >t;  --[[ Complete pipeline ]]
-  FullPipeline;  --[[ Complete workflow as function composition ]]
-
-  --[[ Mathematical operators ]]
-  $to; $in; $and; $forall; *; $subseteq; ===; $iff;
-  $or; $not; $cup; =>; <->;  --[[ Additional operators used in laws and definitions ]]
-  $exists; $exists!;  --[[ Existential quantifications ]]
-
-  --[[ Type relations ]]
-  compatible;  --[[ Port type compatibility relation ]]
-  $related_to;  --[[ Attribute type relation ]]
-  TypeSystem; TypeRelation;  --[[ Type system abstractions ]]
-
-  --[[ Utility concepts ]]
-  exists; --[[ Plain existence predicate ]]
-  active; active_pair;  --[[ Active pair detection ]]
-  connected; consistent;  --[[ Graph property predicates ]]
-  preserves_ports; preserves_connections;  --[[ Preservation properties ]]
-  decreases_active_pairs; preserves_active_pairs;  --[[ Reduction behavior ]]
-  can_reduce; confluent; cyclic;  --[[ Reduction analysis ]]
-  type_signature;  --[[ Box signature specification ]]
-}
-
---[[
-  Compositional View of Full Transformation Pipeline
-
-  Expresses the complete workflow as function composition
-  (Apply a first, then w, etc. - right-to-left composition)
-]]
-FullPipeline = t $comp d $comp r $comp i $comp w $comp a;
-
---[[
-  Implementation Notes:
-
-  - ACSet maps to graph structure in memory
-  - Wiring diagrams represent connections between computational components
-  - Interaction nets provide semantics for graph reduction
-  - The transformation pipeline enables compositional reasoning about complex systems
-  - Reductions capture computational steps as graph transformations
-
-  Example usage:
-
-  world | >a | >w | >i | my_rules | >d | analyze_results
+  This separation clarifies the intended semantics across different domains of the language.
 ]]
