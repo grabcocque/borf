@@ -1,174 +1,205 @@
-// borf.pest - Grammar for the Borf language
-WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
-// Support for Lua-style comments and traditional C-style comments
-COMMENT = _{ "--[[" ~ (!"]" ~ ANY)* ~ "]]" | "--" ~ (!"\n" ~ ANY)* ~ "\n"? | "/*" ~ (!"*/" ~ ANY)* ~ "*/" | "//" ~ (!"\n" ~ ANY)* ~ "\n"? }
+// borf.pest - Grammar for the Borf language as used in prelude/mod.borf
 
-// --- Program Structure ---
-// A program is simply a sequence of statements
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+COMMENT = _{ "--[[" ~ (!"]" ~ ANY)* ~ "]]" | "--" ~ (!"\n" ~ ANY)* ~ "\n"? }
+
+// A program is a sequence of statements
 program = { SOI ~ statement* ~ EOI }
 
-// Top-level statements
+// Top-level statement contains specific statement types
 statement = {
-    import_statement |
     category_statement |
     pipeline_statement |
-    export_statement |
     pipe_statement |
     app_statement |
-    composition_statement
+    composition_statement |
+    export_statement |
+    import_statement
 }
 
-// Import statement
-import_statement = { "@import" ~ string ~ ";" }
+// Category definition (with optional type parameter)
+category_statement = { "@" ~ ident ~ type_param? ~ ":" ~ "{" ~ category_element* ~ "}" }
+type_param = { "<" ~ ident ~ ">" }
 
-// Identifiers
-ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
-transform_ident = @{ ">" ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
-
-// Symbol literal - new rule for symbol syntax using colon prefix
-symbol_literal = @{ ":" ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
-
-// Basic types
-int = @{ ASCII_DIGIT+ }
-float = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* | "." ~ ASCII_DIGIT+ }
-string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
-
-// Set literals for mapping to
-set_literal = { "{" ~ (int | ident | symbol_literal) ~ ("," ~ (int | ident | symbol_literal))* ~ "}" }
-
-// Set comprehension
-set_comprehension = { "{" ~ ident ~ "$in" ~ ident ~ ("," ~ ident ~ "$in" ~ ident)* ~ ("|" ~ constraint_expr)? ~ "}" }
-
-// Complex set expression with a pipe
-complex_set_expr = { "{" ~ expr ~ ("|" ~ constraint_expr)? ~ "}" }
-
-// --- Category Definitions ---
-category_statement = { "@" ~ ident ~ ("<" ~ ident ~ ">")? ~ ":" ~ "{" ~ (WHITESPACE* ~ category_decl)* ~ "}" }
-
-category_decl = { WHITESPACE* ~ (object_decl | mapping_decl | law_decl | structure_mapping_decl | function_def_decl) }
-
-object_decl = { ident ~ ";" ~ WHITESPACE* ~ COMMENT? }
-mapping_decl = { ident ~ WHITESPACE* ~ ":" ~ WHITESPACE* ~ domain_expr ~ WHITESPACE* ~ mapping_type ~ WHITESPACE* ~ (ident | set_literal | symbol_literal) ~ ";" ~ WHITESPACE* ~ COMMENT? }
-
-// Structure mapping declaration
-structure_mapping_decl = { ident ~ WHITESPACE* ~ "=" ~ WHITESPACE* ~ expr ~ ";" ~ WHITESPACE* ~ COMMENT? }
-
-// Function definition declaration
-function_def_decl = { ident ~ "(" ~ ident ~ ("," ~ ident)* ~ ")" ~ WHITESPACE* ~ "=" ~ WHITESPACE* ~ expr ~ ";" ~ WHITESPACE* ~ COMMENT? }
-
-// Expression rule (fixed to avoid left-recursion)
-expr = {
-    term ~ (binary_op ~ term)*
+// Category elements - object declarations, mappings, laws, etc.
+category_element = {
+    object_decl |
+    mapping_decl |
+    structure_mapping_decl |
+    law_decl |
+    function_def_decl
 }
 
-term = {
+// Simple object declaration (e.g., "A;")
+object_decl = { ident ~ ";" }
+
+// Mapping declarations (e.g., "f: A $to B;", "dom: M->O;")
+mapping_decl = { ident ~ ":" ~ domain_expr ~ mapping_type ~ codomain ~ ";" }
+domain_expr = { domain }
+domain = { ident | product_domain | set_literal }
+product_domain = { ident ~ "*" ~ ident }
+mapping_type = { "$to" | "$subseteq" | "->" | "$teq" | "$veq" | "$seq" | "$ceq" | "$omega" | "<->" | "*" }
+codomain = { ident | symbol_literal }
+
+// Structure mappings (e.g., "O = A;")
+structure_mapping_decl = { ident ~ "=" ~ term ~ ";" }
+
+// Laws
+law_decl = {
+    forall_law |
+    exists_law |
+    composition_law |
+    named_law
+}
+
+// Named law with a prefix (e.g., "law.refl = $forall t $in T: t<::t;")
+named_law = { "law." ~ ident ~ "=" ~ (forall_expr | exists_expr | constraint_expr) ~ ";" }
+
+// Forall law (e.g., "$forall t $in T: t<::t;")
+forall_law = { forall_expr ~ ";" }
+forall_expr = { "$forall" ~ ident ~ ("," ~ ident)* ~ "$in" ~ ident ~ ":" ~ constraint_expr }
+
+// Exists law (e.g., "$exists f,g $in M: dom(f) $veq a;")
+exists_law = { exists_expr ~ ";" }
+exists_expr = { "$exists" ~ ("!" | "") ~ ident ~ ("," ~ ident)* ~ "$in" ~ ident ~ ":" ~ constraint_expr }
+
+// Composition law (e.g., "comp $comp id === id;")
+composition_law = { ident ~ "$comp" ~ ident ~ "===" ~ ident ~ ";" }
+
+// Constraint expressions
+constraint_expr = {
+    implication |
+    logical_and |
+    logical_or |
+    comparison |
+    primary_expr
+}
+
+constraint_op = { "=" | "$teq" | "$veq" | "$seq" | "$ceq" | "<::" | ">" | "$in" | "$omega" | "$iff" }
+
+implication = { logical_and ~ "=>" ~ constraint_expr }
+logical_and = { logical_or ~ ("$and" ~ logical_or)* }
+logical_or = { comparison ~ ("$or" ~ comparison)* }
+comparison = { primary_expr ~ (constraint_op ~ primary_expr)? }
+
+primary_expr = {
+    function_app |
     ident |
     int |
-    symbol_literal |                           // Symbol literal
-    set_literal |                              // set literal
-    ident ~ "(" ~ (ident | symbol_literal) ~ ")" |     // function application
-    complex_set_expr |                         // set comprehension with expressions
-    match_expr                                 // match expression
+    symbol_literal |
+    "$not" ~ "(" ~ constraint_expr ~ ")" |
+    set_expr |
+    "(" ~ constraint_expr ~ ")"
 }
 
-// Match expression for pattern matching
-match_expr = { "match" ~ ident ~ "with" ~ ("|" ~ ident ~ "$in" ~ ident ~ "->" ~ expr)+ }
-
-binary_op = _{
-    "+" |                                      // disjoint union
-    "=" |                                      // equality
-    "$and" |                                   // logical and
-    "$teq" |                                   // type equivalence (new)
-    "$veq" |                                   // value equality (new)
-    "$seq" |                                   // structural equivalence (new)
-    "$ceq"                                     // categorical equivalence (new)
-}
-
-// New rule for domain expressions - simplified to be more robust
-domain_expr = {
-    (ident ~ WHITESPACE* ~ "*" ~ WHITESPACE* ~ ident) |  // M * M format
-    ident                                              // Single identifier
-}
-
-// Expanded mapping types to include new equivalence relations
-mapping_type = { "$to" | "$subseteq" | "<->" | "*" | "$teq" | "$veq" | "$seq" | "$ceq" | "$omega" }
-
-// --- Laws and constraints ---
-// Law declaration
-law_decl = { (composition_law | forall_law | exists_law) ~ WHITESPACE* ~ COMMENT? }
-
-composition_law = { ident ~ WHITESPACE* ~ "$comp" ~ WHITESPACE* ~ ident ~ WHITESPACE* ~ ("=" ~ "==" ~ "===" | "===") ~ WHITESPACE* ~ ident ~ ";" }
-forall_law = { forall_expr ~ ";" }
-exists_law = { exists_expr ~ ";" }
-
-forall_expr = {
-    "$forall" ~ ident ~ ("," ~ ident)* ~ "$in" ~ ident ~ ("," ~ "(" ~ constraint_expr ~ ")")? ~ ":" ~
-    constraint_expr
-}
-
-exists_expr = {
-    "$exists" ~ ident ~ ("," ~ ident)* ~ "$in" ~ ident ~ ("," ~ "(" ~ constraint_expr ~ ")")? ~ ":" ~
-    constraint_expr
-}
-
-// Re-introduce binary_constraint rule, make it silent
-constraint_expr = { primary_constraint_term ~ (constraint_op ~ primary_constraint_term)* }
-
-// constraint_op remains atomic and explicit - add new equivalence operators
-constraint_op = @{ "=" | "$and" | "=>" | ">" | "<=" | "<" | ">=" | "=" ~ "==" ~ "===" | "$teq" | "$veq" | "$seq" | "$ceq" | "$omega" }
-
-// Primary terms (silent for implicit whitespace handling)
-primary_constraint_term = _{ int | symbol_literal | set_expr | function_app | ident | "(" ~ constraint_expr ~ ")" | "|" ~ set_expr ~ "|" }
-
+// Set expressions
 set_expr = {
-    "{" ~ set_element ~ ("|" ~ set_condition)? ~ "}" |
-    ident ~ "×" ~ ident |  // Using the proper mathematical symbol for product
-    ident ~ "*" ~ ident |  // Using * as an alternative for product
-    "(" ~ ident ~ "*" ~ ident ~ ")"  // Parenthesized product
+    set_comprehension |
+    set_literal
 }
 
-set_element = { (ident | symbol_literal) ~ ("," ~ (ident | symbol_literal))* }
-set_condition = { ident ~ "(" ~ (ident | symbol_literal) ~ ")" ~ ("$and" ~ ident ~ "(" ~ (ident | symbol_literal) ~ ")")? }
+set_literal = { "{" ~ set_element ~ ("," ~ set_element)* ~ "}" }
+set_element = { ident | int | symbol_literal }
+set_comprehension = { "{" ~ ident ~ "$in" ~ ident ~ set_condition? ~ "}" }
+set_condition = { "|" ~ constraint_expr }
 
-function_app = { ident ~ "(" ~ (ident | constraint_expr | symbol_literal) ~ ")" }
+// Function application (e.g., "dom(f)")
+function_app = { ident ~ "(" ~ function_args ~ ")" }
+function_args = { expr ~ ("," ~ expr)* | "" }
 
-// --- Processing expressions ---
-pipe_statement = { ident ~ ("|" ~ transform_ident)+ }
-app_statement = { transform_ident ~ "(" ~ (app_arg) ~ ")" }
-app_arg = _{ app_statement | ident }
-
-// Modified to support both $comp and . notation
-composition_statement = {
-    ident ~ "=" ~ ident ~ ("$comp" ~ ident)+ ~ ("(" ~ ident ~ ")")? |
-    ident ~ "=" ~ ident ~ ("." ~ ident)+ ~ ("(" ~ ident ~ ")")?
-}
-
-// --- Pipeline and Export Directives ---
+// Pipeline statement
 pipeline_statement = {
-    "@pipeline" ~ ident ~ ("<" ~ ident ~ ">")? ~ "{" ~ pipeline_content ~ "}" |
-    "@" ~ ident ~ ("<" ~ ident ~ ">")? ~ ":" ~ pipeline_content_colon_form
+    "@" ~ ident ~ type_param? ~ ":" ~ pipeline_content
 }
 
 pipeline_content = {
+    "input" ~ ident ~
+    "output" ~ ident ~
+    "steps" ~ "{" ~ comma_separated_ids ~ "}"
+}
+
+pipeline_content_colon_form = {
     "input" ~ ":" ~ ident ~ ";" ~
     "output" ~ ":" ~ ident ~ ";" ~
     "steps" ~ ":" ~ pipe_steps ~ ";"
 }
 
-// Support for the colon form of pipeline content
-pipeline_content_colon_form = {
-    "input" ~ ident ~
-    "output" ~ ident ~
-    "steps" ~ "{" ~ ident ~ ("," ~ WHITESPACE* ~ ident)* ~ "}"
+// Pipe statement
+pipe_statement = { ident ~ pipe_steps }
+pipe_steps = { ("|>" ~ transform_ident)+ }
+transform_ident = { ident }
+
+// Application expression (e.g., ">i(IO)")
+app_statement = { app_expr }
+app_expr = { ident ~ "(" ~ app_arg ~ ")" }
+app_arg = { app_expr | ident }
+
+// Composition statement
+composition_statement = { ident ~ "=" ~ ident ~ ("." ~ ident)+ ~ "(" ~ ident ~ ")" }
+
+// Function definition (e.g., "node_eq: N*N->Bool = \a,b.$lambdaN(a) $seq $lambdaN(b);")
+function_def_decl = { ident ~ ":" ~ domain ~ "->" ~ codomain ~ "=" ~ (lambda_expr | term) ~ ";" }
+
+// Lambda expression (e.g., "\a,b.$lambdaN(a) $seq $lambdaN(b)")
+lambda_expr = { "\\" ~ lambda_params ~ "." ~ expr }
+lambda_params = { ident ~ ("," ~ ident)* | "(" ~ ident ~ ("," ~ ident)* ~ ")" }
+
+// General expressions
+expr = {
+    match_expr |
+    atom_expr
 }
 
-pipe_steps = { ident ~ ("|" ~ ident)* | transform_ident ~ ("|" ~ transform_ident)* }
-
-// Modified export statement to only support comma-separated format
-export_statement = {
-    "export" ~ comma_separated_ids          // export id1, id2, id3 format
+// Match expression (replaced conditional)
+match_expr = {
+    if_then_else |
+    ternary
 }
 
-comma_separated_ids = {
-    (ident | transform_ident) ~ ("," ~ (ident | transform_ident))*
+// Atomic expressions (renamed from atom_expr)
+atom_expr = {
+    function_app |
+    ident |
+    int |
+    symbol_literal |
+    tuple_expr |
+    set_operation |
+    set_comprehension |
+    "(" ~ expr ~ ")" |
+    "\"" ~ ident ~ "\""  // Simple string literals
 }
+
+// Generic term (all types of expressions) for compatibility with existing code
+term = {
+    expr
+}
+
+if_then_else = {
+    "if" ~ atom_expr ~ ((">" | "<") ~ atom_expr)? ~ "then" ~ atom_expr ~ "else" ~ atom_expr
+}
+
+ternary = {
+    atom_expr ~ "?" ~ atom_expr ~ ":" ~ atom_expr
+}
+
+// Tuple expressions
+tuple_expr = { "(" ~ expr ~ "," ~ expr ~ ")" }
+
+// Set operations
+set_operation = { ident ~ set_op ~ ident }
+set_op = { "$cup" | "$cap" }
+
+// Comma-separated identifiers
+comma_separated_ids = { ident ~ ("," ~ ident)* }
+
+// Export statement
+export_statement = { "export" ~ ident ~ ";" }
+
+// Import statement
+import_statement = { "import" ~ string_literal ~ ";" }
+string_literal = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+
+// Basic types
+symbol_literal = @{ ":" ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+ident = @{ (ASCII_ALPHA | "$" | "_" | ">") ~ (ASCII_ALPHANUMERIC | "$" | "_")* }
+int = @{ ASCII_DIGIT+ }
