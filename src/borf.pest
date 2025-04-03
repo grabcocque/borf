@@ -4,10 +4,11 @@ WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 COMMENT = _{ "--[[" ~ (!"]" ~ ANY)* ~ "]]" | "--" ~ (!"\n" ~ ANY)* ~ "\n"? | "/*" ~ (!"*/" ~ ANY)* ~ "*/" | "//" ~ (!"\n" ~ ANY)* ~ "\n"? }
 
 // --- Program Structure ---
+// A program is simply a sequence of statements
 program = { SOI ~ statement* ~ EOI }
 
-// Top-level statements (silent)
-statement = _{
+// Top-level statements
+statement = {
     import_statement |
     category_statement |
     pipeline_statement |
@@ -135,11 +136,18 @@ function_app = { ident ~ "(" ~ (ident | constraint_expr | symbol_literal) ~ ")" 
 pipe_statement = { ident ~ ("|" ~ transform_ident)+ }
 app_statement = { transform_ident ~ "(" ~ (app_arg) ~ ")" }
 app_arg = _{ app_statement | ident }
-composition_statement = { ident ~ "=" ~ ident ~ ("$comp" ~ ident)+ ~ ("(" ~ ident ~ ")")? }
+
+// Modified to support both $comp and . notation
+composition_statement = {
+    ident ~ "=" ~ ident ~ ("$comp" ~ ident)+ ~ ("(" ~ ident ~ ")")? |
+    ident ~ "=" ~ ident ~ ("." ~ ident)+ ~ ("(" ~ ident ~ ")")?
+}
 
 // --- Pipeline and Export Directives ---
-pipeline_statement = { "@pipeline" ~ ident ~ ("<" ~ ident ~ ">")? ~ "{" ~
-                 pipeline_content ~ "}" }
+pipeline_statement = {
+    "@pipeline" ~ ident ~ ("<" ~ ident ~ ">")? ~ "{" ~ pipeline_content ~ "}" |
+    "@" ~ ident ~ ("<" ~ ident ~ ">")? ~ ":" ~ pipeline_content_colon_form
+}
 
 pipeline_content = {
     "input" ~ ":" ~ ident ~ ";" ~
@@ -147,6 +155,20 @@ pipeline_content = {
     "steps" ~ ":" ~ pipe_steps ~ ";"
 }
 
+// Support for the colon form of pipeline content
+pipeline_content_colon_form = {
+    "input" ~ ident ~
+    "output" ~ ident ~
+    "steps" ~ "{" ~ ident ~ ("," ~ WHITESPACE* ~ ident)* ~ "}"
+}
+
 pipe_steps = { ident ~ ("|" ~ ident)* | transform_ident ~ ("|" ~ transform_ident)* }
 
-export_statement = { "@export" ~ "{" ~ ((ident | transform_ident) ~ ";")* ~ "}" }
+// Modified export statement to only support comma-separated format
+export_statement = {
+    "export" ~ comma_separated_ids          // export id1, id2, id3 format
+}
+
+comma_separated_ids = {
+    (ident | transform_ident) ~ ("," ~ (ident | transform_ident))*
+}

@@ -9,5 +9,7 @@ alwaysApply: true
 - In a loop until everything is good:
     - Run `cargo clippy` and fix any issues
     - Run `cargo test` and fix any issues
+    - PLEASE BE AWARE: stubbing out tests, marking tests as ignored, removing tests. test scumming with
+        "assert True" and removing or commenting out failing code _does not count as fixing it_.
     - Run `cargo test --doc` and fix any issues
     - Run `pre-commit run -a` and fix any issues

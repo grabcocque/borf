@@ -531,31 +531,3 @@ than the last. Approach with caution and awe. Begone!
 };
 
 export Core;
-
---[[
-  Equivalence Relations in Borf:
-
-  This prelude distinguishes between different domains of equivalence:
-
-  1. $teq: Type Equivalence - Types considered "the same"
-     - Reflexive, symmetric, transitive
-     - Used for determining type compatibility and substitutability
-     - Example: a*b $teq b*a (product types commute)
-
-  2. $veq: Value Equality - Basic value comparison
-     - Simple equality checking (similar to == in other languages)
-     - Tests if values represent the same entity
-     - Example: dom(f) $veq a (domain of f is a)
-
-  3. $seq: Structural Equivalence - Deep equality of structures
-     - Recursively compares all components of structures
-     - Used for laws and invariants where full equivalence matters
-     - Example: f.id(dom(f)) $seq f (left identity law)
-
-  4. $ceq: Categorical Equivalence - Isomorphism between objects
-     - Two objects are equivalent if they're isomorphic
-     - Defined through the existence of morphisms satisfying certain laws
-     - Example: a $ceq b iff there exist f:a→b, g:b→a with g.f ≅ id_a, f.g ≅ id_b
-
-  This separation clarifies the intended semantics across different domains of the language.
-]]
