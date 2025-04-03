@@ -34,6 +34,19 @@
   $forall f $in M: cod(id(dom(f))) = dom(f);  --[[ Law: domain typing ]]
   $forall f,g $in M: cod(f) = dom(g) => dom(comp(g,f)) = dom(f);  --[[ Law: composition domain ]]
   $forall f,g $in M: cod(f) = dom(g) => cod(comp(g,f)) = cod(g);  --[[ Law: composition codomain ]]
+
+  --[[ Additional fundamental laws ]]
+  $forall f,g,h $in M: cod(f) = dom(g) $and cod(g) = dom(h) => comp(h,comp(g,f)) = comp(comp(h,g),f);  --[[ Law: associativity of composition ]]
+  $forall f $in M: comp(id(cod(f)),f) = f;  --[[ Law: right identity ]]
+  $forall f $in M: comp(f,id(dom(f))) = f;  --[[ Law: left identity ]]
+  $forall o $in O: dom(id(o)) = o $and cod(id(o)) = o;  --[[ Law: identity morphism type ]]
+
+  --[[ Existential quantifications for composability ]]
+  $exists comp(f,g) $iff cod(g) = dom(f);  --[[ Composition exists if and only if codomain of g equals domain of f ]]
+
+  --[[ Well-formedness constraints ]]
+  $forall m $in M: dom(m) $in O $and cod(m) $in O;  --[[ Law: all morphisms connect valid objects ]]
+  $forall o $in O: id(o) $in M;  --[[ Law: all objects have identity morphisms ]]
 }
 
 --[[
@@ -60,6 +73,19 @@
 
   --[[ Composition law ]]
   $forall e1,e2 $in E: t(e1) = s(e2) => s(comp(e2,e1)) = s(e1) $and t(comp(e2,e1)) = t(e2);
+
+  --[[ Additional laws for ACSet coherence ]]
+  $forall e1,e2,e3 $in E: (t(e1) = s(e2) $and t(e2) = s(e3)) => comp(e3,comp(e2,e1)) = comp(comp(e3,e2),e1);  --[[ Law: associativity for edge composition ]]
+  $forall e $in E: comp(id(t(e)),e) = e;  --[[ Law: right identity for edges ]]
+  $forall e $in E: comp(e,id(s(e))) = e;  --[[ Law: left identity for edges ]]
+
+  --[[ Decoration coherence laws ]]
+  $forall e1,e2 $in E: t(e1) = s(e2) => lE(comp(e2,e1)) $related_to (lE(e1),lE(e2));  --[[ Law: edge composition preserves decoration structure ]]
+  $forall n $in N: lE(id(n)) $related_to lN(n);  --[[ Law: identity edge decoration relates to node decoration ]]
+
+  --[[ Existential quantification for attribute compatibility ]]
+  $exists X as TypeSystem;  --[[ There exists a type system for attributes ]]
+  $exists $related_to as TypeRelation(X,X);  --[[ There exists a relation between attribute types ]]
 }
 
 --[[
@@ -86,6 +112,19 @@
   lE((p,q)) = (tP(p), tP(q)); --[[ Edge decoration is pair of port types ]]
 
   w $comp w === id;  --[[ Law: wiring is an involution (self-inverse) ]]
+
+  --[[ Additional laws for wiring diagrams ]]
+  $forall p $in P: $exists! b $in B: b(p) = b;  --[[ Law: each port belongs to exactly one box ]]
+  $forall p,q $in P: w(p) = q => w(q) = p;  --[[ Law: wiring is symmetric ]]
+  $forall p,q $in P: w(p) = q => compatible(tP(p), tP(q));  --[[ Law: connected ports have compatible types ]]
+
+  --[[ Existential quantifications for port compatibility ]]
+  $exists compatible as Relation(X,X);  --[[ There exists a compatibility relation on port types ]]
+  $forall x,y $in X: compatible(x,y) => compatible(y,x);  --[[ Law: compatibility is symmetric ]]
+
+  --[[ Structural invariants ]]
+  $forall p $in P: b(p) = b(w(p)) => p = w(p);  --[[ Law: self-loops only within same box ]]
+  $forall b $in B: $exists type_signature(b) as {InputPorts,OutputPorts};  --[[ Law: boxes have type signatures ]]
 }
 
 --[[
@@ -115,6 +154,19 @@
 
   --[[ Law: Connected principal ports form active pairs (reduction sites) ]]
   $forall p,q $in P: (w(p)=q $and p(p)=1 $and p(q)=1) => active(p,q);
+
+  --[[ Additional laws for interaction nets ]]
+  $forall p $in P: p(p) $in {0,1};  --[[ Law: each port is either principal or auxiliary ]]
+  $forall a,b $in B: a != b => |{active(p,q) | b(p) = a $and b(q) = b}| <= 1;  --[[ Law: at most one active pair between any two boxes ]]
+
+  --[[ Existential quantifications for reduction rules ]]
+  $exists deterministic_rule as $forall a $in Active: $exists! r $in R: applies(r,a);  --[[ Law: deterministic reduction ]]
+  $exists local_confluence as $forall a,b $in Active: can_reduce(a) $and can_reduce(b) => confluent(reduce(a),reduce(b));  --[[ Law: local confluence property ]]
+
+  --[[ Semantic preservation laws ]]
+  $forall r $in R: preserves_ports(r);  --[[ Law: reduction preserves total number of ports ]]
+  $forall r $in R: preserves_connections(r);  --[[ Law: reduction preserves connection topology ]]
+  $forall r $in R: decreases_active_pairs(r) $or preserves_active_pairs(r);  --[[ Law: reductions do not increase active pairs ]]
 }
 
 --[[
@@ -208,7 +260,7 @@
   --[[ Core types ]]
   Category; ACSet; WireDgm; INet; Rewriting; Reduction; Termination;
 
-  --[[ Basic transformation operators ]]
+  --[[ Basic projection operators ]]
   >a; >w; >i; >r; >d; >t;
 
   --[[ Common compositional operators ]]
@@ -219,9 +271,26 @@
   WiringTransform = >a | >w;  --[[ IO to WiringDiagram ]]
   NetTransform = >a | >w | >i;  --[[ IO to InteractionNet ]]
   FullReduction = >a | >w | >i | >r | >d | >t;  --[[ Complete pipeline ]]
+  FullPipeline;  --[[ Complete workflow as function composition ]]
 
   --[[ Mathematical operators ]]
-  $to; $in; $and; $forall; *; $subseteq; ===;
+  $to; $in; $and; $forall; *; $subseteq; ===; $iff;
+  $or; $not; $cup; =>; <->;  --[[ Additional operators used in laws and definitions ]]
+  $exists; $exists!;  --[[ Existential quantifications ]]
+
+  --[[ Type relations ]]
+  compatible;  --[[ Port type compatibility relation ]]
+  $related_to;  --[[ Attribute type relation ]]
+  TypeSystem; TypeRelation;  --[[ Type system abstractions ]]
+
+  --[[ Utility concepts ]]
+  exists; --[[ Plain existence predicate ]]
+  active; active_pair;  --[[ Active pair detection ]]
+  connected; consistent;  --[[ Graph property predicates ]]
+  preserves_ports; preserves_connections;  --[[ Preservation properties ]]
+  decreases_active_pairs; preserves_active_pairs;  --[[ Reduction behavior ]]
+  can_reduce; confluent; cyclic;  --[[ Reduction analysis ]]
+  type_signature;  --[[ Box signature specification ]]
 }
 
 --[[

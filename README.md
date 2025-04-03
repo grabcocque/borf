@@ -191,72 +191,85 @@ The main challenge lies in designing efficient and manageable encodings and ensu
 ### Phase 1: Project Setup and Robust Foundation (Weeks 1-2)
 
 1. **Initial Project Configuration**
-   * [ ] Create a new Rust project with Cargo
-   * [ ] Set up the directory structure
-   * [ ] Add core dependencies:
-     * [ ] `pest` and `pest_derive` for parsing
-     * [ ] `thiserror` for ergonomic error handling
-     * [ ] `miette` for rich diagnostic reporting
-     * [ ] `libfuzzer-sys` and `arbitrary` for fuzzing
-   * [ ] Configure test environment (unit tests, integration tests)
+   * [x] Create a new Rust project with Cargo
+   * [x] Set up the directory structure
+   * [x] Add core dependencies:
+     * [x] `pest` and `pest_derive` for parsing
+     * [x] `thiserror` for ergonomic error handling
+     * [x] `miette` for rich diagnostic reporting
+     * [x] `libfuzzer-sys` and `arbitrary` for fuzzing
+   * [x] Configure test environment (unit tests, integration tests)
    * [~] Set up fuzzing infrastructure with cargo-fuzz
    * [ ] Create CI/CD pipeline that includes fuzzing runs
 
 2. **Error Handling Infrastructure**
-   * [ ] Design the error hierarchy using `thiserror`
-     * [~] Parser errors (syntax, unexpected tokens) - *Basic placeholders exist*
+   * [x] Design the error hierarchy using `thiserror`
+     * [x] Parser errors (syntax, unexpected tokens) - *Basic placeholders exist*
      * [~] Semantic errors (type mismatches, undefined symbols) - *Basic placeholders exist*
      * [~] Runtime errors (execution failures) - *Basic placeholders exist*
-   * [ ] Set up `miette` for rich diagnostic output
-     * [~] Configure source code snippets in error messages - *Basic setup in `BorfError`*
+   * [x] Set up `miette` for rich diagnostic output
+     * [x] Configure source code snippets in error messages - *Basic setup in `BorfError`*
      * [ ] Add syntax highlighting for error locations
-     * [ ] Include helpful suggestions for common mistakes
+     * [x] Include helpful suggestions for common mistakes
 
 3. **Define the Core Data Structures**
-   * [ ] Implement the basic Rust-native Catlab.jl-style ACSets-inspired graph representation
+   * [~] Implement the basic Rust-native Catlab.jl-style ACSets-inspired graph representation
      * [ ] `InteractionNet` struct and associated data types
      * [ ] Agent and port representations
      * [ ] Connection representation
-   * [ ] Implement the type system core
+   * [~] Implement the type system core
      * [ ] Define `Type` enum with variants for all type constructs
      * [ ] Create `TypeContext` for tracking type annotations and inferences
-   * [ ] Implement `Arbitrary` trait for all core data structures to support fuzzing
+   * [~] Implement `Arbitrary` trait for all core data structures to support fuzzing
 
 ### Phase 2: Parser Development with Robust Error Handling (Weeks 3-5)
 
 4. **Create the Pest Grammar**
-   * [ ] Define the grammar for the interaction calculus
-     * [ ] Agent definitions
-     * [ ] Net structure
-     * [ ] Connection syntax
-     * [ ] Type annotations
+   * [x] Define the grammar for the interaction calculus
+     * [x] Agent definitions
+     * [x] Net structure
+     * [~] Connection syntax
+     * [x] Type annotations
      * [ ] Reduction rules
-   * [ ] Test the grammar with sample inputs
+   * [x] Test the grammar with sample inputs
    * [ ] Add detailed error labels and hints in the Pest grammar
    * [~] Create fuzz targets for the grammar to discover edge cases - *One general parser target exists*
 
 5. **Build the AST Processor with Rich Diagnostics**
-   * [ ] Implement functions to traverse the Pest parse tree - *Placeholder in `parser.rs`*
-   * [ ] Convert parse tree nodes to internal data structures - *TODO in `parser.rs`*
-   * [~] Integrate miette for detailed error reporting: - *Basic setup via `BorfError`*
-     * [ ] Source spans for precise error locations
-     * [ ] Contextual help messages
-     * [ ] Visual error indicators in terminal output
+   * [x] Implement functions to traverse the Pest parse tree - *Placeholder in `parser.rs`*
+   * [x] Convert parse tree nodes to internal data structures - *TODO in `parser.rs`*
+   * [x] Integrate miette for detailed error reporting: - *Basic setup via `BorfError`*
+     * [x] Source spans for precise error locations
+     * [x] Contextual help messages
+     * [x] Visual error indicators in terminal output
    * [ ] Implement recovery strategies for common syntax errors
-   * [ ] Test with increasingly complex examples
+   * [x] Test with increasingly complex examples
 
-6. **Parser Fuzzing and Hardening**
+6. **Robust Export Block Processing**
+   * [~] Enhance export block parsing with semantic validation
+     * [ ] Track all defined symbols throughout the program
+     * [ ] Validate that exported symbols are actually defined
+     * [ ] Add specific error reporting for undefined exports
+     * [ ] Distinguish between different types of exported items (operators, types, functions)
+     * [ ] Validate operator usage and consistency
+     * [ ] Check for naming conflicts and duplications
+   * [ ] Implement export filtering and visibility rules
+   * [ ] Add proper scoping for exported identifiers
+   * [ ] Develop detailed export diagnostics with suggested fixes
+   * [ ] Create fuzz targets specifically for export statements
+
+7. **Parser Fuzzing and Hardening**
    * [~] Create comprehensive fuzz targets using `arbitrary` and `libfuzzer-sys` - *One target exists*
-     * [ ] Target syntax edge cases
+     * [~] Target syntax edge cases
      * [ ] Target input length extremes
-     * [ ] Target complex nested structures
+     * [~] Target complex nested structures
    * [ ] Run extended fuzzing sessions to uncover parser weaknesses
    * [ ] Develop property-based tests to verify parser invariants
    * [ ] Fix discovered issues and add regression tests
 
 ### Phase 3: Type System Implementation (Weeks 6-7)
 
-7. **Implement the Gradual Type System**
+8. **Implement the Gradual Type System**
    * [~] Develop the core type checking infrastructure - *Structs exist*
    * [~] Implement set-theoretic types (union, intersection) - *Enum variants exist*
    * [~] Build the type inference engine for connected ports - *Basic `infer_types` method exists*
@@ -265,54 +278,54 @@ The main challenge lies in designing efficient and manageable encodings and ensu
      * [ ] Show relevant type constraints
      * [ ] Provide suggestions for fixing type errors
 
-8. **Type Unification**
-   * [~] Implement unification for primitive types - *Handles `Dyn`, `Simple`*
-   * [~] Add support for unifying parametric types - *Handles basic parametric matching*
+9. **Type Unification**
+   * [x] Implement unification for primitive types - *Handles `Dyn`, `Simple`*
+   * [x] Add support for unifying parametric types - *Handles basic parametric matching*
    * [ ] Implement unification for union and intersection types - *TODO in `unify_types`*
-   * [~] Handle the `Dyn` type and gradual typing features - *`unify_types` handles `Dyn`*
+   * [x] Handle the `Dyn` type and gradual typing features - *`unify_types` handles `Dyn`*
    * [ ] Create fuzz targets for the type unification system
    * [ ] Test with complex type scenarios
 
 ### Phase 4: Graph Representation and Rewriting (Weeks 8-10)
 
-9. **Complete the Rust-native Catlab.jl-style ACSets Graph Implementation**
-   * [~] Finalize the graph representation optimized for rewrites - *Basic structures exist*
-   * [ ] Implement efficient querying mechanisms
-   * [ ] Build serialization/deserialization for graph states
-   * [ ] Add visualization capabilities for debugging
-   * [ ] Create fuzz targets for graph operations
-   * [ ] Implement detailed error reporting for graph operations
+10. **Complete the Rust-native Catlab.jl-style ACSets Graph Implementation**
+    * [~] Finalize the graph representation optimized for rewrites - *Basic structures exist*
+    * [ ] Implement efficient querying mechanisms
+    * [ ] Build serialization/deserialization for graph states
+    * [ ] Add visualization capabilities for debugging
+    * [ ] Create fuzz targets for graph operations
+    * [~] Implement detailed error reporting for graph operations
 
-10. **Build the Pattern Matching Engine**
-    * [ ] Implement pattern matching for identifying redexes
+11. **Build the Pattern Matching Engine**
+    * [~] Implement pattern matching for identifying redexes
     * [ ] Create the subgraph isomorphism algorithm
     * [ ] Optimize for the special case of interaction nets
     * [ ] Add detailed diagnostic information for failed matches
     * [ ] Test with standard interaction net patterns
     * [ ] Fuzz the pattern matching engine for robustness
 
-11. **Implement Graph Rewriting Rules**
+12. **Implement Graph Rewriting Rules**
     * [~] Create the framework for defining rewrite rules - *Placeholders exist*
-    * [ ] Implement rule application logic - *Placeholder `apply_reduction` exists*
+    * [~] Implement rule application logic - *Placeholder `apply_reduction` exists*
     * [ ] Ensure preservation of connections during rewrites
     * [ ] Add support for standard Lafont combinators
       * [ ] Duplicator
       * [ ] Eraser
       * [ ] Constructor/destructor pairs
-    * [ ] Implement robust error handling for rule application failures
+    * [~] Implement robust error handling for rule application failures
 
 ### Phase 5: Reduction Engine (Weeks 11-12)
 
-12. **Build the Execution Engine**
+13. **Build the Execution Engine**
     * [~] Implement the redex detection algorithm - *`find_redexes` exists*
     * [ ] Create the reduction strategy (eager vs. lazy options)
-    * [ ] Build step-by-step and normalization execution modes
+    * [x] Build step-by-step and normalization execution modes
     * [ ] Ensure deterministic reduction when multiple redexes exist
     * [ ] Add detailed execution traces for debugging
     * [ ] Create fuzz targets for the execution engine
 
-13. **Type Propagation During Reduction**
-    * [~] Implement type inference propagation after rewrites - *`infer_types` exists, not integrated with reduction*
+14. **Type Propagation During Reduction**
+    * [x] Implement type inference propagation after rewrites - *`infer_types` exists, not integrated with reduction*
     * [ ] Ensure type consistency is maintained during reduction
     * [ ] Add runtime type checking (optional, for debugging)
     * [ ] Handle type errors gracefully with informative messages
@@ -320,15 +333,15 @@ The main challenge lies in designing efficient and manageable encodings and ensu
 
 ### Phase 6: Standard Library and Examples (Weeks 13-14)
 
-14. **Implement Standard Agents**
+15. **Implement Standard Agents**
     * [ ] Create a standard library of common interaction net agents
     * [ ] Implement the full set of Lafont interaction combinators
     * [ ] Build utility combinators for common programming tasks
     * [ ] Document the standard agents and their behavior
     * [ ] Add comprehensive test suite for standard agents
 
-15. **Develop Example Programs**
-    * [ ] Create simple illustrative examples
+16. **Develop Example Programs**
+    * [~] Create simple illustrative examples
     * [ ] Implement classic algorithms using interaction nets
     * [ ] Build larger case studies showing real-IO applications
     * [ ] Add examples showing the benefits of the type system
@@ -336,28 +349,28 @@ The main challenge lies in designing efficient and manageable encodings and ensu
 
 ### Phase 7: Robustness Enhancement and Performance Optimization (Weeks 15-17)
 
-16. **Extended Fuzzing and Property Testing**
+17. **Extended Fuzzing and Property Testing**
     * [ ] Develop comprehensive property-based tests for all components
-    * [ ] Create advanced fuzz targets that combine multiple operations
+    * [~] Create advanced fuzz targets that combine multiple operations
     * [ ] Perform extended fuzzing sessions (24h+) to discover edge cases
     * [ ] Implement crash reporting and automatic test case minimization
     * [ ] Fix all discovered issues and add regression tests
 
-17. **Performance Optimization**
+18. **Performance Optimization**
     * [ ] Profile the implementation to identify bottlenecks
     * [ ] Optimize pattern matching and rewriting
     * [ ] Improve memory usage of the graph representation
     * [ ] Add benchmarks to track performance
     * [ ] Ensure error reporting doesn't impact performance in release mode
 
-18. **Error Handling and User Experience Enhancement**
-    * [ ] Refine error messages based on user feedback
+19. **Error Handling and User Experience Enhancement**
+    * [~] Refine error messages based on user feedback
     * [ ] Create a hierarchy of error detail levels (terse to verbose)
     * [ ] Add interactive error exploration capabilities
     * [ ] Implement error code documentation system
     * [ ] Create comprehensive troubleshooting guide
 
-19. **Final Polish**
+20. **Final Polish**
     * [ ] Complete comprehensive test suite
     * [ ] Finalize documentation
     * [ ] Prepare for initial release
@@ -366,7 +379,7 @@ The main challenge lies in designing efficient and manageable encodings and ensu
 
 ### Phase 8: Extended Roadmap (Weeks 18-24)
 
-20. **Developer Experience Enhancement**
+21. **Developer Experience Enhancement**
     * [ ] Implement Language Server Protocol (LSP) for IDE integration
     * [ ] Create a web playground for easy experimentation without installation
     * [ ] Develop a visual debugger showing interaction net reductions graphically
@@ -382,7 +395,7 @@ The main challenge lies in designing efficient and manageable encodings and ensu
       * [ ] Export to SVG/PNG/GIF formats for documentation
       * [ ] Integration with the standalone playground and IDE plugins
 
-21. **Performance Optimizations**
+22. **Performance Optimizations**
     * [ ] Implement parallel reduction strategies leveraging Rust's concurrency
     * [ ] Add fearless parallel reduction using Rayon to exploit interaction nets' natural parallelism
     * [ ] Add compilation to efficient native code via LLVM
@@ -391,7 +404,7 @@ The main challenge lies in designing efficient and manageable encodings and ensu
     * [ ] Implement incremental computation techniques
     * [ ] Research optimal graph partitioning algorithms for distributed reduction
 
-22. **Advanced Optimization and Compilation**
+23. **Advanced Optimization and Compilation**
     * [ ] Develop a policy for minimal-reduction subnet transformations
     * [ ] Implement pattern detection for common subnet structures that can be optimized
     * [ ] Create a catalog of subnet transformation optimizations
@@ -403,14 +416,14 @@ The main challenge lies in designing efficient and manageable encodings and ensu
     * [ ] Implement benchmarking tools to measure optimization effectiveness
     * [ ] Develop optimization hints API for programmers
 
-23. **Advanced Language Features**
+24. **Advanced Language Features**
     * [ ] Add effect system for controlled side effects
     * [ ] Implement module system for better code organization
     * [ ] Develop metaprogramming capabilities (macros or reflection)
     * [ ] Create a package manager for sharing libraries
     * [ ] Add pattern matching and destructuring at the language level
 
-24. **Functional Logic Programming**
+25. **Functional Logic Programming**
     * [ ] Implement nondeterministic choice operator inspired by Verse
     * [ ] Add speculative execution with rollback mechanisms
     * [ ] Develop fallible and infallible context tracking in the type system
@@ -422,35 +435,35 @@ The main challenge lies in designing efficient and manageable encodings and ensu
     * [ ] Implement search strategies (depth-first, breadth-first, parallel)
     * [ ] Create debugging tools for visualizing search trees and narrowing steps
 
-25. **Practical Applications**
+26. **Practical Applications**
     * [ ] Develop domain-specific libraries for web/networking, graphics, databases
     * [ ] Create bindings to popular Rust libraries
     * [ ] Build standard data structure implementations optimized for interaction nets
     * [ ] Implement I/O and system interaction primitives
     * [ ] Create example real-IO applications showcasing language capabilities
 
-26. **Academic and Research Value**
+27. **Academic and Research Value**
     * [ ] Formalize type safety proofs
     * [ ] Explore new optimization techniques specific to interaction nets
     * [ ] Research compilation techniques bridging interaction nets and traditional execution models
     * [ ] Publish papers on implementation techniques and language design
     * [ ] Collaborate with academic institutions on formal verification
 
-27. **Ecosystem Growth**
+28. **Ecosystem Growth**
     * [ ] Create documentation generator from code
     * [ ] Develop testing frameworks specific to interaction calculus
     * [ ] Build a community showcase of example applications
     * [ ] Implement benchmarking suite for comparing implementations
     * [ ] Create learning resources and tutorials for various skill levels
 
-28. **Interoperability**
+29. **Interoperability**
     * [ ] Add FFI support for C/Rust libraries
     * [ ] Implement transpilation to other languages for easier adoption
     * [ ] Create bidirectional bridges with existing functional languages
     * [ ] Build compatibility layers for popular runtimes (WASM, JVM, .NET)
     * [ ] Develop protocol bindings for interprocess communication
 
-29. **Verification and Correctness**
+30. **Verification and Correctness**
     * [ ] Implement formal verification tools leveraging the graph-based semantics
     * [ ] Add contract programming features
     * [ ] Develop static analysis tools beyond the type system
@@ -461,28 +474,28 @@ The main challenge lies in designing efficient and manageable encodings and ensu
 
 *Building on the core language, this phase explores features that leverage Borf's unique foundation in interaction nets and push towards truly novel capabilities.*
 
-30. **Linear Logic Integration**
+31. **Linear Logic Integration**
     * [ ] Integrate explicit Linear/Affine types into the core type system
     * [ ] Define resource management semantics based on linear types
     * [ ] Implement compile-time checks for resource usage (memory, handles, etc.)
     * [ ] Explore connections between linear types, effects, and interaction rules
     * [ ] Develop standard library patterns utilizing linear types for safety
 
-31. **Distributed Computing (Join Calculus)**
+32. **Distributed Computing (Join Calculus)**
     * [ ] Define formal mapping between interaction net patterns and Join Calculus semantics
     * [ ] Implement network transparency mechanisms for seamless remote interactions
     * [ ] Develop location-independent agent addressing/discovery
     * [ ] Build fault tolerance strategies using interaction net patterns or rollback
     * [ ] Optimize network communication protocols for interaction nets
 
-32. **Advanced Metaprogramming & Reflection**
+33. **Advanced Metaprogramming & Reflection**
     * [ ] Implement a hygienic macro system (e.g., `macro_rules!` style)
     * [ ] Provide compile-time APIs for interaction net inspection and manipulation
     * [ ] Enable user-defined compiler optimizations via metaprogramming
     * [ ] Explore staged computation / multi-stage programming paradigms
     * [ ] Add runtime reflection capabilities (optional, carefully designed for specific use cases)
 
-33. **Sophisticated Interactive REPL**
+34. **Sophisticated Interactive REPL**
     * [ ] Integrate the visualization engine directly into the REPL for live feedback
     * [ ] Implement interactive agent/net definition and modification
     * [ ] Add step-by-step reduction control and visualization
@@ -491,7 +504,7 @@ The main challenge lies in designing efficient and manageable encodings and ensu
     * [ ] Add net state saving/loading functionality for sessions
     * [ ] Enhance code completion and introspection within the REPL
 
-34. **Graph-Based Security Model**
+35. **Graph-Based Security Model**
     * [ ] Design and implement a capability-based security model using connections as rights
     * [ ] Integrate Information Flow Control (IFC) principles into the type system
     * [ ] Develop static analysis tools to verify security policies at compile time
@@ -502,35 +515,35 @@ The main challenge lies in designing efficient and manageable encodings and ensu
 
 *This phase delves into cutting-edge type system research, pushing the boundaries of static guarantees and exploring the theoretical limits of what interaction nets can express safely.*
 
-35. **Dependent Types & Static State Machines**
+36. **Dependent Types & Static State Machines**
     * [ ] Explore integration of dependent types (e.g., Pi-types, Sigma-types) allowing types to depend on values
     * [ ] Implement type-level tracking of program states (Static State Machines)
     * [ ] Enforce state transition logic directly via the type checker
     * [ ] Develop theorem proving capabilities within the compiler (or integrate external provers)
     * [ ] Research interaction net encodings for dependent types
 
-36. **Session Types for Communication Protocols**
+37. **Session Types for Communication Protocols**
     * [ ] Design and implement session types for interaction nets to describe communication patterns
     * [ ] Provide compile-time guarantees for communication protocols (ordering, typing)
     * [ ] Prevent deadlocks and communication errors statically
     * [ ] Integrate session types with the distributed computing model (Join Calculus)
     * [ ] Explore multiparty session types for complex interactions
 
-37. **Quantitative Type Theory (QTT)**
+38. **Quantitative Type Theory (QTT)**
     * [ ] Enhance linear/affine types with full QTT (zero, one, many usage tracking)
     * [ ] Implement precise compile-time resource usage tracking and guarantees
     * [ ] Leverage QTT for advanced memory management and resource safety proofs
     * [ ] Explore QTT's implications for interaction net reduction strategies
     * [ ] Integrate QTT principles into the core type system and inference
 
-38. **Refinement Types with SMT Integration**
+39. **Refinement Types with SMT Integration**
     * [ ] Implement refinement types augmenting base types with logical predicates (e.g., `x: Int where x > 0`)
     * [ ] Integrate SMT solvers (e.g., Z3) for checking refinement predicates automatically
     * [ ] Provide static guarantees against errors like division-by-zero, out-of-bounds access
     * [ ] Develop ergonomic syntax for defining and using refinement types
     * [ ] Research efficient checking mechanisms within the interaction net context
 
-39. **Information Flow Control Types (Security)**
+40. **Information Flow Control Types (Security)**
     * [ ] Deepen the Graph-Based Security Model with explicit IFC types (e.g., `Public`, `Secret` data)
     * [ ] Track security levels associated with data throughout the net
     * [ ] Enforce non-interference policies statically via the type checker (preventing leaks)

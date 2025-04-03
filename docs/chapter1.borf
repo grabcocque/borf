@@ -59,8 +59,10 @@ These mapping types allow you to express different kinds of relationships betwee
 Laws define the properties and constraints that apply within a category. They express the mathematical rules that must be satisfied by the objects and morphisms.
 ]]
 
--- Composition law
-f $comp g === h;
+@Category: {
+  -- Composition law
+  f $comp g === h;
+}
 
 --[[
 This law states that the composition of morphisms f and g is equivalent to morphism h. In category theory, composition is a fundamental operation that combines two compatible morphisms into a new one.
@@ -68,8 +70,10 @@ This law states that the composition of morphisms f and g is equivalent to morph
 The `$comp` operator denotes function composition, where (f $comp g)(x) = g(f(x)). The `===` operator asserts that the expressions on both sides are equivalent.
 ]]
 
--- Universal quantifier with constraint
-$forall a $in A: a > 0;
+@Category: {
+  -- Universal quantifier with constraint
+  $forall a $in A: a > 0;
+}
 
 --[[
 This law uses the universal quantifier `$forall` to express that all elements `a` in set `A` satisfy the constraint that `a > 0`. Universal quantifiers allow you to express properties that must hold for all elements of a set.
@@ -80,7 +84,7 @@ Borf provides several ways to compose and apply functions, giving you flexibilit
 
 1. Pipe expressions chain operations in a left-to-right order, making the data flow explicit and readable:
 ]]
-input |> f |> g |> h
+input | >f | >g | >h
 
 --[[
 In this pipe expression, `input` is first passed to function `f`, then the result is passed to `g`, and finally the result of that is passed to `h`. This syntax emphasizes the flow of data through a series of transformations.
@@ -154,10 +158,12 @@ Borf supports several advanced pipeline features that allow you to create sophis
 
 You can extend an existing pipeline to add additional processing steps while preserving the original pipeline's structure. This promotes code reuse and allows you to build on existing pipelines.
 ]]
+--[[ NOT YET IMPLEMENTED:
 @pipeline MyExtendedPipeline<InteractionNetTransform> {
   --[[ Add post-processing steps ]]
   steps: super.steps | my_analyzer | result_formatter;
 }
+]]--
 
 --[[
 In this example, `MyExtendedPipeline` extends the `InteractionNetTransform` pipeline. It uses `super.steps` to include all the steps from the parent pipeline, and then adds two additional steps: `my_analyzer` and `result_formatter`.
@@ -168,9 +174,11 @@ The `super.steps` reference is similar to the `super` keyword in object-oriented
 
 You can compose multiple pipelines to create a new pipeline that combines their functionality. This allows you to break down complex transformation sequences into smaller, reusable pipelines.
 ]]
+--[[ NOT YET IMPLEMENTED:
 @pipeline CompositePipeline {
   steps: PreprocessPipeline | CoreTransformPipeline | OutputPipeline;
 }
+]]--
 
 --[[
 In this example, `CompositePipeline` is composed of three other pipelines: `PreprocessPipeline`, `CoreTransformPipeline`, and `OutputPipeline`. The output of `PreprocessPipeline` becomes the input to `CoreTransformPipeline`, and the output of `CoreTransformPipeline` becomes the input to `OutputPipeline`.
@@ -181,6 +189,7 @@ This composition mechanism allows you to break down complex transformation seque
 
 Borf supports conditional branching within pipelines, allowing different transformation paths to be taken based on runtime conditions. This enables more complex logic to be expressed within a pipeline.
 ]]
+--[[ NOT YET IMPLEMENTED:
 @pipeline BranchingPipeline {
   input: Source;
   output: Result;
@@ -190,6 +199,7 @@ Borf supports conditional branching within pipelines, allowing different transfo
     false_branch: identity;
   } | postprocessor;
 }
+]]--
 
 --[[
 In this example, `BranchingPipeline` includes a conditional branch that checks whether there exists an active pair (connected principal ports in an interaction net). If the condition is true, it applies the transformations `>r` and `>d` (reduction and diagram transformation); if false, it applies the `identity` transformation (which leaves the input unchanged).
@@ -203,7 +213,11 @@ Borf provides a module system that allows you to organize your code into reusabl
 Import directives allow you to use definitions from other modules:
 ]]
 
+@import "Prelude.borf";
+
+--[[ NOT YET IMPLEMENTED: Selective imports
 @import Prelude { InteractionNetTransform, FullReductionPipeline, >a, >w }
+]]--
 
 --[[
 This import directive imports specific entities (`InteractionNetTransform`, `FullReductionPipeline`, `>a`, and `>w`) from the `Prelude` module. The `Prelude` is a built-in module that provides standard categories, transformations, and pipelines for working with interaction nets.
@@ -363,12 +377,92 @@ We export the transformations `toReal` and `toComplex` and the pipeline `MathTra
 ]]
 
 -- Use our pipeline on an input
+--[[ NOT YET IMPLEMENTED: Integer literals in pipes
 5 |> toReal |> toComplex
+]]--
+IO | >toReal | >toComplex
 
 --[[
 Finally, we use our transformations on a specific input: the natural number 5. We first apply `toReal` to convert it to a real number, and then apply `toComplex` to convert it to a complex number.
 
 This example demonstrates the basic workflow of defining categories, transformations, and pipelines, and then using them to process data. It's a simple illustration of the concepts we've covered in this chapter.
+
+### Currently Supported Syntax
+
+The following example demonstrates all the syntax features that are currently supported by the Borf parser:
+]]
+
+-- Import a module
+@import "module/utils.borf";
+
+-- Define a category with objects, morphisms and laws
+@Category: {
+  -- Objects
+  Source; Intermediate; Target;
+
+  -- Morphisms with different mapping types
+  process: Source $to Intermediate;
+  analyze: Intermediate $to Target;
+  contains: Source $subseteq Target;
+  relates: Source <-> Target;
+
+  -- Composition law
+  process $comp analyze === direct;
+
+  -- Universal quantifier with constraint
+  $forall x $in Source: x > 0;
+
+  -- Existential quantifier with constraint
+  $exists y $in Target: y = 0;
+}
+
+-- Define a parameterized pipeline
+@pipeline DataProcessor<ResultType> {
+  input: Source;
+  output: ResultType;
+  steps: >process | >filter | >analyze;
+}
+
+-- Application expression
+result = >analyze(>process(data))
+
+-- Pipe expression
+transformed = data | >process | >filter | >analyze
+
+-- Composition expression
+combined = process $comp filter $comp analyze(data)
+
+-- Export directive
+@export {
+  >process; >filter; >analyze;
+  DataProcessor;
+}
+
+--[[
+This example showcases the core syntax elements that the Borf parser can currently handle:
+
+1. **Imports**: Basic file imports with `@import "path/to/file.borf";`
+
+2. **Categories**: Complete category definitions including:
+   - Objects (`Source; Intermediate; Target;`)
+   - Morphisms with various mapping types (`$to`, `$subseteq`, `<->`)
+   - Composition laws (`process $comp analyze === direct;`)
+   - Universal quantifiers with constraints (`$forall x $in Source: x > 0;`)
+   - Existential quantifiers with constraints (`$exists y $in Target: y = 0;`)
+
+3. **Pipelines**: Definition of transformation pipelines with:
+   - Type parameters (`DataProcessor<ResultType>`)
+   - Input and output type specifications
+   - Transformation steps
+
+4. **Expressions**:
+   - Application expressions (`>analyze(>process(data))`)
+   - Pipe expressions (`data | >process | >filter | >analyze`)
+   - Composition expressions (`process $comp filter $comp analyze(data)`)
+
+5. **Exports**: Export directives that make identifiers available to other modules
+
+These features provide a solid foundation for creating and manipulating categorical structures in Borf.
 
 ### Conclusion
 

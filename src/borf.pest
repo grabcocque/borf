@@ -85,13 +85,19 @@ mapping_type = { "$to" | "$subseteq" | "<->" | "*" }
 
 // --- Laws and constraints ---
 // Law declaration
-law_decl = { (composition_law | forall_law) ~ WHITESPACE* ~ COMMENT? }
+law_decl = { (composition_law | forall_law | exists_law) ~ WHITESPACE* ~ COMMENT? }
 
 composition_law = { ident ~ WHITESPACE* ~ "$comp" ~ WHITESPACE* ~ ident ~ WHITESPACE* ~ ("=" ~ "==" ~ "===" | "===") ~ WHITESPACE* ~ ident ~ ";" }
 forall_law = { forall_expr ~ ";" }
+exists_law = { exists_expr ~ ";" }
 
 forall_expr = {
     "$forall" ~ ident ~ ("," ~ ident)* ~ "$in" ~ ident ~ ("," ~ "(" ~ constraint_expr ~ ")")? ~ ":" ~
+    constraint_expr
+}
+
+exists_expr = {
+    "$exists" ~ ident ~ ("," ~ ident)* ~ "$in" ~ ident ~ ("," ~ "(" ~ constraint_expr ~ ")")? ~ ":" ~
     constraint_expr
 }
 
