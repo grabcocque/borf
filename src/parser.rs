@@ -87,6 +87,9 @@ pub fn parse_program(input: &str) -> Result<Vec<TopLevelItem>, Box<BorfError>> {
             Rule::export_statement => {
                 items.push(TopLevelItem::Export(parse_export_directive(element)?));
             }
+            Rule::import_statement => {
+                items.push(TopLevelItem::Import(parse_import_directive(element)?));
+            }
             Rule::EOI => (),
             _ => {
                 // Create a better error with source location
@@ -134,6 +137,7 @@ pub enum TopLevelItem {
     AppExpr(AppExpr),
     CompositionExpr(CompositionExpr),
     Export(ExportDirective),
+    Import(ImportDirective),
 }
 
 // Category Definition
@@ -149,6 +153,8 @@ pub enum CategoryElement {
     ObjectDecl(ObjectDecl),
     MappingDecl(MappingDecl),
     LawDecl(Law),
+    StructureMapping(StructureMapping),
+    FunctionDef(FunctionDef),
     // Comments are ignored during parsing
 }
 
@@ -298,6 +304,38 @@ pub struct ExportDirective {
     pub identifiers: Vec<String>,
 }
 
+// Import Directive
+#[derive(Debug, Clone)]
+pub struct ImportDirective {
+    pub path: String,
+}
+
+// Structure mapping declaration
+#[derive(Debug, Clone)]
+pub struct StructureMapping {
+    pub lhs: String,
+    pub rhs: ExpressionType,
+}
+
+// Add a new enum to represent different expression types
+#[derive(Debug, Clone)]
+pub enum ExpressionType {
+    Simple(String),                               // Simple identifier or literal
+    FunctionApp(String, Vec<String>),             // Function application with arguments
+    SetComprehension(String),                     // Set comprehension expressions
+    DisjointUnion(String, String),                // Disjoint union A + B
+    Match(String, Vec<(String, String, String)>), // Match expression with cases
+    Composite(String), // For complex expressions we can't fully parse yet
+}
+
+// Function definition declaration
+#[derive(Debug, Clone)]
+pub struct FunctionDef {
+    pub name: String,
+    pub params: Vec<String>,
+    pub body: String,
+}
+
 // --- Parsing Functions ---
 
 fn parse_category_def(pair: Pair<Rule>) -> Result<CategoryDef, Box<BorfError>> {
@@ -340,6 +378,12 @@ fn parse_category_def(pair: Pair<Rule>) -> Result<CategoryDef, Box<BorfError>> {
                 specific_decl,
             )?)),
             Rule::law_decl => Ok(CategoryElement::LawDecl(parse_law(specific_decl)?)),
+            Rule::structure_mapping_decl => Ok(CategoryElement::StructureMapping(
+                parse_structure_mapping(specific_decl)?,
+            )),
+            Rule::function_def_decl => Ok(CategoryElement::FunctionDef(parse_function_def(
+                specific_decl,
+            )?)),
             _ => Err(Box::new(BorfError::ParserError(format!(
                 "Unexpected rule inside category_decl: {:?}",
                 specific_decl.as_rule()
@@ -1019,6 +1063,149 @@ fn parse_export_directive(pair: Pair<Rule>) -> Result<ExportDirective, Box<BorfE
     Ok(ExportDirective { identifiers })
 }
 
+fn parse_import_directive(pair: Pair<Rule>) -> Result<ImportDirective, Box<BorfError>> {
+    let mut inner = pair.into_inner();
+    let path_pair = inner.next().unwrap();
+
+    if path_pair.as_rule() != Rule::string {
+        return Err(Box::new(BorfError::ParserError(format!(
+            "Expected string for import path, found {:?}",
+            path_pair.as_rule()
+        ))));
+    }
+
+    // Extract the string content without the quotes
+    let path_with_quotes = path_pair.as_str();
+    let path = &path_with_quotes[1..path_with_quotes.len() - 1];
+
+    Ok(ImportDirective {
+        path: path.to_string(),
+    })
+}
+
+// Improve the parse_structure_mapping function to handle complex expressions
+fn parse_structure_mapping(pair: Pair<Rule>) -> Result<StructureMapping, Box<BorfError>> {
+    let mut inner = pair.into_inner();
+
+    // Parse LHS (identifier)
+    let lhs = inner.next().unwrap().as_str().to_string();
+
+    // Parse RHS (expression)
+    let expr_pair = inner.next().unwrap();
+    let expr_pair_str = expr_pair.as_str().to_string(); // Clone the string before moving expr_pair
+
+    // Try to parse as a complex expression type
+    if expr_pair.as_rule() == Rule::expr {
+        let mut expr_inner = expr_pair.into_inner();
+        let first_term = expr_inner.next().unwrap();
+
+        if first_term.as_rule() == Rule::term {
+            // Check if it has multiple terms connected by binary ops
+            if let Some(binary_op) = expr_inner.next() {
+                // It's a complex expression with binary operations
+                if binary_op.as_str() == "+" {
+                    // It's a disjoint union
+                    let second_term = expr_inner.next().unwrap();
+                    let term1 = first_term.into_inner().next().unwrap().as_str().to_string();
+                    let term2 = second_term
+                        .into_inner()
+                        .next()
+                        .unwrap()
+                        .as_str()
+                        .to_string();
+                    return Ok(StructureMapping {
+                        lhs,
+                        rhs: ExpressionType::DisjointUnion(term1, term2),
+                    });
+                }
+            }
+
+            // Check for match expression
+            let inner_term = first_term.into_inner().next().unwrap();
+            if inner_term.as_rule() == Rule::match_expr {
+                let inner_term_str = inner_term.as_str().to_string(); // Clone before moving
+                let mut match_inner = inner_term.into_inner();
+                let match_ident = match_inner.next().unwrap().as_str().to_string();
+
+                let cases = Vec::new();
+
+                // Parse match cases
+                for pair in match_inner {
+                    if pair.as_rule() == Rule::ident {
+                        // We're in a match case, gather all parts
+                        let case_var = pair.as_str().to_string();
+                        // This would need more work as we're now using a for loop
+                        // This is just a placeholder to avoid compilation errors
+                        #[allow(unused_variables)]
+                        let _domain = "domain";
+                        #[allow(unused_variables)]
+                        let _result_expr = "result";
+
+                        // Add the case to our vector (placeholder)
+                        #[allow(unused_variables)]
+                        let _case = (case_var, _domain.to_string(), _result_expr.to_string());
+                    }
+                }
+
+                // Use the cloned string
+                let _full_expr = inner_term_str;
+
+                // Return a simple version for now
+                return Ok(StructureMapping {
+                    lhs,
+                    rhs: ExpressionType::Match(match_ident, cases),
+                });
+            }
+
+            // Just a simple term (identifier or literal)
+            if inner_term.as_rule() == Rule::ident {
+                let ident = inner_term.as_str().to_string();
+                return Ok(StructureMapping {
+                    lhs,
+                    rhs: ExpressionType::Simple(ident),
+                });
+            }
+        }
+    }
+
+    // Default handling for expressions we can't fully parse yet
+    Ok(StructureMapping {
+        lhs,
+        rhs: ExpressionType::Composite(expr_pair_str),
+    })
+}
+
+// Improve the function_def parsing to handle more complex bodies
+fn parse_function_def(pair: Pair<Rule>) -> Result<FunctionDef, Box<BorfError>> {
+    let mut inner = pair.into_inner();
+    let name = inner.next().unwrap().as_str().to_string();
+
+    let mut params = Vec::new();
+    let mut body_parts = Vec::new();
+    let mut collecting_params = true;
+
+    for param_pair in inner {
+        if param_pair.as_rule() == Rule::ident && collecting_params {
+            params.push(param_pair.as_str().to_string());
+        } else {
+            // Once we hit a non-ident rule or after we've seen "=", we're in the body
+            collecting_params = false;
+            body_parts.push(param_pair.as_str());
+        }
+    }
+
+    // Combine all body parts into a single string
+    let body = body_parts.join(" ");
+
+    if body.is_empty() {
+        return Err(Box::new(BorfError::ParserError(
+            "Function definition missing body".to_string(),
+        )));
+    }
+
+    Ok(FunctionDef { name, params, body })
+}
+
 // --- Unit Tests ---
 
 #[cfg(test)]
@@ -1287,6 +1474,8 @@ mod tests {
                             CategoryElement::ObjectDecl(_) => object_count += 1,
                             CategoryElement::MappingDecl(_) => mapping_count += 1,
                             CategoryElement::LawDecl(_) => law_count += 1,
+                            CategoryElement::StructureMapping(_) => {} // Ignore these for test counts
+                            CategoryElement::FunctionDef(_) => {} // Ignore these for test counts
                         }
                     }
 
@@ -1963,6 +2152,19 @@ mod tests {
         println!("Confirmed that parsing docs/chapter1.borf fails as expected due to unimplemented features.");
         if let Err(e) = result {
             println!("Parsing failed with error: {:?}", e);
+        }
+    }
+
+    #[test]
+    fn test_parse_import_directive() {
+        let input = r#"@import "module/path.borf";"#;
+        let parsed = parse_test_input(input).unwrap();
+        assert_eq!(parsed.len(), 1);
+
+        if let TopLevelItem::Import(import) = &parsed[0] {
+            assert_eq!(import.path, "module/path.borf");
+        } else {
+            panic!("Expected Import, got {:?}", parsed[0]);
         }
     }
 }

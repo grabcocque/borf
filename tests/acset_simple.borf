@@ -1,0 +1,13 @@
+@ACSetTest<Category>: {
+  N;E;                --[[ N: set of nodes, E: set of edges ]]
+  s:E $to N; t:E $to N; --[[ s: source map, t: target map ]]
+  lN:N $to X; lE:E $to X; --[[ lN: node decoration, lE: edge decoration, X: attribute type ]]
+  id:N $to E;         --[[ id: identity edge for each node ]]
+  comp:E * E $to E;  --[[ comp: edge composition ]]
+
+  --[[ Category structure mapping ]]
+  O = N;              --[[ Objects are nodes ]]
+  M = E;              --[[ Morphisms are edges ]]
+  dom = s;            --[[ Domain is source ]]
+  cod = t;            --[[ Codomain is target ]]
+}

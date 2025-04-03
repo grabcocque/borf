@@ -1,0 +1,9 @@
+@Category: {
+  O;M;                --[[ O: set of objects, M: set of morphisms ]]
+  dom:M $to O; cod:M $to O; --[[ dom: domain map, cod: codomain map ]]
+  id:O $to M;         --[[ id: identity morphism map ]]
+  comp:M * M $to M;  --[[ comp: composition operation ]]
+
+  --[[ Laws for categories ]]
+  comp $comp id === id;  --[[ Law: identity acts as unit for composition ]]
+}

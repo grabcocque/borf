@@ -1,0 +1,16 @@
+@WireDgm<ACSet>: {
+  B;P;                --[[ B: set of boxes, P: set of ports ]]
+  b:P $to B;           --[[ b: assigns each port to its parent box ]]
+  w:P<->P;            --[[ w: wiring relation, connects ports (symmetric) ]]
+  tP:P $to X; tB:B $to X; --[[ tP: port types, tB: box types ]]
+
+  --[[ ACSet structure mapping ]]
+  N = B + P;          --[[ Nodes are boxes and ports (disjoint union) ]]
+  E = {(p,q) | w(p)=q}; --[[ Edges are the wiring connections ]]
+  s((p,q)) = p;       --[[ Source is first port in the wiring ]]
+  t((p,q)) = q;       --[[ Target is second port in the wiring ]]
+  lN(x) = match x with --[[ Node decoration depends on node type ]]
+    | b $in B -> tB(b)
+    | p $in P -> tP(p);
+  lE((p,q)) = (tP(p), tP(q)); --[[ Edge decoration is pair of port types ]]
+}

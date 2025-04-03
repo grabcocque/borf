@@ -1,0 +1,12 @@
+@WireDgm<ACSet>: {
+  B;P;                --[[ B: set of boxes, P: set of ports ]]
+  b:P $to B;           --[[ b: assigns each port to its parent box ]]
+  w:P<->P;            --[[ w: wiring relation, connects ports (symmetric) ]]
+  tP:P $to X; tB:B $to X; --[[ tP: port types, tB: box types ]]
+
+  --[[ ACSet structure mapping ]]
+  N = B + P;          --[[ Nodes are boxes and ports (disjoint union) ]]
+  E = {p};        --[[ Simplified representation of edges ]]
+  s = t;             --[[ Source maps to target as a simplification ]]
+  t = s;             --[[ Target maps to source as a simplification ]]
+}

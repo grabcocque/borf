@@ -1,13 +1,14 @@
 // borf.pest - Grammar for the Borf language
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 // Support for Lua-style comments and traditional C-style comments
-COMMENT = _{ "--[[" ~ (!"]" ~ ANY)* ~ "]]" | "--" ~ (!"\n" ~ ANY)* ~ "\n"? | "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+COMMENT = _{ "--[[" ~ (!"]" ~ ANY)* ~ "]]" | "--" ~ (!"\n" ~ ANY)* ~ "\n"? | "/*" ~ (!"*/" ~ ANY)* ~ "*/" | "//" ~ (!"\n" ~ ANY)* ~ "\n"? }
 
 // --- Program Structure ---
 program = { SOI ~ statement* ~ EOI }
 
 // Top-level statements (silent)
 statement = _{
+    import_statement |
     category_statement |
     pipeline_statement |
     export_statement |
@@ -15,6 +16,9 @@ statement = _{
     app_statement |
     composition_statement
 }
+
+// Import statement
+import_statement = { "@import" ~ string ~ ";" }
 
 // Identifiers
 ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
@@ -31,19 +35,50 @@ set_literal = { "{" ~ (int | ident) ~ ("," ~ (int | ident))* ~ "}" }
 // Set comprehension
 set_comprehension = { "{" ~ ident ~ "$in" ~ ident ~ ("," ~ ident ~ "$in" ~ ident)* ~ ("|" ~ constraint_expr)? ~ "}" }
 
+// Complex set expression with a pipe
+complex_set_expr = { "{" ~ expr ~ ("|" ~ constraint_expr)? ~ "}" }
+
 // --- Category Definitions ---
 category_statement = { "@" ~ ident ~ ("<" ~ ident ~ ">")? ~ ":" ~ "{" ~ (WHITESPACE* ~ category_decl)* ~ "}" }
 
-category_decl = { WHITESPACE* ~ (object_decl | mapping_decl | law_decl) }
+category_decl = { WHITESPACE* ~ (object_decl | mapping_decl | law_decl | structure_mapping_decl | function_def_decl) }
 
 object_decl = { ident ~ ";" ~ WHITESPACE* ~ COMMENT? }
-mapping_decl = { ident ~ WHITESPACE* ~ ":" ~ WHITESPACE* ~ domain_expr ~ WHITESPACE* ~ mapping_type ~ WHITESPACE* ~ ident ~ ";" ~ WHITESPACE* ~ COMMENT? }
+mapping_decl = { ident ~ WHITESPACE* ~ ":" ~ WHITESPACE* ~ domain_expr ~ WHITESPACE* ~ mapping_type ~ WHITESPACE* ~ (ident | set_literal) ~ ";" ~ WHITESPACE* ~ COMMENT? }
 
-// New rule for domain expressions
-domain_expr = {
+// Structure mapping declaration
+structure_mapping_decl = { ident ~ WHITESPACE* ~ "=" ~ WHITESPACE* ~ expr ~ ";" ~ WHITESPACE* ~ COMMENT? }
+
+// Function definition declaration
+function_def_decl = { ident ~ "(" ~ ident ~ ("," ~ ident)* ~ ")" ~ WHITESPACE* ~ "=" ~ WHITESPACE* ~ expr ~ ";" ~ WHITESPACE* ~ COMMENT? }
+
+// Expression rule (fixed to avoid left-recursion)
+expr = {
+    term ~ (binary_op ~ term)*
+}
+
+term = {
     ident |
-    "(" ~ ident ~ WHITESPACE* ~ "*" ~ WHITESPACE* ~ ident ~ ")" |  // Parenthesized product
-    ident ~ WHITESPACE* ~ "*" ~ WHITESPACE* ~ ident                // Direct product
+    int |
+    set_literal |                              // set literal
+    ident ~ "(" ~ ident ~ ")" |                // function application
+    complex_set_expr |                         // set comprehension with expressions
+    match_expr                                 // match expression
+}
+
+// Match expression for pattern matching
+match_expr = { "match" ~ ident ~ "with" ~ ("|" ~ ident ~ "$in" ~ ident ~ "->" ~ expr)+ }
+
+binary_op = _{
+    "+" |                                      // disjoint union
+    "=" |                                      // equality
+    "$and"                                     // logical and
+}
+
+// New rule for domain expressions - simplified to be more robust
+domain_expr = {
+    (ident ~ WHITESPACE* ~ "*" ~ WHITESPACE* ~ ident) |  // M * M format
+    ident                                              // Single identifier
 }
 
 mapping_type = { "$to" | "$subseteq" | "<->" | "*" }

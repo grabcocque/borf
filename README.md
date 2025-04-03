@@ -5,18 +5,17 @@ This project aims to implement a gradually typed language based on the interacti
 ## Current State (April 2024)
 
 *   **Parser:** A functional parser for the proposed Borf syntax has been implemented using Pest.
-    *   Supports ACSet definitions (`@ACSet { ... }`).
-    *   Supports Wire Diagram definitions (`@WireDgm<Base> { ... }`).
-    *   Supports Interaction Net definitions (`@INet<Base> { ... }`).
-    *   Parses basic object declarations (`N; E;`) and mapping declarations (`s:E.to N;`, `p:P.to{0,1};`).
-    *   Parses basic law declarations (`w.comp w.equiv id;`, `.forall b.in B: ...;`).
+    *   Supports category definitions (`@Category: { ... }`).
+    *   Supports pipeline definitions (`@pipeline Name<Base> { ... }`).
+    *   Parses basic object declarations (`N; E;`) and mapping declarations (`f: A $to B;`, `p: M * M $to M;`).
+    *   Parses basic law declarations (`f $comp g === h;`, `$forall m $in M: f(m) = g(m);`).
     *   Parses processing expressions:
-        *   Pipe-like: `IO |> a |> w`
+        *   Pipe-like: `IO | >a | >w`
         *   Function application: `>i(>w(>a(IO)))`
-        *   Composition: `T = t.comp d.comp a(W)`
-    *   Handles comments starting with `#` or `;;`.
+        *   Composition: `T = f $comp g $comp h(W)`
+    *   Handles comments in Lua style (`--` for single line, `--[[...]]` for blocks) and C-style (`//` for single line, `/*...*/` for blocks).
     *   Includes a suite of unit tests (`src/parser.rs`) verifying the parser logic.
-*   **AST:** Data structures representing the parsed elements (ACSetDef, WireDgmDef, INetDef, expressions, etc.) are defined in `src/parser.rs`.
+*   **AST:** Data structures representing the parsed elements (CategoryDef, PipelineDef, expressions, etc.) are defined in `src/parser.rs`.
 *   **Basic Runner:** A simple binary (`src/main.rs`) exists that can take a filename as an argument, read the file, parse it using the implemented parser, and print a summary of the parsed definitions or any parsing errors encountered.
 *   **Error Handling:** Basic error handling using `thiserror` and `miette` is set up (`src/error.rs`), providing structured error types for parser issues. Diagnostic output is basic.
 *   **Testing:** Unit tests for the parser are passing. Basic example files (`examples/minimal/`, `examples/simplified_acset.borf`) are used for testing and demonstration.
@@ -28,12 +27,28 @@ This project aims to implement a gradually typed language based on the interacti
     *   Handle more complex `mapping_decl` targets (e.g., `B*B`).
     *   Improve error reporting with more specific `miette` diagnostics.
     *   **Parse features needed for `docs/chapter1.borf`:**
-        *   Parse `@import` statements.
+        *   ✅ Parse `@import` statements.
         *   Parse pipeline extension syntax (`@pipeline Name<Base> { ... }`).
         *   Parse pipeline composition syntax (`steps: PipelineA | PipelineB;`).
         *   Parse conditional branching within pipelines (`branch { ... }`).
         *   Allow integer/other literals at the start of `pipe_statement` expressions (e.g., `5 |> ...`).
         *   Allow top-level assignments (e.g., `net = >i(...)`).
+    *   **Import System Implementation:**
+        *   Develop a file resolver to locate and load imported files.
+        *   Add support for both relative and absolute paths.
+        *   Implement circular import detection.
+        *   Create a module dependency graph.
+        *   Cache imported modules to avoid redundant parsing.
+    *   **Module System Design:**
+        *   Define how imported items are scoped and accessed.
+        *   Implement namespace management for imported items.
+        *   Support selective imports/exports with more flexible syntax.
+        *   Add error handling for missing or invalid imports.
+    *   **Import-Related Testing:**
+        *   Add integration tests with real file imports.
+        *   Create tests for edge cases (circular imports, missing files).
+        *   Test nested imports (modules importing other modules).
+        *   Benchmark performance with many imports.
 2.  **Semantic Analysis:**
     *   Build a semantic analysis phase to check for correctness beyond syntax (e.g., undefined identifiers, type consistency based on definitions).
     *   Implement the gradual type system logic (type checking, inference).
@@ -142,7 +157,7 @@ The **easiest way** to achieve this is through **encoding and syntax sugar**:
     *   **Control Flow:**
         *   **Conditionals (`if/then/else`):** As described for booleans.
         *   **Recursion/Loops:** Interaction nets handle sharing and cycles naturally using duplicator (\(\delta\)) agents. Recursive functions can often be encoded by creating cycles or using duplicators to copy the function body net and connect it appropriately.
-    *   **Functions/Abstractions:** Represent a function as a net with a designated input (principal port) and output (an auxiliary port). Applying the function means connecting the input net to the function net's principal port. Lambda calculus abstractions can be encoded, often using specific interaction patterns.
+        *   **Functions/Abstractions:** Represent a function as a net with a designated input (principal port) and output (an auxiliary port). Applying the function means connecting the input net to the function net's principal port. Lambda calculus abstractions can be encoded, often using specific interaction patterns.
 
 2.  **Define Interaction Rules for Encoded Structures:** Ensure that the standard interaction rules, when applied to these encoded structures, perform the desired high-level operation (e.g., adding encoded numbers, branching based on encoded booleans).
 

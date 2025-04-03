@@ -1,0 +1,10 @@
+@Test: {
+  A;B;
+  f:A $to B;
+  g:B $to A;
+
+  --[[ Structure mappings ]]
+  X = A;
+  Y = B;
+  h = f;
+}

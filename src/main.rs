@@ -135,6 +135,29 @@ fn load_and_parse_prelude() -> Result<Vec<TopLevelItem>, String> {
     }
 }
 
+fn test_specific_rule(rule_name: &str, input: &str) -> bool {
+    println!("Testing specific rule: {}", rule_name);
+    println!("Input: {}", input);
+
+    // Map the rule name to the actual Rule enum variant
+    let rule = match rule_name {
+        "object_decl" => Rule::object_decl,
+        "mapping_decl" => Rule::mapping_decl,
+        "domain_expr" => Rule::domain_expr,
+        "category_statement" => Rule::category_statement,
+        "structure_mapping_decl" => Rule::structure_mapping_decl,
+        "function_def_decl" => Rule::function_def_decl,
+        // Add more rules as needed
+        _ => {
+            println!("Unknown rule: {}", rule_name);
+            return false;
+        }
+    };
+
+    // Test the rule directly
+    test_direct_parse(input, rule)
+}
+
 fn main() {
     println!("Hello from Borf binary!");
 
@@ -156,48 +179,79 @@ fn main() {
         }
     };
 
-    // --- Process Command Line Argument File ---
+    // --- Process Command Line Arguments ---
     let args: Vec<String> = env::args().collect();
     if args.len() > 1 {
-        let file_path = &args[1];
-        println!("\nProcessing user file: {}", file_path);
+        // Check for special rule testing command
+        if args[1] == "rule" && args.len() >= 4 {
+            let rule_name = &args[2];
+            let file_path = &args[3];
 
-        match fs::read_to_string(file_path) {
-            Ok(input) => {
-                // Set the file as the current source for error reporting
-                set_current_source(file_path, input.clone());
+            match fs::read_to_string(file_path) {
+                Ok(input) => {
+                    // Set the file as the current source for error reporting
+                    set_current_source(file_path, input.clone());
 
-                match parser::parse_program(&input) {
-                    Ok(user_items) => {
-                        println!("Successfully parsed {} user item(s)!", user_items.len());
-                        for (i, item) in user_items.iter().enumerate() {
-                            match item {
-                                TopLevelItem::Category(_) => {
-                                    println!("  {}. Category definition", i + 1)
-                                }
-                                TopLevelItem::PipeExpr(_) => {
-                                    println!("  {}. Pipe expression", i + 1)
-                                }
-                                TopLevelItem::AppExpr(_) => {
-                                    println!("  {}. Application expression", i + 1)
-                                }
-                                TopLevelItem::CompositionExpr(_) => {
-                                    println!("  {}. Composition expression", i + 1)
-                                }
-                                TopLevelItem::Pipeline(_) => {
-                                    println!("  {}. Pipeline definition", i + 1)
-                                }
-                                TopLevelItem::Export(_) => {
-                                    println!("  {}. Export directive", i + 1)
+                    // Test the specific rule
+                    if test_specific_rule(rule_name, &input) {
+                        println!("Rule test succeeded for {}: '{}'", rule_name, file_path);
+                    } else {
+                        println!("Rule test failed for {}: '{}'", rule_name, file_path);
+                    }
+                }
+                Err(e) => println!("Error reading file {}: {}", file_path, e),
+            }
+        } else if args[1] == "test" {
+            // Just run the tests we already have
+        } else {
+            // Original file processing code...
+            let file_path = &args[1];
+            println!("\nProcessing user file: {}", file_path);
+
+            match fs::read_to_string(file_path) {
+                Ok(input) => {
+                    // Set the file as the current source for error reporting
+                    set_current_source(file_path, input.clone());
+
+                    match parser::parse_program(&input) {
+                        Ok(user_items) => {
+                            println!("Successfully parsed {} user item(s)!", user_items.len());
+                            for (i, item) in user_items.iter().enumerate() {
+                                match item {
+                                    TopLevelItem::Category(_) => {
+                                        println!("  {}. Category definition", i + 1)
+                                    }
+                                    TopLevelItem::PipeExpr(_) => {
+                                        println!("  {}. Pipe expression", i + 1)
+                                    }
+                                    TopLevelItem::AppExpr(_) => {
+                                        println!("  {}. Application expression", i + 1)
+                                    }
+                                    TopLevelItem::CompositionExpr(_) => {
+                                        println!("  {}. Composition expression", i + 1)
+                                    }
+                                    TopLevelItem::Pipeline(_) => {
+                                        println!("  {}. Pipeline definition", i + 1)
+                                    }
+                                    TopLevelItem::Export(_) => {
+                                        println!("  {}. Export directive", i + 1)
+                                    }
+                                    TopLevelItem::Import(import) => {
+                                        println!(
+                                            "  {}. Import directive: \"{}\"",
+                                            i + 1,
+                                            import.path
+                                        )
+                                    }
                                 }
                             }
+                            // TODO: Combine user_items with prelude_definitions for further processing
                         }
-                        // TODO: Combine user_items with prelude_definitions for further processing
+                        Err(e) => println!("Parse error in {}: {}", file_path, format_error(*e)),
                     }
-                    Err(e) => println!("Parse error in {}: {}", file_path, format_error(*e)),
                 }
+                Err(e) => println!("Error reading file {}: {}", file_path, e),
             }
-            Err(e) => println!("Error reading file {}: {}", file_path, e),
         }
     } else if prelude_definitions.is_some() {
         println!("\nPrelude loaded successfully. No user file provided.");

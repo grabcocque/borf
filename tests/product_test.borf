@@ -1,0 +1,3 @@
+@Test: {
+  comp:M * M $to M;
+}
