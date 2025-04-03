@@ -20,535 +20,387 @@ This project aims to implement a gradually typed language based on the interacti
 *   **Error Handling:** Basic error handling using `thiserror` and `miette` is set up (`src/error.rs`), providing structured error types for parser issues. Diagnostic output is basic.
 *   **Testing:** Unit tests for the parser are passing. Basic example files (`examples/minimal/`, `examples/simplified_acset.borf`) are used for testing and demonstration.
 
-## Next Steps
-
-1.  **Refine Grammar and Parser:**
-    *   Implement parsing for the full constraint language within `forall` laws.
-    *   Handle more complex `mapping_decl` targets (e.g., `B*B`).
-    *   Improve error reporting with more specific `miette` diagnostics.
-    *   **Parse features needed for `docs/chapter1.borf`:**
-        *   ✅ Parse `@import` statements.
-        *   Parse pipeline extension syntax (`@pipeline Name<Base> { ... }`).
-        *   Parse pipeline composition syntax (`steps: PipelineA | PipelineB;`).
-        *   Parse conditional branching within pipelines (`branch { ... }`).
-        *   Allow integer/other literals at the start of `pipe_statement` expressions (e.g., `5 |> ...`).
-        *   Allow top-level assignments (e.g., `net = >i(...)`).
-    *   **Import System Implementation:**
-        *   Develop a file resolver to locate and load imported files.
-        *   Add support for both relative and absolute paths.
-        *   Implement circular import detection.
-        *   Create a module dependency graph.
-        *   Cache imported modules to avoid redundant parsing.
-    *   **Module System Design:**
-        *   Define how imported items are scoped and accessed.
-        *   Implement namespace management for imported items.
-        *   Support selective imports/exports with more flexible syntax.
-        *   Add error handling for missing or invalid imports.
-    *   **Import-Related Testing:**
-        *   Add integration tests with real file imports.
-        *   Create tests for edge cases (circular imports, missing files).
-        *   Test nested imports (modules importing other modules).
-        *   Benchmark performance with many imports.
-2.  **Semantic Analysis:**
-    *   Build a semantic analysis phase to check for correctness beyond syntax (e.g., undefined identifiers, type consistency based on definitions).
-    *   Implement the gradual type system logic (type checking, inference).
-3.  **ACSet Representation:**
-    *   Develop the runtime representation based on ACSets (likely using a separate library or module).
-    *   Implement functions to convert the parsed AST (`BorfDefinition` structs) into this ACSet representation.
-4.  **Evaluation/Reduction Engine:**
-    *   Implement the interaction calculus reduction rules based on the ACSet representation.
-5.  **Fuzzing:** Enhance fuzzing targets to cover more complex inputs and edge cases.
-
-## Getting Started
-
-### Prerequisites
-
-*   Rust programming language and Cargo: [https://www.rust-lang.org/tools/install](https://www.rust-lang.org/tools/install)
-
-### Building
-
-```bash
-cargo build
-```
-
-### Running Tests
-
-```bash
-cargo test
-```
-
-### Running the Parser on an Example File
-
-```bash
-cargo run -- examples/simplified_acset.borf
-```
-
-This will parse the file and output the types of definitions found or any parsing errors.
-
-## Project Structure
-
-*   `src/`: Source code
-    *   `main.rs`: Binary entry point, handles file reading and calls the parser.
-    *   `lib.rs`: Library entry point.
-    *   `parser.rs`: Contains the Pest parser logic, AST struct definitions, and parsing functions.
-    *   `borf.pest`: The Pest grammar file defining the language syntax.
-    *   `error.rs`: Defines custom error types using `thiserror` and `miette`.
-    *   `evaluator.rs`: (Placeholder) Intended for the runtime evaluation/reduction engine.
-    *   `runtime.rs`: (Placeholder) Potentially for runtime data structures.
-    *   `semantics.rs`: (Placeholder) Intended for semantic analysis and type checking.
-*   `examples/`: Example `.borf` files.
-    *   `acset_interaction_net.borf`: Original complex example (currently doesn't fully parse).
-    *   `simplified_acset.borf`: A version of the above that parses successfully with the current implementation.
-    *   `minimal/`: Small files testing specific syntax rules.
-*   `Cargo.toml`: Project manifest and dependencies.
-*   `README.md`: This file.
-*   `.pre-commit-config.yaml`, `.gitignore`, `.markdownlint.json`: Code quality and git configuration.
-
-# Typed Interaction Calculus Implementation Roadmap
-
-## Project Overview
-
-Alright, let's break down the Interaction Calculus and the most straightforward path to making it a general-purpose language!
-
-## What is the Interaction Calculus?
-
-The **Interaction Calculus (IC)**, developed by Yves Lafont, is a model of computation based on **interaction nets**. Think of it as a graphical way to represent computation, focusing on *local interactions* between simple components called **agents**.
-
-Here are the key concepts:
-
-1.  **Agents:** These are the fundamental building blocks. Each agent has a specific type (like Eraser, Duplicator, Constructor) and a set of **ports**.
-    *   **Principal Port:** Each agent has exactly *one* special port called the principal port (often drawn at the top or marked distinctly). This is where interactions *happen*.
-    *   **Auxiliary Ports:** An agent can have zero or more auxiliary ports. These are used for connecting to other agents but are not the primary site of interaction.
-
-2.  **Nets:** An interaction net is a graph where:
-    *   Nodes are **agents**.
-    *   Edges represent **connections** between ports.
-    *   Crucially, exactly two ports are connected by any edge. Ports are either connected to another port or are "free" (representing inputs/outputs of the net).
-
-3.  **Interaction Rules:** Computation proceeds by applying interaction rules. A rule is defined for pairs of agent types.
-    *   **Active Pair (Redex):** When two agents are connected via their **principal ports**, they form an *active pair* or *redex* (reducible expression). This is the only situation where a computation step can occur.
-    *   **Reduction:** Applying an interaction rule involves:
-        1.  **Annihilation:** The two interacting agents in the active pair are destroyed.
-        2.  **Rewiring:** The auxiliary ports of the destroyed agents are reconnected according to the specific rule for that pair. The rule defines a new small net (potentially empty) that replaces the interacting pair and connects to the "dangling" wires left by their auxiliary ports.
-
-4.  **Standard Agents (Lafont Style):**
-    *   **Eraser (\(\epsilon\)):** Has one principal port. When it interacts with another agent \(A\), both are destroyed, and any auxiliary ports of \(A\) are left unconnected (effectively erasing the connected sub-net).
-    *   **Duplicator (\(\delta\)):** Has one principal port and two auxiliary ports. When it interacts with another agent \(A\), they are destroyed. The principal port of \(A\) is effectively duplicated – two copies of the agent \(A\) are created (or rather, the net connected to \(A\)'s principal port gets duplicated and connected to the two auxiliary ports of the original \(\delta\)). This is subtle and relies on the specific rules. A more common view is that \(\delta\) interacts with another \(\delta\), producing two \(\delta\) agents connected in a specific way, and other interactions handle the propagation of duplication.
-    *   **Constructors/Destructors:** Often used in pairs (e.g., `Cons`/`Nil` for lists) to build and deconstruct data structures.
-
-**Key Properties:**
-
-*   **Locality:** Interaction rules only depend on the two agents involved.
-*   **Concurrency:** Multiple active pairs can be reduced simultaneously without interference (if they don't share agents/connections).
-*   **No Global State:** Computation is entirely local graph rewriting.
-*   **Turing Complete:** Interaction nets are powerful enough to simulate any Turing machine.
-
-## Easiest Way to Extend IC into a General-Purpose Language
-
-The Interaction Calculus is minimal and low-level. To make it a general-purpose language (GPL) that's practical to write programs in, you need higher-level abstractions like data types, control flow, functions, etc.
-
-The **easiest way** to achieve this is through **encoding and syntax sugar**:
-
-1.  **Encoding High-Level Constructs:** Represent standard programming concepts using specific patterns of interaction net agents and connections.
-    *   **Data Types:**
-        *   **Booleans:** Define `True` and `False` agents. An `If` agent could interact with a boolean agent via principal ports, connecting one of its two auxiliary ports (representing the `then` and `else` branches) based on the boolean value.
-        *   **Numbers:** Use encodings like Scott or Church numerals. For example, the number \(n\) could be a chain of \(n\) "Successor" agents ending in a "Zero" agent. Arithmetic operations become complex interaction rules or specific net configurations that manipulate these chains.
-        *   **Data Structures (Lists, Trees):** Use constructor agents (like `Cons`, `Node`) and a terminator (like `Nil`). A list `[1, 2]` would be encoded as `Cons(1, Cons(2, Nil))`, where `1`, `2`, `Cons`, and `Nil` are specific agent configurations.
-    *   **Control Flow:**
-        *   **Conditionals (`if/then/else`):** As described for booleans.
-        *   **Recursion/Loops:** Interaction nets handle sharing and cycles naturally using duplicator (\(\delta\)) agents. Recursive functions can often be encoded by creating cycles or using duplicators to copy the function body net and connect it appropriately.
-        *   **Functions/Abstractions:** Represent a function as a net with a designated input (principal port) and output (an auxiliary port). Applying the function means connecting the input net to the function net's principal port. Lambda calculus abstractions can be encoded, often using specific interaction patterns.
-
-2.  **Define Interaction Rules for Encoded Structures:** Ensure that the standard interaction rules, when applied to these encoded structures, perform the desired high-level operation (e.g., adding encoded numbers, branching based on encoded booleans).
-
-3.  **Add Syntax Sugar (The Parser's Job!):** Create a user-friendly surface syntax (like the one you're designing with Pest). This syntax doesn't change the underlying interaction calculus; it just provides a convenient way to *write* programs.
-    *   The parser translates this high-level syntax (`let x = 5; if y { ... } else { ... }`) into the corresponding low-level interaction net encodings (specific graphs of \(\delta\), \(\epsilon\), constructors, etc.).
-    *   Your gradual typing system fits in here, annotating the agents and connections derived from the high-level code.
-
-4.  **Handle I/O (Pragmatic Extension):** Pure interaction nets don't have built-in I/O. The easiest way is to introduce special "magic" agents (e.g., `ReadConsole`, `WriteConsole`) that interact with the outside IO. These agents break the pure model slightly but are necessary for practical programming. Their interaction rules would trigger system calls or other side effects.
-
-**Why is this the "easiest" way?**
-
-*   It leverages the existing, well-understood foundation of the Interaction Calculus.
-*   It avoids inventing entirely new computational primitives.
-*   It relies on the known Turing completeness, guaranteeing that such encodings are possible.
-*   The complexity is managed by the compiler/parser, which translates familiar syntax into potentially complex net structures.
-
-The main challenge lies in designing efficient and manageable encodings and ensuring the interaction rules correctly implement the desired high-level semantics. Your plan to use Pest for parsing and Rust-native Catlab.jl-style ACSets for representation fits perfectly with this encoding-based approach.
-
-## Core Features
-
-* Parser for interaction calculus syntax using Pest with robust error handling via miette
-* Gradually typed system with set-theoretic types and `Dyn` fallback
-* Local type inference between agents connected via principal ports
-* Rust-native Catlab.jl-style ACSets-based graph representation of interaction nets
-* Reduction engine implementing Lafont's interaction calculus semantics
-* Standard interaction combinators implementation
-* Comprehensive fuzzing and property-based testing
-
 ## Development Roadmap
+
+*This roadmap details the planned development phases. Checkmarks indicate the current implementation status.*
 
 ### Phase 1: Project Setup and Robust Foundation (Weeks 1-2)
 
-1. **Initial Project Configuration**
-   * [x] Create a new Rust project with Cargo
-   * [x] Set up the directory structure
-   * [x] Add core dependencies:
-     * [x] `pest` and `pest_derive` for parsing
-     * [x] `thiserror` for ergonomic error handling
-     * [x] `miette` for rich diagnostic reporting
-     * [x] `libfuzzer-sys` and `arbitrary` for fuzzing
-   * [x] Configure test environment (unit tests, integration tests)
-   * [~] Set up fuzzing infrastructure with cargo-fuzz
-   * [ ] Create CI/CD pipeline that includes fuzzing runs
+1.  **Initial Project Configuration**
+    *   [x] Create a new Rust project with Cargo
+    *   [x] Set up the directory structure
+    *   [x] Add core dependencies:
+        *   [x] `pest` and `pest_derive` for parsing
+        *   [x] `thiserror` for ergonomic error handling
+        *   [x] `miette` for rich diagnostic reporting
+        *   [x] `libfuzzer-sys` and `arbitrary` for fuzzing
+    *   [x] Configure test environment (unit tests, integration tests)
+    *   [~] Set up fuzzing infrastructure with cargo-fuzz
+    *   [ ] Create CI/CD pipeline that includes fuzzing runs
 
-2. **Error Handling Infrastructure**
-   * [x] Design the error hierarchy using `thiserror`
-     * [x] Parser errors (syntax, unexpected tokens) - *Basic placeholders exist*
-     * [~] Semantic errors (type mismatches, undefined symbols) - *Basic placeholders exist*
-     * [~] Runtime errors (execution failures) - *Basic placeholders exist*
-   * [x] Set up `miette` for rich diagnostic output
-     * [x] Configure source code snippets in error messages - *Basic setup in `BorfError`*
-     * [ ] Add syntax highlighting for error locations
-     * [x] Include helpful suggestions for common mistakes
+2.  **Error Handling Infrastructure**
+    *   [x] Design the error hierarchy using `thiserror`
+        *   [x] Parser errors (syntax, unexpected tokens) - *Basic placeholders exist*
+        *   [~] Semantic errors (type mismatches, undefined symbols) - *Basic placeholders exist*
+        *   [~] Runtime errors (execution failures) - *Basic placeholders exist*
+    *   [x] Set up `miette` for rich diagnostic output
+        *   [x] Configure source code snippets in error messages - *Basic setup in `BorfError`*
+        *   [ ] Add syntax highlighting for error locations
+        *   [x] Include helpful suggestions for common mistakes
 
-3. **Define the Core Data Structures**
-   * [~] Implement the basic Rust-native Catlab.jl-style ACSets-inspired graph representation
-     * [ ] `InteractionNet` struct and associated data types
-     * [ ] Agent and port representations
-     * [ ] Connection representation
-   * [~] Implement the type system core
-     * [ ] Define `Type` enum with variants for all type constructs
-     * [ ] Create `TypeContext` for tracking type annotations and inferences
-   * [~] Implement `Arbitrary` trait for all core data structures to support fuzzing
+3.  **Define the Core Data Structures**
+    *   [~] Implement the basic Rust-native Catlab.jl-style ACSets-inspired graph representation
+        *   [ ] `InteractionNet` struct and associated data types
+        *   [ ] Agent and port representations
+        *   [ ] Connection representation
+    *   [~] Implement the type system core
+        *   [ ] Define `Type` enum with variants for all type constructs
+        *   [ ] Create `TypeContext` for tracking type annotations and inferences
+    *   [~] Implement `Arbitrary` trait for all core data structures to support fuzzing
 
 ### Phase 2: Parser Development with Robust Error Handling (Weeks 3-5)
 
-4. **Create the Pest Grammar**
-   * [x] Define the grammar for the interaction calculus
-     * [x] Agent definitions
-     * [x] Net structure
-     * [~] Connection syntax
-     * [x] Type annotations
-     * [ ] Reduction rules
-   * [x] Test the grammar with sample inputs
-   * [ ] Add detailed error labels and hints in the Pest grammar
-   * [~] Create fuzz targets for the grammar to discover edge cases - *One general parser target exists*
+4.  **Create the Pest Grammar**
+    *   [x] Define the grammar for the interaction calculus
+        *   [x] Agent definitions
+        *   [x] Net structure (including basic pipe, application, composition)
+        *   [~] Connection syntax
+        *   [x] Type annotations
+        *   [ ] Reduction rules
+        *   [ ] Constraint language within `forall` laws
+        *   [ ] More complex `mapping_decl` targets (e.g., `B*B`)
+        *   [ ] Pipeline extension syntax (`@pipeline Name<Base> { ... }`)
+        *   [ ] Pipeline composition syntax (`steps: PipelineA | PipelineB;`)
+        *   [ ] Conditional branching within pipelines (`branch { ... }`)
+        *   [ ] Leading literals in pipe statements (e.g., `5 |> ...`)
+        *   [ ] Top-level assignments (e.g., `net = >i(...)`)
+    *   [x] Test the grammar with sample inputs
+    *   [ ] Add detailed error labels and hints in the Pest grammar
+    *   [~] Create fuzz targets for the grammar to discover edge cases - *One general parser target exists*
 
-5. **Build the AST Processor with Rich Diagnostics**
-   * [x] Implement functions to traverse the Pest parse tree - *Placeholder in `parser.rs`*
-   * [x] Convert parse tree nodes to internal data structures - *TODO in `parser.rs`*
-   * [x] Integrate miette for detailed error reporting: - *Basic setup via `BorfError`*
-     * [x] Source spans for precise error locations
-     * [x] Contextual help messages
-     * [x] Visual error indicators in terminal output
-   * [ ] Implement recovery strategies for common syntax errors
-   * [x] Test with increasingly complex examples
+5.  **Build the AST Processor with Rich Diagnostics**
+    *   [x] Implement functions to traverse the Pest parse tree - *Placeholder in `parser.rs`*
+    *   [x] Convert parse tree nodes to internal data structures - *TODO in `parser.rs`*
+    *   [x] Integrate miette for detailed error reporting: - *Basic setup via `BorfError`*
+        *   [x] Source spans for precise error locations
+        *   [x] Contextual help messages
+        *   [x] Visual error indicators in terminal output
+        *   [ ] Improve specificity of diagnostics (more detailed hints/labels)
+    *   [ ] Implement recovery strategies for common syntax errors
+    *   [x] Test with increasingly complex examples
 
-6. **Robust Export Block Processing**
-   * [~] Enhance export block parsing with semantic validation
-     * [ ] Track all defined symbols throughout the program
-     * [ ] Validate that exported symbols are actually defined
-     * [ ] Add specific error reporting for undefined exports
-     * [ ] Distinguish between different types of exported items (operators, types, functions)
-     * [ ] Validate operator usage and consistency
-     * [ ] Check for naming conflicts and duplications
-   * [ ] Implement export filtering and visibility rules
-   * [ ] Add proper scoping for exported identifiers
-   * [ ] Develop detailed export diagnostics with suggested fixes
-   * [ ] Create fuzz targets specifically for export statements
+6.  **Robust Export Block Processing**
+    *   [~] Enhance export block parsing with semantic validation
+        *   [ ] Track all defined symbols throughout the program
+        *   [ ] Validate that exported symbols are actually defined
+        *   [ ] Add specific error reporting for undefined exports
+        *   [ ] Distinguish between different types of exported items (operators, types, functions)
+        *   [ ] Validate operator usage and consistency
+        *   [ ] Check for naming conflicts and duplications
+    *   [ ] Implement export filtering and visibility rules
+    *   [ ] Add proper scoping for exported identifiers
+    *   [ ] Develop detailed export diagnostics with suggested fixes
+    *   [ ] Create fuzz targets specifically for export statements
 
-7. **Parser Fuzzing and Hardening**
-   * [~] Create comprehensive fuzz targets using `arbitrary` and `libfuzzer-sys` - *One target exists*
-     * [~] Target syntax edge cases
-     * [ ] Target input length extremes
-     * [~] Target complex nested structures
-   * [ ] Run extended fuzzing sessions to uncover parser weaknesses
-   * [ ] Develop property-based tests to verify parser invariants
-   * [ ] Fix discovered issues and add regression tests
+7.  **Parser Fuzzing and Hardening**
+    *   [~] Create comprehensive fuzz targets using `arbitrary` and `libfuzzer-sys` - *One target exists*
+        *   [~] Target syntax edge cases
+        *   [ ] Target input length extremes
+        *   [~] Target complex nested structures
+    *   [ ] Run extended fuzzing sessions to uncover parser weaknesses
+    *   [ ] Develop property-based tests to verify parser invariants
+    *   [ ] Fix discovered issues and add regression tests
 
 ### Phase 3: Type System Implementation (Weeks 6-7)
 
-8. **Implement the Gradual Type System**
-   * [~] Develop the core type checking infrastructure - *Structs exist*
-   * [~] Implement set-theoretic types (union, intersection) - *Enum variants exist*
-   * [~] Build the type inference engine for connected ports - *Basic `infer_types` method exists*
-   * [ ] Implement subtyping relationship and consistency checks
-   * [~] Add detailed type error reporting with miette - *Placeholders exist in `BorfError`*
-     * [ ] Show relevant type constraints
-     * [ ] Provide suggestions for fixing type errors
+8.  **Implement the Gradual Type System**
+    *   [~] Develop the core type checking infrastructure - *Structs exist*
+    *   [~] Implement set-theoretic types (union, intersection) - *Enum variants exist*
+    *   [~] Build the type inference engine for connected ports - *Basic `infer_types` method exists*
+    *   [ ] Implement subtyping relationship and consistency checks
+    *   [~] Add detailed type error reporting with miette - *Placeholders exist in `BorfError`*
+        *   [ ] Show relevant type constraints
+        *   [ ] Provide suggestions for fixing type errors
+    *   [ ] Perform semantic analysis (e.g., undefined identifiers, type consistency based on category definitions)
 
-9. **Type Unification**
-   * [x] Implement unification for primitive types - *Handles `Dyn`, `Simple`*
-   * [x] Add support for unifying parametric types - *Handles basic parametric matching*
-   * [ ] Implement unification for union and intersection types - *TODO in `unify_types`*
-   * [x] Handle the `Dyn` type and gradual typing features - *`unify_types` handles `Dyn`*
-   * [ ] Create fuzz targets for the type unification system
-   * [ ] Test with complex type scenarios
+9.  **Type Unification**
+    *   [x] Implement unification for primitive types - *Handles `Dyn`, `Simple`*
+    *   [x] Add support for unifying parametric types - *Handles basic parametric matching*
+    *   [ ] Implement unification for union and intersection types - *TODO in `unify_types`*
+    *   [x] Handle the `Dyn` type and gradual typing features - *`unify_types` handles `Dyn`*
+    *   [ ] Create fuzz targets for the type unification system
+    *   [ ] Test with complex type scenarios
 
 ### Phase 4: Graph Representation and Rewriting (Weeks 8-10)
 
 10. **Complete the Rust-native Catlab.jl-style ACSets Graph Implementation**
-    * [~] Finalize the graph representation optimized for rewrites - *Basic structures exist*
-    * [ ] Implement efficient querying mechanisms
-    * [ ] Build serialization/deserialization for graph states
-    * [ ] Add visualization capabilities for debugging
-    * [ ] Create fuzz targets for graph operations
-    * [~] Implement detailed error reporting for graph operations
+    *   [~] Finalize the graph representation optimized for rewrites - *Basic structures exist*
+    *   [ ] Implement efficient querying mechanisms
+    *   [ ] Build serialization/deserialization for graph states
+    *   [ ] Add visualization capabilities for debugging
+    *   [ ] Create fuzz targets for graph operations
+    *   [~] Implement detailed error reporting for graph operations
+    *   [ ] Implement functions to convert the parsed AST into the ACSet representation
 
 11. **Build the Pattern Matching Engine**
-    * [~] Implement pattern matching for identifying redexes
-    * [ ] Create the subgraph isomorphism algorithm
-    * [ ] Optimize for the special case of interaction nets
-    * [ ] Add detailed diagnostic information for failed matches
-    * [ ] Test with standard interaction net patterns
-    * [ ] Fuzz the pattern matching engine for robustness
+    *   [~] Implement pattern matching for identifying redexes
+    *   [ ] Create the subgraph isomorphism algorithm
+    *   [ ] Optimize for the special case of interaction nets
+    *   [ ] Add detailed diagnostic information for failed matches
+    *   [ ] Test with standard interaction net patterns
+    *   [ ] Fuzz the pattern matching engine for robustness
 
 12. **Implement Graph Rewriting Rules**
-    * [~] Create the framework for defining rewrite rules - *Placeholders exist*
-    * [~] Implement rule application logic - *Placeholder `apply_reduction` exists*
-    * [ ] Ensure preservation of connections during rewrites
-    * [ ] Add support for standard Lafont combinators
-      * [ ] Duplicator
-      * [ ] Eraser
-      * [ ] Constructor/destructor pairs
-    * [~] Implement robust error handling for rule application failures
+    *   [~] Create the framework for defining rewrite rules - *Placeholders exist*
+    *   [~] Implement rule application logic - *Placeholder `apply_reduction` exists*
+    *   [ ] Ensure preservation of connections during rewrites
+    *   [ ] Add support for standard Lafont combinators
+        *   [ ] Duplicator
+        *   [ ] Eraser
+        *   [ ] Constructor/destructor pairs
+    *   [~] Implement robust error handling for rule application failures
 
 ### Phase 5: Reduction Engine (Weeks 11-12)
 
 13. **Build the Execution Engine**
-    * [~] Implement the redex detection algorithm - *`find_redexes` exists*
-    * [ ] Create the reduction strategy (eager vs. lazy options)
-    * [x] Build step-by-step and normalization execution modes
-    * [ ] Ensure deterministic reduction when multiple redexes exist
-    * [ ] Add detailed execution traces for debugging
-    * [ ] Create fuzz targets for the execution engine
+    *   [~] Implement the redex detection algorithm - *`find_redexes` exists*
+    *   [ ] Create the reduction strategy (eager vs. lazy options)
+    *   [x] Build step-by-step and normalization execution modes
+    *   [ ] Ensure deterministic reduction when multiple redexes exist
+    *   [ ] Add detailed execution traces for debugging
+    *   [ ] Create fuzz targets for the execution engine
 
 14. **Type Propagation During Reduction**
-    * [x] Implement type inference propagation after rewrites - *`infer_types` exists, not integrated with reduction*
-    * [ ] Ensure type consistency is maintained during reduction
-    * [ ] Add runtime type checking (optional, for debugging)
-    * [ ] Handle type errors gracefully with informative messages
-    * [ ] Add visual type flow in error diagnostics
+    *   [x] Implement type inference propagation after rewrites - *`infer_types` exists, not integrated with reduction*
+    *   [ ] Ensure type consistency is maintained during reduction
+    *   [ ] Add runtime type checking (optional, for debugging)
+    *   [ ] Handle type errors gracefully with informative messages
+    *   [ ] Add visual type flow in error diagnostics
 
 ### Phase 6: Standard Library and Examples (Weeks 13-14)
 
 15. **Implement Standard Agents**
-    * [ ] Create a standard library of common interaction net agents
-    * [ ] Implement the full set of Lafont interaction combinators
-    * [ ] Build utility combinators for common programming tasks
-    * [ ] Document the standard agents and their behavior
-    * [ ] Add comprehensive test suite for standard agents
+    *   [ ] Create a standard library of common interaction net agents
+    *   [ ] Implement the full set of Lafont interaction combinators
+    *   [ ] Build utility combinators for common programming tasks
+    *   [ ] Document the standard agents and their behavior
+    *   [ ] Add comprehensive test suite for standard agents
 
 16. **Develop Example Programs**
-    * [~] Create simple illustrative examples
-    * [ ] Implement classic algorithms using interaction nets
-    * [ ] Build larger case studies showing real-IO applications
-    * [ ] Add examples showing the benefits of the type system
-    * [ ] Create tutorial documentation with detailed error explanations
+    *   [~] Create simple illustrative examples
+    *   [ ] Implement classic algorithms using interaction nets
+    *   [ ] Build larger case studies showing real-IO applications
+    *   [ ] Add examples showing the benefits of the type system
+    *   [ ] Create tutorial documentation with detailed error explanations
 
 ### Phase 7: Robustness Enhancement and Performance Optimization (Weeks 15-17)
 
 17. **Extended Fuzzing and Property Testing**
-    * [ ] Develop comprehensive property-based tests for all components
-    * [~] Create advanced fuzz targets that combine multiple operations
-    * [ ] Perform extended fuzzing sessions (24h+) to discover edge cases
-    * [ ] Implement crash reporting and automatic test case minimization
-    * [ ] Fix all discovered issues and add regression tests
+    *   [ ] Develop comprehensive property-based tests for all components
+    *   [~] Create advanced fuzz targets that combine multiple operations (Enhance existing targets for complex inputs/edge cases)
+    *   [ ] Perform extended fuzzing sessions (24h+) to discover edge cases
+    *   [ ] Implement crash reporting and automatic test case minimization
+    *   [ ] Fix all discovered issues and add regression tests
 
 18. **Performance Optimization**
-    * [ ] Profile the implementation to identify bottlenecks
-    * [ ] Optimize pattern matching and rewriting
-    * [ ] Improve memory usage of the graph representation
-    * [ ] Add benchmarks to track performance
-    * [ ] Ensure error reporting doesn't impact performance in release mode
+    *   [ ] Profile the implementation to identify bottlenecks
+    *   [ ] Optimize pattern matching and rewriting
+    *   [ ] Improve memory usage of the graph representation
+    *   [ ] Add benchmarks to track performance
+    *   [ ] Ensure error reporting doesn't impact performance in release mode
 
 19. **Error Handling and User Experience Enhancement**
-    * [~] Refine error messages based on user feedback
-    * [ ] Create a hierarchy of error detail levels (terse to verbose)
-    * [ ] Add interactive error exploration capabilities
-    * [ ] Implement error code documentation system
-    * [ ] Create comprehensive troubleshooting guide
+    *   [~] Refine error messages based on user feedback
+    *   [ ] Create a hierarchy of error detail levels (terse to verbose)
+    *   [ ] Add interactive error exploration capabilities
+    *   [ ] Implement error code documentation system
+    *   [ ] Create comprehensive troubleshooting guide
 
 20. **Final Polish**
-    * [ ] Complete comprehensive test suite
-    * [ ] Finalize documentation
-    * [ ] Prepare for initial release
-    * [ ] Set up contribution guidelines
-    * [ ] Create detailed examples of error handling for contributors
+    *   [ ] Complete comprehensive test suite
+    *   [ ] Finalize documentation
+    *   [ ] Prepare for initial release
+    *   [ ] Set up contribution guidelines
+    *   [ ] Create detailed examples of error handling for contributors
 
 ### Phase 8: Extended Roadmap (Weeks 18-24)
 
 21. **Developer Experience Enhancement**
-    * [ ] Implement Language Server Protocol (LSP) for IDE integration
-    * [ ] Create a web playground for easy experimentation without installation
-    * [ ] Develop a visual debugger showing interaction net reductions graphically
-    * [ ] Add inline documentation and hover tooltips in IDEs
-    * [ ] Build comprehensive editor integrations (VS Code, Vim, Emacs)
-    * [ ] Create interactive visualization engine for interaction nets:
-      * [ ] Real-time rendering of interaction net structure in Lafont's style
-      * [ ] Animated transitions for reduction steps
-      * [ ] Highlighting of active pairs (redexes)
-      * [ ] Multiple visualization layouts (tree, graph, compular)
-      * [ ] User-configurable rendering styles
-      * [ ] Recording and playback of reduction sequences
-      * [ ] Export to SVG/PNG/GIF formats for documentation
-      * [ ] Integration with the standalone playground and IDE plugins
+    *   [ ] Implement Language Server Protocol (LSP) for IDE integration
+    *   [ ] Create a web playground for easy experimentation without installation
+    *   [ ] Develop a visual debugger showing interaction net reductions graphically
+    *   [ ] Add inline documentation and hover tooltips in IDEs
+    *   [ ] Build comprehensive editor integrations (VS Code, Vim, Emacs)
+    *   [ ] Create interactive visualization engine for interaction nets:
+        *   [ ] Real-time rendering of interaction net structure in Lafont's style
+        *   [ ] Animated transitions for reduction steps
+        *   [ ] Highlighting of active pairs (redexes)
+        *   [ ] Multiple visualization layouts (tree, graph, compular)
+        *   [ ] User-configurable rendering styles
+        *   [ ] Recording and playback of reduction sequences
+        *   [ ] Export to SVG/PNG/GIF formats for documentation
+        *   [ ] Integration with the standalone playground and IDE plugins
 
 22. **Performance Optimizations**
-    * [ ] Implement parallel reduction strategies leveraging Rust's concurrency
-    * [ ] Add fearless parallel reduction using Rayon to exploit interaction nets' natural parallelism
-    * [ ] Add compilation to efficient native code via LLVM
-    * [ ] Create runtime profiling tools to identify bottlenecks in user programs
-    * [ ] Optimize memory usage patterns for large interaction nets
-    * [ ] Implement incremental computation techniques
-    * [ ] Research optimal graph partitioning algorithms for distributed reduction
+    *   [ ] Implement parallel reduction strategies leveraging Rust's concurrency
+    *   [ ] Add fearless parallel reduction using Rayon to exploit interaction nets' natural parallelism
+    *   [ ] Add compilation to efficient native code via LLVM
+    *   [ ] Create runtime profiling tools to identify bottlenecks in user programs
+    *   [ ] Optimize memory usage patterns for large interaction nets
+    *   [ ] Implement incremental computation techniques
+    *   [ ] Research optimal graph partitioning algorithms for distributed reduction
 
 23. **Advanced Optimization and Compilation**
-    * [ ] Develop a policy for minimal-reduction subnet transformations
-    * [ ] Implement pattern detection for common subnet structures that can be optimized
-    * [ ] Create a catalog of subnet transformation optimizations
-    * [ ] Build static analysis tools to identify optimization opportunities
-    * [ ] Implement optimizing passes for the interaction net representation
-    * [ ] Develop LLVM-IR generation from optimized interaction nets
-    * [ ] Integrate LLVM-JIT for runtime compilation
-    * [ ] Create AOT compilation pipelines leveraging LLVM backends
-    * [ ] Implement benchmarking tools to measure optimization effectiveness
-    * [ ] Develop optimization hints API for programmers
+    *   [ ] Develop a policy for minimal-reduction subnet transformations
+    *   [ ] Implement pattern detection for common subnet structures that can be optimized
+    *   [ ] Create a catalog of subnet transformation optimizations
+    *   [ ] Build static analysis tools to identify optimization opportunities
+    *   [ ] Implement optimizing passes for the interaction net representation
+    *   [ ] Develop LLVM-IR generation from optimized interaction nets
+    *   [ ] Integrate LLVM-JIT for runtime compilation
+    *   [ ] Create AOT compilation pipelines leveraging LLVM backends
+    *   [ ] Implement benchmarking tools to measure optimization effectiveness
+    *   [ ] Develop optimization hints API for programmers
 
 24. **Advanced Language Features**
-    * [ ] Add effect system for controlled side effects
-    * [ ] Implement module system for better code organization
-    * [ ] Develop metaprogramming capabilities (macros or reflection)
-    * [ ] Create a package manager for sharing libraries
-    * [ ] Add pattern matching and destructuring at the language level
+    *   [ ] Add effect system for controlled side effects
+    *   [ ] Implement module system for better code organization
+        *   [x] Parse `@import` statements
+        *   [ ] Develop a file resolver (relative/absolute paths)
+        *   [ ] Implement circular import detection & module dependency graph
+        *   [ ] Cache imported modules
+        *   [ ] Define import scoping and namespace management
+        *   [ ] Support selective imports/exports
+        *   [ ] Add error handling for missing/invalid imports
+    *   [ ] Develop metaprogramming capabilities (macros or reflection)
+    *   [ ] Create a package manager for sharing libraries
+    *   [ ] Add pattern matching and destructuring at the language level
 
 25. **Functional Logic Programming**
-    * [ ] Implement nondeterministic choice operator inspired by Verse
-    * [ ] Add speculative execution with rollback mechanisms
-    * [ ] Develop fallible and infallible context tracking in the type system
-    * [ ] Replace traditional error handling with narrowing
-    * [ ] Create verification system to ensure operations in infallible contexts must succeed
-    * [ ] Design and implement interaction between fallible/infallible contexts and the effects system
-    * [ ] Add constraint solving capabilities for logical programming
-    * [ ] Optimize backtracking algorithms for interaction nets
-    * [ ] Implement search strategies (depth-first, breadth-first, parallel)
-    * [ ] Create debugging tools for visualizing search trees and narrowing steps
+    *   [ ] Implement nondeterministic choice operator inspired by Verse
+    *   [ ] Add speculative execution with rollback mechanisms
+    *   [ ] Develop fallible and infallible context tracking in the type system
+    *   [ ] Replace traditional error handling with narrowing
+    *   [ ] Create verification system to ensure operations in infallible contexts must succeed
+    *   [ ] Design and implement interaction between fallible/infallible contexts and the effects system
+    *   [ ] Add constraint solving capabilities for logical programming
+    *   [ ] Optimize backtracking algorithms for interaction nets
+    *   [ ] Implement search strategies (depth-first, breadth-first, parallel)
+    *   [ ] Create debugging tools for visualizing search trees and narrowing steps
 
 26. **Practical Applications**
-    * [ ] Develop domain-specific libraries for web/networking, graphics, databases
-    * [ ] Create bindings to popular Rust libraries
-    * [ ] Build standard data structure implementations optimized for interaction nets
-    * [ ] Implement I/O and system interaction primitives
-    * [ ] Create example real-IO applications showcasing language capabilities
+    *   [ ] Develop domain-specific libraries for web/networking, graphics, databases
+    *   [ ] Create bindings to popular Rust libraries
+    *   [ ] Build standard data structure implementations optimized for interaction nets
+    *   [ ] Implement I/O and system interaction primitives
+    *   [ ] Create example real-IO applications showcasing language capabilities
 
 27. **Academic and Research Value**
-    * [ ] Formalize type safety proofs
-    * [ ] Explore new optimization techniques specific to interaction nets
-    * [ ] Research compilation techniques bridging interaction nets and traditional execution models
-    * [ ] Publish papers on implementation techniques and language design
-    * [ ] Collaborate with academic institutions on formal verification
+    *   [ ] Formalize type safety proofs
+    *   [ ] Explore new optimization techniques specific to interaction nets
+    *   [ ] Research compilation techniques bridging interaction nets and traditional execution models
+    *   [ ] Publish papers on implementation techniques and language design
+    *   [ ] Collaborate with academic institutions on formal verification
 
 28. **Ecosystem Growth**
-    * [ ] Create documentation generator from code
-    * [ ] Develop testing frameworks specific to interaction calculus
-    * [ ] Build a community showcase of example applications
-    * [ ] Implement benchmarking suite for comparing implementations
-    * [ ] Create learning resources and tutorials for various skill levels
+    *   [ ] Create documentation generator from code
+    *   [ ] Develop testing frameworks specific to interaction calculus
+    *   [ ] Build a community showcase of example applications
+    *   [ ] Implement benchmarking suite for comparing implementations
+    *   [ ] Create learning resources and tutorials for various skill levels
 
 29. **Interoperability**
-    * [ ] Add FFI support for C/Rust libraries
-    * [ ] Implement transpilation to other languages for easier adoption
-    * [ ] Create bidirectional bridges with existing functional languages
-    * [ ] Build compatibility layers for popular runtimes (WASM, JVM, .NET)
-    * [ ] Develop protocol bindings for interprocess communication
+    *   [ ] Add FFI support for C/Rust libraries
+    *   [ ] Implement transpilation to other languages for easier adoption
+    *   [ ] Create bidirectional bridges with existing functional languages
+    *   [ ] Build compatibility layers for popular runtimes (WASM, JVM, .NET)
+    *   [ ] Develop protocol bindings for interprocess communication
 
 30. **Verification and Correctness**
-    * [ ] Implement formal verification tools leveraging the graph-based semantics
-    * [ ] Add contract programming features
-    * [ ] Develop static analysis tools beyond the type system
-    * [ ] Create property-based testing specifically for interaction nets
-    * [ ] Implement refinement types for stronger correctness guarantees
+    *   [ ] Implement formal verification tools leveraging the graph-based semantics
+    *   [ ] Add contract programming features
+    *   [ ] Develop static analysis tools beyond the type system
+    *   [ ] Create property-based testing specifically for interaction nets
+        *   [ ] Add integration tests with real file imports
+        *   [ ] Create tests for edge cases (circular imports, missing files)
+        *   [ ] Test nested imports
+    *   [ ] Implement refinement types for stronger correctness guarantees
 
 ### Phase 9: Advanced Capabilities & Uniqueness (Weeks 25-30+)
 
-*Building on the core language, this phase explores features that leverage Borf's unique foundation in interaction nets and push towards truly novel capabilities.*
-
 31. **Linear Logic Integration**
-    * [ ] Integrate explicit Linear/Affine types into the core type system
-    * [ ] Define resource management semantics based on linear types
-    * [ ] Implement compile-time checks for resource usage (memory, handles, etc.)
-    * [ ] Explore connections between linear types, effects, and interaction rules
-    * [ ] Develop standard library patterns utilizing linear types for safety
+    *   [ ] Integrate explicit Linear/Affine types into the core type system
+    *   [ ] Define resource management semantics based on linear types
+    *   [ ] Implement compile-time checks for resource usage (memory, handles, etc.)
+    *   [ ] Explore connections between linear types, effects, and interaction rules
+    *   [ ] Develop standard library patterns utilizing linear types for safety
 
 32. **Distributed Computing (Join Calculus)**
-    * [ ] Define formal mapping between interaction net patterns and Join Calculus semantics
-    * [ ] Implement network transparency mechanisms for seamless remote interactions
-    * [ ] Develop location-independent agent addressing/discovery
-    * [ ] Build fault tolerance strategies using interaction net patterns or rollback
-    * [ ] Optimize network communication protocols for interaction nets
+    *   [ ] Define formal mapping between interaction net patterns and Join Calculus semantics
+    *   [ ] Implement network transparency mechanisms for seamless remote interactions
+    *   [ ] Develop location-independent agent addressing/discovery
+    *   [ ] Build fault tolerance strategies using interaction net patterns or rollback
+    *   [ ] Optimize network communication protocols for interaction nets
 
 33. **Advanced Metaprogramming & Reflection**
-    * [ ] Implement a hygienic macro system (e.g., `macro_rules!` style)
-    * [ ] Provide compile-time APIs for interaction net inspection and manipulation
-    * [ ] Enable user-defined compiler optimizations via metaprogramming
-    * [ ] Explore staged computation / multi-stage programming paradigms
-    * [ ] Add runtime reflection capabilities (optional, carefully designed for specific use cases)
+    *   [ ] Implement a hygienic macro system (e.g., `macro_rules!` style)
+    *   [ ] Provide compile-time APIs for interaction net inspection and manipulation
+    *   [ ] Enable user-defined compiler optimizations via metaprogramming
+    *   [ ] Explore staged computation / multi-stage programming paradigms
+    *   [ ] Add runtime reflection capabilities (optional, carefully designed for specific use cases)
 
 34. **Sophisticated Interactive REPL**
-    * [ ] Integrate the visualization engine directly into the REPL for live feedback
-    * [ ] Implement interactive agent/net definition and modification
-    * [ ] Add step-by-step reduction control and visualization
-    * [ ] Allow inspection of agent states and port connections during execution
-    * [ ] Implement breakpoints based on agent types, interactions, or net structure
-    * [ ] Add net state saving/loading functionality for sessions
-    * [ ] Enhance code completion and introspection within the REPL
+    *   [ ] Integrate the visualization engine directly into the REPL for live feedback
+    *   [ ] Implement interactive agent/net definition and modification
+    *   [ ] Add step-by-step reduction control and visualization
+    *   [ ] Allow inspection of agent states and port connections during execution
+    *   [ ] Implement breakpoints based on agent types, interactions, or net structure
+    *   [ ] Add net state saving/loading functionality for sessions
+    *   [ ] Enhance code completion and introspection within the REPL
 
 35. **Graph-Based Security Model**
-    * [ ] Design and implement a capability-based security model using connections as rights
-    * [ ] Integrate Information Flow Control (IFC) principles into the type system
-    * [ ] Develop static analysis tools to verify security policies at compile time
-    * [ ] Explore secure interaction patterns and standard library components
-    * [ ] Research sandboxing mechanisms based on net partitioning
+    *   [ ] Design and implement a capability-based security model using connections as rights
+    *   [ ] Integrate Information Flow Control (IFC) principles into the type system
+    *   [ ] Develop static analysis tools to verify security policies at compile time
+    *   [ ] Explore secure interaction patterns and standard library components
+    *   [ ] Research sandboxing mechanisms based on net partitioning
 
 ### Phase 10: Type System Zenith (Weeks 31+ "Mad Science")
 
-*This phase delves into cutting-edge type system research, pushing the boundaries of static guarantees and exploring the theoretical limits of what interaction nets can express safely.*
-
 36. **Dependent Types & Static State Machines**
-    * [ ] Explore integration of dependent types (e.g., Pi-types, Sigma-types) allowing types to depend on values
-    * [ ] Implement type-level tracking of program states (Static State Machines)
-    * [ ] Enforce state transition logic directly via the type checker
-    * [ ] Develop theorem proving capabilities within the compiler (or integrate external provers)
-    * [ ] Research interaction net encodings for dependent types
+    *   [ ] Explore integration of dependent types (e.g., Pi-types, Sigma-types) allowing types to depend on values
+    *   [ ] Implement type-level tracking of program states (Static State Machines)
+    *   [ ] Enforce state transition logic directly via the type checker
+    *   [ ] Develop theorem proving capabilities within the compiler (or integrate external provers)
+    *   [ ] Research interaction net encodings for dependent types
 
 37. **Session Types for Communication Protocols**
-    * [ ] Design and implement session types for interaction nets to describe communication patterns
-    * [ ] Provide compile-time guarantees for communication protocols (ordering, typing)
-    * [ ] Prevent deadlocks and communication errors statically
-    * [ ] Integrate session types with the distributed computing model (Join Calculus)
-    * [ ] Explore multiparty session types for complex interactions
+    *   [ ] Design and implement session types for interaction nets to describe communication patterns
+    *   [ ] Provide compile-time guarantees for communication protocols (ordering, typing)
+    *   [ ] Prevent deadlocks and communication errors statically
+    *   [ ] Integrate session types with the distributed computing model (Join Calculus)
+    *   [ ] Explore multiparty session types for complex interactions
 
 38. **Quantitative Type Theory (QTT)**
-    * [ ] Enhance linear/affine types with full QTT (zero, one, many usage tracking)
-    * [ ] Implement precise compile-time resource usage tracking and guarantees
-    * [ ] Leverage QTT for advanced memory management and resource safety proofs
-    * [ ] Explore QTT's implications for interaction net reduction strategies
-    * [ ] Integrate QTT principles into the core type system and inference
+    *   [ ] Enhance linear/affine types with full QTT (zero, one, many usage tracking)
+    *   [ ] Implement precise compile-time resource usage tracking and guarantees
+    *   [ ] Leverage QTT for advanced memory management and resource safety proofs
+    *   [ ] Explore QTT's implications for interaction net reduction strategies
+    *   [ ] Integrate QTT principles into the core type system and inference
 
 39. **Refinement Types with SMT Integration**
-    * [ ] Implement refinement types augmenting base types with logical predicates (e.g., `x: Int where x > 0`)
-    * [ ] Integrate SMT solvers (e.g., Z3) for checking refinement predicates automatically
-    * [ ] Provide static guarantees against errors like division-by-zero, out-of-bounds access
-    * [ ] Develop ergonomic syntax for defining and using refinement types
-    * [ ] Research efficient checking mechanisms within the interaction net context
+    *   [ ] Implement refinement types augmenting base types with logical predicates (e.g., `x: Int where x > 0`)
+    *   [ ] Integrate SMT solvers (e.g., Z3) for checking refinement predicates automatically
+    *   [ ] Provide static guarantees against errors like division-by-zero, out-of-bounds access
+    *   [ ] Develop ergonomic syntax for defining and using refinement types
+    *   [ ] Research efficient checking mechanisms within the interaction net context
 
 40. **Information Flow Control Types (Security)**
-    * [ ] Deepen the Graph-Based Security Model with explicit IFC types (e.g., `Public`, `Secret` data)
-    * [ ] Track security levels associated with data throughout the net
-    * [ ] Enforce non-interference policies statically via the type checker (preventing leaks)
-    * [ ] Guarantee confidentiality and integrity properties at compile time
-    * [ ] Explore interaction net patterns for secure multi-party computation
+    *   [ ] Deepen the Graph-Based Security Model with explicit IFC types (e.g., `Public`, `Secret` data)
+    *   [ ] Track security levels associated with data throughout the net
+    *   [ ] Enforce non-interference policies statically via the type checker (preventing leaks)
+    *   [ ] Guarantee confidentiality and integrity properties at compile time
+    *   [ ] Explore interaction net patterns for secure multi-party computation
 
 ## Implementation Details
 
