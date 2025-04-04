@@ -607,10 +607,7 @@ fn test_parentheses_override_precedence() {
         }
     );
 
-    if let Expression::InfixOp {
-        ref lhs, ref rhs, ..
-    } = expr
-    {
+    if let Expression::InfixOp { ref lhs, .. } = expr {
         // Left side should be a parenthesized expression
         assert_expr_matches!(**lhs, Expression::AtomExpr(Atom::Paren(..)));
 

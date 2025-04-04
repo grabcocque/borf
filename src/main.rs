@@ -49,17 +49,17 @@ fn test_category_parsing() {
     // Test category content (now as part of a minimal statement)
     println!("Testing category content parsing:");
     let test_content = "@Test: { A; B; f: A -> B; }";
-    test_direct_parse(test_content, Rule::category_statement);
+    test_direct_parse(test_content, Rule::module_declaration);
 
     // Test very simple category
     println!("Testing minimal category parsing:");
     let test_category = "@Simple: {}";
-    test_direct_parse(test_category, Rule::category_statement);
+    test_direct_parse(test_category, Rule::module_declaration);
 
     // Now test a category with some content
     println!("Testing simple category statement parsing:");
     let simple_category = "@Category: { A; B; f: A -> B; }";
-    if test_direct_parse(simple_category, Rule::category_statement) {
+    if test_direct_parse(simple_category, Rule::module_declaration) {
         println!("Simple category parses correctly!");
     } else {
         println!("Simple category fails to parse!");
@@ -150,9 +150,10 @@ fn test_specific_rule(rule_name: &str, input: &str) -> bool {
         "object_decl" => Rule::object_decl,
         "mapping_decl" => Rule::mapping_decl,
         "type_expr" => Rule::type_expr,
-        "category_statement" => Rule::category_statement,
-        "structure_mapping_decl" => Rule::structure_mapping_decl,
-        "function_def_decl" => Rule::function_def_decl,
+        "category_statement" => Rule::module_declaration,
+        // These rules no longer exist, comment them out
+        // "structure_mapping_decl" => Rule::structure_mapping_decl,
+        // "function_def_decl" => Rule::function_def_decl,
         // Add more rules as needed
         _ => {
             println!("Unknown rule: {}", rule_name);
@@ -221,23 +222,14 @@ fn main() {
 
                     match parser::parse_program(&input) {
                         Ok(user_items) => {
-                            println!("Successfully parsed {} user item(s)!", user_items.len());
+                            println!("Successfully parsed {} user_item(s)!", user_items.len());
                             for (i, item) in user_items.iter().enumerate() {
                                 match item {
-                                    TopLevelItem::Category(_) => {
-                                        println!("  {}. Category definition", i + 1)
+                                    TopLevelItem::Module(_) => {
+                                        println!("  {}. Module definition", i + 1)
                                     }
-                                    TopLevelItem::PipeExpr(_) => {
-                                        println!("  {}. Pipe expression", i + 1)
-                                    }
-                                    TopLevelItem::AppExpr(_) => {
-                                        println!("  {}. Application expression", i + 1)
-                                    }
-                                    TopLevelItem::CompositionExpr(_) => {
-                                        println!("  {}. Composition expression", i + 1)
-                                    }
-                                    TopLevelItem::Pipeline(_) => {
-                                        println!("  {}. Pipeline definition", i + 1)
+                                    TopLevelItem::Primitive(_) => {
+                                        println!("  {}. Primitive definition", i + 1)
                                     }
                                     TopLevelItem::Export(_) => {
                                         println!("  {}. Export directive", i + 1)
@@ -248,6 +240,9 @@ fn main() {
                                             i + 1,
                                             import.path
                                         )
+                                    }
+                                    TopLevelItem::ExpressionStatement(_) => {
+                                        println!("  {}. Expression statement", i + 1)
                                     }
                                 }
                             }

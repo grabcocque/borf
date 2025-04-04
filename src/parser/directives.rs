@@ -26,22 +26,14 @@ pub fn parse_export_directive(pair: Pair<Rule>) -> Result<ExportDirective, Box<B
     // Create a vector to store all identifier names
     let mut identifiers = Vec::new();
 
-    // Process all inner pairs
+    // Process all inner pairs - based on the current grammar
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
-            // Handle the export id1, id2, id3 format
-            Rule::comma_separated_ids => {
-                for item in inner_pair.into_inner() {
-                    if item.as_rule() == Rule::ident || item.as_rule() == Rule::transform_ident {
-                        identifiers.push(item.as_str().to_string());
-                    }
-                }
-            }
-            // Direct identifiers (top level)
-            Rule::ident | Rule::transform_ident => {
+            // Simplified to only handle direct identifiers
+            Rule::ident => {
                 identifiers.push(inner_pair.as_str().to_string());
             }
-            _ => {} // Ignore other rules
+            _ => {} // Ignore other rules like semicolons
         }
     }
 
@@ -72,6 +64,20 @@ pub fn parse_export_directive(pair: Pair<Rule>) -> Result<ExportDirective, Box<B
 pub fn parse_import_directive(pair: Pair<Rule>) -> Result<ImportDirective, Box<BorfError>> {
     let pair_clone = pair.clone(); // Clone for error handling
     let path_pair = pair.into_inner().next().unwrap();
+
+    // Make sure we're looking at a string literal according to current grammar
+    if path_pair.as_rule() != Rule::string_literal {
+        let span = pair_to_span(&pair_clone);
+        let src = get_named_source(pair_clone.as_str());
+        return Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
+            "Import directive without a string literal path",
+            src,
+            span,
+            "Import directives must specify a string literal path",
+            "Invalid import path",
+        ))));
+    }
+
     let path_with_quotes = path_pair.as_str().to_string();
 
     // Remove the surrounding quotes if present

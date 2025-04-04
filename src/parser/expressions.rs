@@ -1,310 +1,183 @@
 //! Parsers for expressions in the Borf language.
 //!
-//! This module provides functions for parsing pipe expressions, application expressions,
-//! composition expressions, and pipeline definitions.
+//! This module provides functions for parsing various expression types in Borf.
 
-use super::ast::{AppExpr, AppExprArg, CompositionExpr, PipeExpr, PipelineDef};
-use super::error::{BorfError, SyntaxError};
-use crate::parser::Rule;
-use crate::parser::{get_named_source, pair_to_span};
+use super::ast::{Expression, FunctionChainExpr, IfExpr, LambdaExpr, LetRecExpr};
+use super::error::BorfError;
+use crate::parser::{build_expr_ast, get_named_source, pair_to_span, Rule};
 use pest::iterators::Pair;
 
-/// Parses a pipe expression from a pest pair.
-///
-/// Pipe expressions represent a sequence of transformations applied to a starting value.
+/// Parses a function chain expression (e.g., f(a)(b)(c)).
+/// Represents nested function calls.
 ///
 /// # Arguments
 ///
-/// * `pair` - A pest Pair representing a pipe expression
+/// * `pair` - A pest Pair representing a function chain expression
 ///
 /// # Returns
 ///
-/// * `Result<PipeExpr, Box<BorfError>>` - The parsed pipe expression or an error
-pub fn parse_pipe_expr(pair: Pair<Rule>) -> Result<PipeExpr, Box<BorfError>> {
-    let mut inner = pair.into_inner();
-    let start = inner.next().unwrap().as_str().to_string();
-    let steps: Vec<String> = inner.map(|p| p.as_str().to_string()).collect();
+/// * `Result<Expression, Box<BorfError>>` - The parsed expression or an error
+pub fn parse_function_chain_expr(pair: Pair<Rule>) -> Result<Expression, Box<BorfError>> {
+    let _span = pair_to_span(&pair);
+    let _src = get_named_source(pair.as_str());
 
-    Ok(PipeExpr { start, steps })
+    let mut inner = pair.into_inner();
+    let base_pair = inner.next().unwrap();
+
+    // Get the base identifier as a string (simplification - in a real parser we would handle more complex bases)
+    let base = base_pair.as_str().to_string();
+
+    // Process the chain calls
+    let mut calls = Vec::new();
+    for args_pair in inner {
+        if args_pair.as_rule() == Rule::function_args {
+            let mut arg_list = Vec::new();
+            for arg_pair in args_pair.into_inner() {
+                if arg_pair.as_rule() == Rule::expression {
+                    arg_list.push(build_expr_ast(arg_pair.into_inner())?);
+                }
+            }
+            calls.push(arg_list);
+        }
+    }
+
+    Ok(Expression::FunctionChainCall(FunctionChainExpr {
+        base, // Now it's a String as expected
+        calls,
+    }))
 }
 
-/// Parses an application expression from a pest pair.
-///
-/// Application expressions represent applying a function to an argument.
+/// Parses a lambda expression (e.g., \x.expr or \x,y,z.expr).
 ///
 /// # Arguments
 ///
-/// * `pair` - A pest Pair representing an application expression
+/// * `pair` - A pest Pair representing a lambda expression
 ///
 /// # Returns
 ///
-/// * `Result<AppExpr, Box<BorfError>>` - The parsed application expression or an error
-pub fn parse_app_expr(pair: Pair<Rule>) -> Result<AppExpr, Box<BorfError>> {
+/// * `Result<Expression, Box<BorfError>>` - The parsed expression or an error
+pub fn parse_lambda_expr(pair: Pair<Rule>) -> Result<Expression, Box<BorfError>> {
+    let _span = pair_to_span(&pair);
+    let _src = get_named_source(pair.as_str());
+
     let mut inner = pair.into_inner();
-    let func = inner.next().unwrap().as_str().to_string();
-    let arg_pair = inner.next().unwrap();
+    let params_pair = inner.next().unwrap();
 
-    let arg = match arg_pair.as_rule() {
-        Rule::app_statement => Box::new(AppExprArg::AppExpr(Box::new(parse_app_expr(arg_pair)?))),
-        _ => Box::new(AppExprArg::Identifier(arg_pair.as_str().to_string())),
-    };
+    // Extract parameter names
+    let mut params = Vec::new();
+    for param in params_pair.into_inner() {
+        if param.as_rule() == Rule::ident {
+            params.push(param.as_str().to_string());
+        }
+    }
 
-    Ok(AppExpr { func, arg })
+    // Parse the body expression
+    let body_pair = inner.next().unwrap();
+    let body = build_expr_ast(body_pair.into_inner())?;
+
+    Ok(Expression::Lambda(LambdaExpr {
+        params,
+        body: Box::new(body),
+    }))
 }
 
-/// Parses a composition expression from a pest pair.
-///
-/// Composition expressions represent combining multiple functions and applying
-/// the resulting composed function to an argument.
+/// Parses an if-then-else expression (e.g., if cond then expr1 else expr2).
 ///
 /// # Arguments
 ///
-/// * `pair` - A pest Pair representing a composition expression
+/// * `pair` - A pest Pair representing an if-then-else expression
 ///
 /// # Returns
 ///
-/// * `Result<CompositionExpr, Box<BorfError>>` - The parsed composition expression or an error
-pub fn parse_composition_expr(pair: Pair<Rule>) -> Result<CompositionExpr, Box<BorfError>> {
-    let pair_clone = pair.clone(); // Clone for error handling
+/// * `Result<Expression, Box<BorfError>>` - The parsed expression or an error
+pub fn parse_if_expr(pair: Pair<Rule>) -> Result<Expression, Box<BorfError>> {
+    let _span = pair_to_span(&pair);
+    let _src = get_named_source(pair.as_str());
+
     let mut inner = pair.into_inner();
-    let result = inner.next().unwrap().as_str().to_string();
+    let condition_pair = inner.next().unwrap();
+    let condition = build_expr_ast(condition_pair.into_inner())?;
 
-    // Parse the functions to compose
-    let mut functions = Vec::new();
-    let mut arg = String::new();
+    let then_pair = inner.next().unwrap();
+    let then_branch = build_expr_ast(then_pair.into_inner())?;
 
-    // Collect identifiers until we hit the optional argument parenthesis
-    for item in inner {
-        match item.as_rule() {
-            Rule::ident => {
-                functions.push(item.as_str().to_string());
-            }
-            // We ignore both "$comp" and "." tokens as they're just separators
-            // They're handled by the grammar
-            _ => {
-                // If we find something else, it should be the argument in parentheses
-                // Extract the identifier from inside
-                if let Some(arg_inner) = item.into_inner().next() {
-                    arg = arg_inner.as_str().to_string();
-                }
-                break;
-            }
-        }
-    }
+    let else_pair = inner.next().unwrap();
+    let else_branch = build_expr_ast(else_pair.into_inner())?;
 
-    // If no argument parenthesis was found, the last "function" is actually the argument
-    if arg.is_empty() && !functions.is_empty() {
-        arg = functions.pop().unwrap();
-    }
-
-    if functions.is_empty() {
-        let span = pair_to_span(&pair_clone);
-        let src = get_named_source(pair_clone.as_str());
-        return Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
-            "Composition with no functions",
-            src,
-            span,
-            "Composition expressions must have at least one function",
-            "No functions to compose",
-        ))));
-    }
-
-    Ok(CompositionExpr {
-        result,
-        functions,
-        arg,
-    })
+    Ok(Expression::If(IfExpr {
+        condition: Box::new(condition),
+        then_branch: Box::new(then_branch),
+        else_branch: Box::new(else_branch),
+    }))
 }
 
-/// Parses a pipeline definition from a pest pair.
-///
-/// Pipeline definitions specify a sequence of transformation steps
-/// from an input type to an output type.
+/// Parses a let-rec expression (e.g., let rec name params = bound_expr in body).
 ///
 /// # Arguments
 ///
-/// * `pair` - A pest Pair representing a pipeline definition
+/// * `pair` - A pest Pair representing a let-rec expression
 ///
 /// # Returns
 ///
-/// * `Result<PipelineDef, Box<BorfError>>` - The parsed pipeline definition or an error
-pub fn parse_pipeline_def(pair: Pair<Rule>) -> Result<PipelineDef, Box<BorfError>> {
-    let pair_clone = pair.clone(); // Clone for error reporting
+/// * `Result<Expression, Box<BorfError>>` - The parsed expression or an error
+pub fn parse_let_rec_expr(pair: Pair<Rule>) -> Result<Expression, Box<BorfError>> {
+    let _span = pair_to_span(&pair);
+    let _src = get_named_source(pair.as_str());
+
     let mut inner = pair.into_inner();
-    let name = inner.next().unwrap().as_str().to_string();
+    let name_pair = inner.next().unwrap();
+    let name = name_pair.as_str().to_string();
 
-    // Check for type parameter in angle brackets
-    let next_token = inner.peek().unwrap().as_rule();
-    let (type_param, content_pair) = if next_token == Rule::ident {
-        // This could be a type parameter
-        let param = inner.next().unwrap().as_str().to_string();
-        (Some(param), inner.next().unwrap())
-    } else {
-        // No type parameter
-        (None, inner.next().unwrap())
-    };
-
-    let mut input_type = String::new();
-    let mut output_type = String::new();
-    let mut steps = Vec::new();
-
-    // For debugging
-    #[cfg(test)]
-    eprintln!("Pipeline content rule: {:?}", content_pair.as_rule());
-
-    match content_pair.as_rule() {
-        Rule::pipeline_content => {
-            // Parse pipeline_content
-            let content_inner: Vec<_> = content_pair.into_inner().collect();
-
-            // For debugging
-            #[cfg(test)]
-            eprintln!(
-                "Pipeline content inner: {:?}",
-                content_inner
-                    .iter()
-                    .map(|p| (p.as_rule(), p.as_str()))
-                    .collect::<Vec<_>>()
-            );
-
-            // Extract input, output, and steps from content
-            for (i, item) in content_inner.iter().enumerate() {
-                if i == 0 && item.as_str() == "input" {
-                    // Next item should be the input type
-                    if i + 1 < content_inner.len() {
-                        input_type = content_inner[i + 1].as_str().to_string();
-                    }
-                } else if i == 2 && item.as_str() == "output" {
-                    // Next item should be the output type
-                    if i + 1 < content_inner.len() {
-                        output_type = content_inner[i + 1].as_str().to_string();
-                    }
-                } else if i == 4 && item.as_str() == "steps" {
-                    // Next item should be the pipe_steps
-                    if i + 1 < content_inner.len()
-                        && content_inner[i + 1].as_rule() == Rule::pipe_steps
-                    {
-                        // Extract steps from pipe_steps
-                        for step in content_inner[i + 1].clone().into_inner() {
-                            steps.push(step.as_str().to_string());
-                        }
-                    }
-                }
-            }
-        }
-        Rule::pipeline_content_colon_form => {
-            // For testing
-            #[cfg(test)]
-            eprintln!("Processing colon form. Content: {}", content_pair.as_str());
-
-            let content_text = content_pair.as_str();
-
-            // Simple direct parsing for the exact format in the test
-            if content_text.contains("input")
-                && content_text.contains("output")
-                && content_text.contains("steps")
-            {
-                // Extract the parts using string manipulation if needed
-                let parts: Vec<&str> = content_text.split_whitespace().collect();
-
-                // Find input type
-                for (i, part) in parts.iter().enumerate() {
-                    if *part == "input" && i + 1 < parts.len() {
-                        input_type = parts[i + 1].to_string();
-                    } else if *part == "output" && i + 1 < parts.len() {
-                        output_type = parts[i + 1].to_string();
-                    }
-                }
-
-                // Find steps between { and }
-                if let Some(steps_text) = content_text.split('{').nth(1) {
-                    if let Some(steps_list) = steps_text.split('}').next() {
-                        steps = steps_list
-                            .split(',')
-                            .map(|s| s.trim().to_string())
-                            .filter(|s| !s.is_empty())
-                            .collect();
-                    }
-                }
-            } else {
-                // Parse the colon form (input Type output Type steps { step1, step2 })
-                let mut content_inner = content_pair.into_inner();
-
-                // For testing - simplified to avoid borrow issues
-                #[cfg(test)]
-                eprintln!("Parsing colon form inner elements");
-
-                // Iterate through all pairs to extract what we need
-                while let Some(pair) = content_inner.next() {
-                    match pair.as_str() {
-                        "input" => {
-                            if let Some(type_pair) = content_inner.next() {
-                                input_type = type_pair.as_str().to_string();
-                            }
-                        }
-                        "output" => {
-                            if let Some(type_pair) = content_inner.next() {
-                                output_type = type_pair.as_str().to_string();
-                            }
-                        }
-                        "steps" => {
-                            // The next pair should be the step list
-                            if let Some(step_list) = content_inner.next() {
-                                // Extract all identifiers in the step list
-                                for step_pair in step_list.into_inner() {
-                                    steps.push(step_pair.as_str().to_string());
-                                }
-                            }
-                        }
-                        _ => {
-                            // This catches step identifiers and other things
-                            if pair.as_rule() == Rule::ident {
-                                // Add step identifier if appropriate
-                                steps.push(pair.as_str().to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        _ => {
-            // Unchanged code for handling unexpected rules
-            let span = pair_to_span(&pair_clone);
-            let src = get_named_source(pair_clone.as_str());
-            return Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
-                "Invalid pipeline content format",
-                src,
-                span,
-                "Pipeline content should follow either the curly brace or colon format",
-                "Invalid pipeline format",
-            ))));
+    // Extract parameter names
+    let params_pair = inner.next().unwrap();
+    let mut params = Vec::new();
+    for param in params_pair.into_inner() {
+        if param.as_rule() == Rule::ident {
+            params.push(param.as_str().to_string());
         }
     }
 
-    // For debugging
-    #[cfg(test)]
-    eprintln!(
-        "After parsing: input_type={:?}, output_type={:?}, steps={:?}",
-        input_type, output_type, steps
-    );
+    // Parse the bound expression and body
+    let bound_expr_pair = inner.next().unwrap();
+    let bound_expr = build_expr_ast(bound_expr_pair.into_inner())?;
 
-    if steps.is_empty() {
-        let span = pair_to_span(&pair_clone);
-        let src = get_named_source(pair_clone.as_str());
-        return Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
-            "Pipeline with no transformation steps",
-            src,
-            span,
-            "Pipelines must have at least one transformation step",
-            "No transformation steps",
-        ))));
-    }
+    let body_pair = inner.next().unwrap();
+    let body = build_expr_ast(body_pair.into_inner())?;
 
-    Ok(PipelineDef {
+    Ok(Expression::LetRec(LetRecExpr {
         name,
-        type_param,
-        input_type,
-        output_type,
-        steps,
+        params,
+        bound_expr: Box::new(bound_expr),
+        body: Box::new(body),
+    }))
+}
+
+/// Parses a conditional/ternary expression (e.g., a ? b : c).
+///
+/// # Arguments
+///
+/// * `pair` - A pest Pair representing a conditional expression
+///
+/// # Returns
+///
+/// * `Result<Expression, Box<BorfError>>` - The parsed expression or an error
+pub fn parse_conditional_expr_inline(pair: Pair<Rule>) -> Result<Expression, Box<BorfError>> {
+    let _span = pair_to_span(&pair);
+    let _src = get_named_source(pair.as_str());
+
+    let mut inner = pair.into_inner();
+    let condition_pair = inner.next().unwrap();
+    let condition = build_expr_ast(condition_pair.into_inner())?;
+
+    let if_true_pair = inner.next().unwrap();
+    let if_true = build_expr_ast(if_true_pair.into_inner())?;
+
+    let if_false_pair = inner.next().unwrap();
+    let if_false = build_expr_ast(if_false_pair.into_inner())?;
+
+    Ok(Expression::TernaryOp {
+        condition: Box::new(condition),
+        if_true: Box::new(if_true),
+        if_false: Box::new(if_false),
     })
 }

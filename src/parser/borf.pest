@@ -113,10 +113,10 @@ module_qualified_type = { ident ~ "." ~ ident }
 // Type with parameters (e.g., (s,t,f,x)->y)
 type_with_parameters = { "(" ~ type_expr ~ ("," ~ type_expr)* ~ ")" ~ "->" ~ type_expr }
 
-// Added multi-parameter function type with complex constraints 
+// Added multi-parameter function type with complex constraints
 // (e.g., (s,t,f,x)->y | s:Cat $and t:Cat $and f:s->t $and x:s.O $and y:t.O)
-multi_parameter_function_type = { 
-    "(" ~ param_list ~ ")" ~ "->" ~ type_expr ~ 
+multi_parameter_function_type = {
+    "(" ~ param_list ~ ")" ~ "->" ~ type_expr ~
     ("|" ~ complex_constraint_expr)?
 }
 
@@ -283,8 +283,8 @@ postfix_access_op = { "." } // Matches the dot for field/member access
 // --- Postfix Operator Arguments ---
 // These are parsed *after* the Pratt parser identifies a postfix op
 // function_args are needed for calls
-function_args = { 
-    (expression ~ ("," ~ expression)*)? ~ ")" 
+function_args = {
+    (expression ~ ("," ~ expression)*)? ~ ")"
 } // Matches args list and closing paren
 
 index_args = { expression ~ "]" } // Matches index expression and closing bracket
@@ -302,16 +302,16 @@ if_expr = { "if" ~ expression ~ "then" ~ expression ~ "else" ~ expression }
 // Let recursive bindings (Typically handled as prefix/atom in Pratt)
 // Enhanced to support nested function definitions and parameters
 let_rec = { "let" ~ "rec" ~ binding ~ ("and" ~ binding)* ~ "in" ~ expression }
-binding = { 
+binding = {
     // Simple binding (let x = expr)
     (ident | tuple_pattern) ~ "=" ~ expression |
     // Function binding with parameters (let f x y = expr)
-    ident ~ lambda_params ~ "=" ~ expression 
+    ident ~ lambda_params ~ "=" ~ expression
 }
 
 // Tuples - enhanced to support dollar identifiers
-tuple_expr = { 
-    "(" ~ (expression | dollar_ident) ~ "," ~ (expression | dollar_ident) ~ ("," ~ (expression | dollar_ident))* ~ ")" 
+tuple_expr = {
+    "(" ~ (expression | dollar_ident) ~ "," ~ (expression | dollar_ident) ~ ("," ~ (expression | dollar_ident))* ~ ")"
 }
 
 // Set Expressions (Literals, Comprehensions, Constructors)
@@ -328,9 +328,9 @@ set_literal = { "{" ~ (expression ~ ("," ~ expression)*)? ~ "}" }
 // Generalized Set Comprehension - enhanced for more complex expressions and nested comprehensions
 set_comprehension = { "{" ~ expression ~ "|" ~ comprehension_clauses ~ "}" }
 comprehension_clauses = { comprehension_clause ~ ("," ~ comprehension_clause)* }
-comprehension_clause = { 
-    generator | 
-    constraint_expr | 
+comprehension_clause = {
+    generator |
+    constraint_expr |
     nested_comprehension |
     dynamic_predicate // Added for dynamic predicates
 }

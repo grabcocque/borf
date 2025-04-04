@@ -17,9 +17,7 @@ mod tests;
 
 // Re-export the key types and functions
 pub use ast::*;
-pub use category::parse_category_def;
 pub use directives::{parse_export_directive, parse_import_directive};
-pub use laws::parse_law;
 
 // Explicit imports (remove duplicates)
 // Remove shadowed AST imports, keep only specific error types
@@ -126,7 +124,7 @@ fn map_primary_expr(primary: Pair<Rule>) -> Result<Expression, Box<BorfError>> {
                 Rule::law_identifier => {
                     // Get the name part of law.name
                     let name = inner.into_inner().next().unwrap().as_str().to_string();
-                    Ok(Expression::LawIdentifier { name })
+                    Ok(Expression::AtomExpr(Atom::LawIdentifier(name)))
                 }
                 Rule::int => inner
                     .as_str()
@@ -390,6 +388,7 @@ fn map_postfix_expr(lhs: Expression, op: Pair<Rule>) -> Result<Expression, Box<B
 }
 
 /// Parses a flattened sequence of terms and operators into a TypeExpr AST node.
+#[allow(dead_code)]
 fn build_type_ast(pairs: Pairs<Rule>) -> Result<TypeExpr, Box<BorfError>> {
     TYPE_PRATT_PARSER
         .map_primary(|primary| map_primary_type(primary))
@@ -399,6 +398,7 @@ fn build_type_ast(pairs: Pairs<Rule>) -> Result<TypeExpr, Box<BorfError>> {
 }
 
 /// Helper for map_primary in type Pratt parser.
+#[allow(dead_code)]
 fn map_primary_type(primary: Pair<Rule>) -> Result<TypeExpr, Box<BorfError>> {
     match primary.as_rule() {
         Rule::ident => Ok(TypeExpr::Base(primary.as_str().to_string())),
@@ -440,6 +440,7 @@ fn map_primary_type(primary: Pair<Rule>) -> Result<TypeExpr, Box<BorfError>> {
 }
 
 /// Helper for map_prefix in type Pratt parser.
+#[allow(dead_code)]
 fn map_prefix_type(op: Pair<Rule>, rhs: TypeExpr) -> Result<TypeExpr, Box<BorfError>> {
     let span = pair_to_span(&op);
     let src = get_named_source(op.as_str());
@@ -461,6 +462,7 @@ fn map_prefix_type(op: Pair<Rule>, rhs: TypeExpr) -> Result<TypeExpr, Box<BorfEr
 }
 
 /// Helper for map_infix in type Pratt parser.
+#[allow(dead_code)]
 fn map_infix_type(
     lhs: TypeExpr,
     op: Pair<Rule>,
@@ -573,9 +575,10 @@ fn parse_quantifier_expr(pair: Pair<Rule>) -> Result<Expression, Box<BorfError>>
     }))
 }
 
+/// Placeholder for parsing type calculation expressions |{...}|
 fn parse_type_calculation_expr(pair: Pair<Rule>) -> Result<Expression, Box<BorfError>> {
+    let src = get_named_source(pair.as_str()); // Use pair for src/span
     let span = pair_to_span(&pair);
-    let src = get_named_source(pair.as_str());
     Err(Box::new(BorfError::NotYetImplemented {
         feature: "parse_type_calculation_expr".to_string(),
         src: Some(src),
@@ -778,7 +781,7 @@ fn parse_statement(pair: Pair<Rule>) -> Result<Option<TopLevelItem>, Box<BorfErr
         _ => {
             let rule_str = format!("{:?}", pair.as_rule());
             let span = pair_to_span(&pair);
-            let src = get_named_source(pair.as_str()); // Get source for specific pair
+            let src = get_named_source(pair.as_str());
 
             Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
                 &format!("Unexpected statement type: {}", rule_str),
@@ -820,4 +823,251 @@ pub fn get_named_source(input: &str) -> NamedSource<String> {
     } else {
         NamedSource::new("unknown.borf", input.to_string())
     }
+}
+
+/// Parses a declaration (`mapping_decl` rule) into a Declaration AST node.
+/// NOTE: Initial simple version, identifier list parsing might need refinement.
+fn parse_declaration(pair: Pair<Rule>) -> Result<Declaration, Box<BorfError>> {
+    let span = pair_to_span(&pair);
+    let src = get_named_source(pair.as_str());
+    let mut inner_pairs = pair.clone().into_inner();
+
+    // 1. Extract Identifiers (Simplified: assumes first pair is the name(s))
+    //    TODO: Properly handle comma-separated list `a, b : T` parsing.
+    let mut names = Vec::new();
+    let identifier_part = inner_pairs.next().ok_or_else(|| {
+        // Error reporting for missing identifier part (use overall span)
+        let _err_src = get_named_source(pair.as_str()); // Use original pair for context
+        let _err_span = pair_to_span(&pair);
+        Box::new(BorfError::SyntaxError(SyntaxError::new(
+            "Missing identifier part in declaration",
+            src.clone(),
+            span,
+            "Expected name(s) or law identifier.",
+            "Missing name",
+        )))
+    })?;
+
+    // Simple approach: just take the text of the first part. This is likely WRONG for lists.
+    names.push(identifier_part.as_str().to_string());
+
+    // 2. Parse Optional Parts (: type, = expr, | expr)
+    let mut type_annotation = None;
+    let mut definition = None;
+    let mut constraint = None;
+
+    // Loop to parse optional parts: Type Annotation (: T), Definition (= E), Constraint (| C)
+    loop {
+        match inner_pairs.peek().map(|p| p.as_str()) {
+            Some(":") => {
+                inner_pairs.next(); // Consume ':'
+                let type_pair = inner_pairs.next().ok_or_else(|| {
+                    let err_src = get_named_source(pair.as_str());
+                    let err_span = span;
+                    Box::new(BorfError::SyntaxError(SyntaxError::new(
+                        "Expected type expression after ':'",
+                        err_src,
+                        err_span,
+                        "Expected a type.",
+                        "Missing type",
+                    )))
+                })?;
+                if type_pair.as_rule() == Rule::type_expr {
+                    type_annotation = Some(build_type_ast(type_pair.into_inner())?);
+                } else {
+                    let err_src = get_named_source(type_pair.as_str());
+                    let err_span = pair_to_span(&type_pair); // Pass reference
+                    return Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
+                        "Invalid token after ':'",
+                        err_src,
+                        err_span,
+                        "Expected a type expression.",
+                        "Invalid type annotation",
+                    ))));
+                }
+            }
+            Some("=") => {
+                inner_pairs.next(); // Consume '='
+                let expr_pair = inner_pairs.next().ok_or_else(|| {
+                    let err_src = get_named_source(pair.as_str());
+                    let err_span = span;
+                    Box::new(BorfError::SyntaxError(SyntaxError::new(
+                        "Expected expression after '='",
+                        err_src,
+                        err_span,
+                        "Expected an expression.",
+                        "Missing definition",
+                    )))
+                })?;
+                if expr_pair.as_rule() == Rule::expression {
+                    definition = Some(build_expr_ast(expr_pair.into_inner())?);
+                } else {
+                    let err_src = get_named_source(expr_pair.as_str());
+                    let err_span = pair_to_span(&expr_pair); // Pass reference
+                    return Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
+                        "Invalid token after '='",
+                        err_src,
+                        err_span,
+                        "Expected an expression.",
+                        "Invalid definition",
+                    ))));
+                }
+            }
+            Some("|") => {
+                inner_pairs.next(); // Consume '|'
+                let constraint_pair = inner_pairs.next().ok_or_else(|| {
+                    let err_src = get_named_source(pair.as_str());
+                    let err_span = span;
+                    Box::new(BorfError::SyntaxError(SyntaxError::new(
+                        "Expected expression after '|'",
+                        err_src,
+                        err_span,
+                        "Expected an expression.",
+                        "Missing constraint",
+                    )))
+                })?;
+                if constraint_pair.as_rule() == Rule::constraint_expr {
+                    let expr_pair = constraint_pair.into_inner().next().unwrap();
+                    constraint = Some(build_expr_ast(expr_pair.into_inner())?);
+                } else {
+                    let err_src = get_named_source(constraint_pair.as_str());
+                    let err_span = pair_to_span(&constraint_pair); // Pass reference
+                    return Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
+                        "Invalid token after '|'",
+                        err_src,
+                        err_span,
+                        "Expected an expression for constraint.",
+                        "Invalid constraint",
+                    ))));
+                }
+            }
+            Some(";") => {
+                inner_pairs.next(); // Consume ';'
+                break; // End of declaration parts
+            }
+            Some(other) => {
+                // Unexpected token string
+                return Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
+                    &format!("Unexpected token '{}' in declaration", other),
+                    get_named_source(inner_pairs.peek().unwrap().as_str()), // Get source from peeked ref
+                    pair_to_span(&inner_pairs.peek().unwrap()), // Add '&' to fix the issue
+                    "Expected ':', '=', '|', or ';'.",
+                    "Invalid declaration structure",
+                ))));
+            }
+            None => {
+                // Reached end of inner pairs unexpectedly (missing semicolon)
+                let err_src = get_named_source(pair.as_str());
+                let err_span = span;
+                return Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
+                    "Unexpected end of declaration",
+                    err_src,
+                    err_span,
+                    "Missing ';'?",
+                    "Incomplete declaration",
+                ))));
+            }
+        }
+    }
+
+    // Final check for any remaining tokens (should not happen if loop logic is correct)
+    if let Some(extra_pair) = inner_pairs.next() {
+        // If we are here, the loop finished but there are still tokens.
+        // This means a semicolon was likely missing before these tokens.
+        let err_src = get_named_source(extra_pair.as_str());
+        let err_span = pair_to_span(&extra_pair); // Pass reference
+        return Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
+            &format!("Unexpected trailing token: {:?}", extra_pair.as_rule()),
+            err_src,
+            err_span,
+            "Expected ';' to terminate the declaration.",
+            "Missing semicolon or extra tokens",
+        ))));
+    }
+
+    Ok(Declaration {
+        names,
+        type_annotation,
+        definition,
+        constraint,
+    })
+}
+
+/// Helper function stubs (to be implemented)
+#[allow(dead_code)]
+fn parse_module_def(pair: Pair<Rule>) -> Result<TopLevelItem, Box<BorfError>> {
+    let mut inner_pairs = pair.into_inner();
+    let name_pair = inner_pairs.next().unwrap(); // First is always ident
+    let name = name_pair.as_str().to_string();
+
+    let mut elements = Vec::new();
+
+    for element_pair in inner_pairs {
+        // Remaining pairs are elements or delimiters {}
+        match element_pair.as_rule() {
+            Rule::module_element => {
+                let decl_pair = element_pair.into_inner().next().unwrap(); // module_element contains mapping_decl
+                if decl_pair.as_rule() == Rule::mapping_decl {
+                    let declaration = parse_declaration(decl_pair)?;
+                    elements.push(ModuleElement::Declaration(declaration));
+                } else {
+                    // Handle unexpected content within module_element if necessary
+                    return Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
+                        &format!(
+                            "Unexpected rule inside module_element: {:?}",
+                            decl_pair.as_rule()
+                        ),
+                        get_named_source(decl_pair.as_str()),
+                        pair_to_span(&decl_pair),
+                        "Expected a declaration.",
+                        "Invalid module element",
+                    ))));
+                }
+            }
+            Rule::COMMENT => {}    // Ignore comments
+            Rule::WHITESPACE => {} // Ignore whitespace
+            // Skip delimiters that are handled by the grammar
+            _ => {}
+        }
+    }
+
+    Ok(TopLevelItem::Module(ModuleDef { name, elements }))
+}
+
+#[allow(dead_code)]
+fn parse_primitive_def(pair: Pair<Rule>) -> Result<TopLevelItem, Box<BorfError>> {
+    // Process the primitive elements
+    let mut inner = pair.into_inner();
+    let name = inner.next().unwrap().as_str().to_string(); // Get the identifier
+
+    // Process the elements within the primitive block
+    let mut elements = Vec::new();
+    for element_pair in inner {
+        if element_pair.as_rule() == Rule::primitive_element {
+            for inner_elem in element_pair.into_inner() {
+                if inner_elem.as_rule() == Rule::mapping_decl {
+                    let decl = parse_declaration(inner_elem)?;
+                    elements.push(PrimitiveElement::Declaration(decl));
+                }
+            }
+        }
+    }
+
+    // Create a new PrimitiveDef
+    Ok(TopLevelItem::Primitive(PrimitiveDef { name, elements }))
+}
+
+#[allow(dead_code)]
+fn handle_parse_error(pair: Pair<Rule>) -> Box<BorfError> {
+    // Use original pair for context
+    let err_src = get_named_source(pair.as_str());
+    let err_span = pair_to_span(&pair);
+
+    Box::new(BorfError::SyntaxError(SyntaxError::new(
+        &format!("Failed to parse: {:?}", pair.as_rule()),
+        err_src,
+        err_span,
+        "The input could not be parsed according to the grammar.",
+        "Parse error",
+    )))
 }

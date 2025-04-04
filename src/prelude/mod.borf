@@ -4,6 +4,7 @@
                  and symbol-based entity classification.
 ]]
 
+
 --[[ Placeholder Primitives (Assumed built-in or defined elsewhere) ]]
 @Primitives: {
   -- Placeholder: Checks if a linear resource has been used exactly once.
@@ -33,6 +34,7 @@
   -- Placeholder: Checks if a set is non-empty.
   $ne: {Any} -> Bool;
 };
+
 
 --[[ Type system foundations ]]
 @T: {  -- Type universe
@@ -69,7 +71,9 @@
   law.linear = $forall a $in T,x $in !a: Primitives.use_once(x);
 };
 
-@R: {  -- Relation structure
+
+--[[ Relation structure ]]
+@R: {
   rel: T*T->Bool;                  -- Basic relation between types
   $omega: T*T->Bool;               -- Compatibility relation (symbolic)
 
@@ -92,6 +96,7 @@
   law.veq_vs_seq = $forall x,y: x $seq y => x $veq y;  -- Structural implies value equality
   law.seq_deeper = $exists x,y: x $veq y $and $not(x $seq y);  -- But not vice versa
 };
+
 
 --[[ Core categorical structures ]]
 @Cat: {  -- Category
@@ -120,7 +125,9 @@
   hom: O*O->{M} = \a,b.{f $in M | dom(f) $veq a $and cod(f) $veq b};
 };
 
-@Mod: {  -- Module system
+
+--[[ Module system ]]
+@Mod: {
   E;                             -- Entities
   $tau: E->Sym;                  -- Type of entities (Now returns a Symbol)
   $delta: E*E->Bool;             -- Dependency relation
@@ -151,7 +158,9 @@
   exp = {e $in E | vis(e)};        -- Exported entities
 };
 
-@Grph: {  -- Graph structure
+
+--[[ Graph structure ]]
+@Grph: {
   N;                             -- Nodes
   E;                             -- Edges
   src,tgt: E->N;                 -- Structure maps
@@ -185,7 +194,9 @@
   law.node_edge = $forall n $in N: $lambdaE(loop(n)) R.rel $lambdaN(n);
 };
 
-@Wire: {  -- Wiring diagram
+
+--[[ Wiring diagram ]]
+@Wire: {
   B;                             -- Boxes
   P;                             -- Ports
   box: P->B;                     -- Box assignment
@@ -211,7 +222,9 @@
   law.sig = $forall b $in B,p $in P: box(p) $veq b => p $in sig(b).in $or p $in sig(b).out;
 };
 
-@Net: {  -- Interaction net
+
+--[[ Interaction net ]]
+@Net: {
   B;                             -- Boxes
   P;                             -- Ports
   box: P->B;                     -- Box assignment
@@ -250,7 +263,9 @@
   law.conns = $forall (a,r) $in R: conn(a) $veq conn(r);
 };
 
-@IO: {  -- IO system
+
+--[[ IO system ]]
+@IO: {
   B;                             -- Boxes
   P;                             -- Ports
   box: P->B;                     -- Box assignment
@@ -290,7 +305,9 @@
   law.complete = $forall n $in Net: Red.normal(n) => unused(n) $seq {}; -- Assuming unused needs implementation
 };
 
-@Rewrite: {  -- Transformation rules
+
+--[[ Transformation rules ]]
+@Rewrite: {
   B; P; $pi: P->Bool; w: P->P;    -- Required for Net compatibility
   $alpha;                         -- Active pairs from Net
   $rho;                           -- Replacement from Net
@@ -324,7 +341,9 @@
   law.io = $forall a $in $alpha,b $in {x $in B | IO.io_agent(x)}: Primitives.a_uses(a,b) => io_rule(a) $seq rewrite(a);
 };
 
-@Red: {  -- Reduction system
+
+--[[ Reduction system ]]
+@Red: {
   B; P; $pi: P->Bool; w: P->P;    -- Required for Net compatibility
   $alpha;                         -- Active pairs from Net
   rewrite;                        -- From Rewrite (Interface/Signature)
@@ -353,6 +372,8 @@
   io_strat: Net->$alpha = \n.io_first(Net.$alpha(n));
 };
 
+
+--[[ Termination analysis ]]
 @Term: {  -- Termination analysis
   B; P; $pi: P->Bool; w: P->P;    -- Required for Net compatibility
   step; red; normal; hist;        -- From Red (Interfaces/Signatures)
@@ -381,7 +402,9 @@
   io_term: Net->Bool = \n.term(n) $and unstuck(n);
 };
 
-@Xform: {  -- Transformation framework
+
+--[[ Transformation framework ]]
+@Xform: {
   -- Generic transformation (Interface/Signature)
   xform: (s,t,f,x)->y | s:Cat $and t:Cat $and f:s->t $and x:s.O $and y:t.O;
 
@@ -412,6 +435,8 @@
   files: [S]->[Net] = \fs.map(\f.Primitives.safe_pipeline(f),fs);
 };
 
+
+--[[ Core module ]]
 @Core: {  -- Core module
   -- Required for Mod compatibility
   E;                             -- Entities
@@ -452,4 +477,6 @@
   vis = \e.true;
 };
 
+
+--[[ Make the prelude available for import as a module ]]
 export Core;
