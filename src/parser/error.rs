@@ -7,7 +7,8 @@ use thiserror::Error;
 pub use miette::{NamedSource, SourceSpan};
 
 // Forward declare the Rule enum from the parser module
-pub use pest::RuleType as Rule;
+// Removed conflicting re-export
+// pub use pest::RuleType as Rule;
 
 /// Main source cache to keep track of source files for better error reporting
 #[derive(Debug, Default, Clone)]
@@ -155,6 +156,19 @@ pub enum BorfError {
         help("An error occurred during the execution of the interaction net.")
     )]
     RuntimeError(String),
+
+    #[error("Feature not yet implemented: {feature}")]
+    #[diagnostic(
+        code(borf::not_implemented),
+        help("This part of the parser or AST building is not yet complete.")
+    )]
+    NotYetImplemented {
+        feature: String, // Name of the feature/function
+        #[source_code]
+        src: Option<NamedSource<String>>,
+        #[label("Not implemented here")]
+        span: Option<SourceSpan>,
+    },
 }
 
 // --- Category Parsing Errors ---

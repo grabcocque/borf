@@ -4,10 +4,12 @@
 //! mapping declarations, structure mappings, and function definitions.
 
 use super::ast::{
-    CategoryDef, CategoryElement, DomainType, ExpressionType, FunctionDef, MappingDecl,
+    CategoryDef, CategoryElement, Constraint, DomainType, ExpressionType, FunctionDef, MappingDecl,
     MappingType, ObjectDecl, StructureMapping,
 };
 use super::error::{BorfError, SyntaxError};
+use crate::parser::ast::Constraint;
+use crate::parser::error::{CategoryParseError, Constraint};
 use crate::parser::laws::{parse_constraint_expr, parse_law};
 use crate::parser::Rule;
 use crate::parser::{common_expr::parse_expression, get_named_source, pair_to_span};
@@ -25,56 +27,61 @@ use pest::iterators::Pair;
 ///
 /// * `Result<CategoryDef, Box<BorfError>>` - The parsed category definition or an error
 pub fn parse_category_def(pair: Pair<Rule>) -> Result<CategoryDef, Box<BorfError>> {
-    let mut inner = pair.into_inner();
-    let name = inner.next().unwrap().as_str().to_string();
+    let span = pair_to_span(&pair);
+    let src = get_named_source(pair.as_str());
+    let mut inner_pairs = pair.into_inner();
 
-    // Handle optional base category (in angle brackets)
-    let next_token = inner.peek().unwrap().as_rule();
-    let (base_category, elements_pair) = if next_token == Rule::ident {
-        // This could be a base category in angle brackets syntax
-        let base = inner.next().unwrap().as_str().to_string();
-        (Some(base), inner.next().unwrap())
+    // Extract category name
+    let name_pair = inner_pairs.next().unwrap(); // Expecting ident
+    let name = name_pair.as_str().to_string();
+
+    // Optional base category
+    let base_category = if inner_pairs
+        .peek()
+        .map_or(false, |p| p.as_rule() == Rule::ident)
+    {
+        Some(inner_pairs.next().unwrap().as_str().to_string())
     } else {
-        // No base category
-        (None, inner.next().unwrap())
+        None
     };
 
     // Parse category elements
     let mut elements = Vec::new();
-    for element in elements_pair.into_inner() {
+    // Variable no longer needed for this simplified loop
+    // let mut codomain_pair: Option<Pair<Rule>> = None;
+
+    for element in inner_pairs {
         match element.as_rule() {
             Rule::object_decl => {
-                elements.push(CategoryElement::ObjectDecl(parse_object_decl(element)?))
+                let names = element
+                    .into_inner()
+                    .map(|ident_pair| ident_pair.as_str().to_string())
+                    .collect();
+                elements.push(CategoryElement::ObjectDecl(ObjectDecl { names }));
             }
             Rule::mapping_decl => {
-                elements.push(CategoryElement::MappingDecl(parse_mapping_decl(element)?))
+                // TODO: Implement mapping_decl parsing based on its new unified structure
+                // Needs to handle optional type, optional value, optional constraint
+                elements.push(CategoryElement::MappingDecl(parse_mapping_decl(element)?));
             }
-            Rule::law_decl => elements.push(CategoryElement::LawDecl(parse_law(element)?)),
-            Rule::structure_mapping_decl => elements.push(CategoryElement::StructureMapping(
-                parse_structure_mapping(element)?,
-            )),
-            Rule::function_def_decl => {
-                elements.push(CategoryElement::FunctionDef(parse_function_def(element)?))
-            }
-            Rule::constraint_decl => {
-                let constraint_pair = element.into_inner().next().unwrap();
-                elements.push(CategoryElement::ConstraintDecl(parse_constraint_expr(
-                    constraint_pair,
-                )?))
-            }
+            Rule::comment_decl => { /* Skip comments */ }
+            // Removed old/specific rules:
+            // Rule::law_decl => ...
+            // Rule::structure_mapping_decl => ...
+            // Rule::function_def_decl => ...
+            // Rule::constraint_decl => ...
             _ => {
-                // Create better error with source location
-                let rule_str = format!("{:?}", element.as_rule());
-                let span = pair_to_span(&element);
-                let src = get_named_source(element.as_str());
-
-                return Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
-                    &format!("Unexpected category element: {}", rule_str),
-                    src,
-                    span,
-                    "Only object declarations, mapping declarations, laws, structure mappings, function definitions, and constraint declarations are allowed in a category",
-                    &format!("Unexpected {} here", rule_str)
-                ))));
+                let element_span = pair_to_span(&element);
+                let element_src = get_named_source(element.as_str());
+                return Err(Box::new(BorfError::MalformedCategory(
+                    CategoryParseError::new(
+                        &format!("Unexpected element in category definition: {:?}", element.as_rule()),
+                        element_src,
+                        element_span,
+                        "Expected object declaration, mapping, law, function, or structure mapping.",
+                        "Unexpected element"
+                    )
+                )));
             }
         }
     }
@@ -129,54 +136,22 @@ pub fn parse_object_decl(pair: Pair<Rule>) -> Result<ObjectDecl, Box<BorfError>>
 ///
 /// * `Result<MappingDecl, Box<BorfError>>` - The parsed mapping declaration or an error
 pub fn parse_mapping_decl(pair: Pair<Rule>) -> Result<MappingDecl, Box<BorfError>> {
-    let mut inner = pair.into_inner();
-    let names_pair = inner.next().unwrap();
-    let names: Vec<String> = names_pair
-        .into_inner()
-        .map(|p| p.as_str().to_string())
-        .collect();
-
-    let domain_pair = inner.next().unwrap();
-    let domain = domain_pair.as_str().to_string();
-    let domain_type = if domain_pair.as_rule() == Rule::set_literal {
-        DomainType::SetComprehension
-    } else {
-        DomainType::Simple
-    };
-
-    let mapping_type_pair = inner.next().unwrap();
-    let mapping_type = match mapping_type_pair.as_str() {
-        "->" => MappingType::To,
-        "$subseteq" => MappingType::Subseteq,
-        "<->" => MappingType::Bidirectional,
-        "*" => MappingType::Times,
-        "$teq" => MappingType::TypeEquiv,
-        "$veq" => MappingType::ValueEquiv,
-        "$seq" => MappingType::StructEquiv,
-        "$ceq" => MappingType::CatEquiv,
-        "$omega" => MappingType::Compatibility,
-        _ => {
-            let span = pair_to_span(&mapping_type_pair);
-            let src = get_named_source(mapping_type_pair.as_str());
-            return Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
-                &format!("Unknown mapping type: {}", mapping_type_pair.as_str()),
-                src,
-                span,
-                "Mapping types must be one of: ->, $subseteq, <->, *, $teq, $veq, $seq, $ceq, $omega",
-                "Invalid mapping type"
-            ))));
-        }
-    };
-
-    let codomain = inner.next().unwrap().as_str().to_string();
-
-    Ok(MappingDecl {
-        names,
-        domain,
-        domain_type,
-        mapping_type,
-        codomain,
-    })
+    let span = pair_to_span(&pair);
+    let src = get_named_source(pair.as_str());
+    Err(Box::new(BorfError::NotYetImplemented {
+        feature: "parse_mapping_decl".to_string(),
+        src: Some(src),
+        span: Some(span),
+    }))
+    // Placeholder implementation
+    // let mut inner = pair.into_inner();
+    // let name_part = inner.next().unwrap();
+    // let name = name_part.as_str().to_string();
+    // let mut type_expr: Option<TypeExpr> = None;
+    // let mut value_expr: Option<Expression> = None;
+    // let mut constraint_expr: Option<Expression> = None;
+    // // ... logic to parse optional parts based on peek/next ...
+    // Ok(MappingDecl { /* fields based on parsed parts */ })
 }
 
 /// Parses a structure mapping from a pest pair.
@@ -270,4 +245,18 @@ pub fn parse_function_def(pair: Pair<Rule>) -> Result<FunctionDef, Box<BorfError
         params: vec![], // Parameters are not parsed by function_def_decl in grammar
         body,
     })
+}
+
+// --- Constraint Parsing (Placeholder - Needs to use Pratt Parser) ---
+
+/// Placeholder function for parsing a constraint expression.
+/// TODO: This should eventually use the build_expr_ast Pratt parser function.
+pub fn parse_constraint(pair: Pair<Rule>) -> Result<Constraint, Box<BorfError>> {
+    let span = pair_to_span(&pair);
+    let src = get_named_source(pair.as_str());
+    Err(Box::new(BorfError::NotYetImplemented {
+        feature: "parse_constraint".to_string(),
+        src: Some(src),
+        span: Some(span),
+    }))
 }

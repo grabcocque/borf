@@ -3,6 +3,58 @@
 //! This module contains the type definitions that make up the AST for Borf,
 //! including top-level items, category elements, constraints, and expressions.
 
+/// Represents infix operators.
+#[derive(Debug, Clone, PartialEq)]
+pub enum InfixOperator {
+    // Composition
+    Compose,      // .
+    ComposeRight, // >>
+    Pipe,         // |>
+    // Arithmetic
+    Multiply, // *
+    Divide,   // /
+    Add,      // +
+    Subtract, // -
+    // Set
+    Union,     // $cup
+    Intersect, // $cap
+    Subset,    // $subseteq
+    // Comparison
+    Equal,         // = or == or === (Semantic distinction needed later)
+    TypeEqual,     // $teq
+    ValueEqual,    // $veq
+    StructEqual,   // $seq
+    CategoryEqual, // $ceq
+    Subtype,       // <::
+    GreaterThan,   // >
+    LessThan,      // <
+    GreaterEqual,  // >=
+    LessEqual,     // <=
+    In,            // $in
+    Compatible,    // $omega
+    // Logical
+    And,     // $and
+    Or,      // $or
+    Implies, // =>
+    Iff,     // $iff
+}
+
+/// Represents prefix operators.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PrefixOperator {
+    Not,      // $not
+    Optional, // ? (Potentially for types/expressions)
+    Linear,   // ! (Potentially for types/expressions)
+}
+
+/// Represents postfix operators.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PostfixOperator {
+    FieldAccess(String),           // .ident
+    FunctionCall(Vec<Expression>), // (args)
+    Index(Box<Expression>),        // [expr]
+}
+
 /// Represents a top-level item in the Borf program.
 ///
 /// Top-level items include category definitions, pipeline definitions,
@@ -12,6 +64,8 @@
 pub enum TopLevelItem {
     /// A category definition with objects, mappings, laws, and other elements
     Category(CategoryDef),
+    /// A primitive block definition
+    Primitive(PrimitiveDef), // Added for primitive_declaration
     /// A pipeline definition with input type, output type, and transformation steps
     Pipeline(PipelineDef),
     /// A pipe expression representing a sequence of transformations
@@ -24,6 +78,8 @@ pub enum TopLevelItem {
     Export(ExportDirective),
     /// An import directive for including external modules
     Import(ImportDirective),
+    /// A standalone expression statement
+    ExpressionStatement(Expression),
 }
 
 /// Represents a category definition in the Borf language.
@@ -291,7 +347,7 @@ pub enum ConstraintExpr {
 /// Represents a set expression in a constraint.
 ///
 /// Set expressions can be either set comprehensions or Cartesian products.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SetExpr {
     /// A set comprehension {elements | condition}
     Comprehension {
@@ -318,7 +374,7 @@ pub enum SetExpr {
 /// Represents a condition in a set comprehension.
 ///
 /// Set conditions specify constraints on the elements in a set comprehension.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SetCondition {
     /// First function in the condition
     pub func1: String,
@@ -462,7 +518,7 @@ pub struct FunctionDef {
 // --- Set Expression Related Types ---
 
 /// Represents a literal set enumeration.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SetLiteral {
     /// The elements of the set.
     /// Using Expression for now, as elements can be idents, ints, symbols, tuples according to grammar.
@@ -470,7 +526,7 @@ pub struct SetLiteral {
 }
 
 /// Represents a set comprehension.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SetComprehension {
     /// The variable being bound.
     pub variable: String,
@@ -483,7 +539,7 @@ pub struct SetComprehension {
 }
 
 /// Represents a binary operation on sets.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SetOperation {
     /// Left-hand side set identifier.
     pub lhs: String,
@@ -495,20 +551,20 @@ pub struct SetOperation {
 
 // --- Expression AST Nodes (Lambda, If, LetRec, Composition) ---
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LambdaExpr {
     pub params: Vec<String>,
     pub body: Box<Expression>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct IfExpr {
     pub condition: Box<Expression>,
     pub then_branch: Box<Expression>,
     pub else_branch: Box<Expression>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LetRecExpr {
     pub name: String,
     pub params: Vec<String>,
@@ -525,25 +581,106 @@ pub struct CompositionExprRhs {
 }
 
 /// Represents the different forms an expression can take based on the grammar.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     AtomExpr(Atom), // Renamed variant slightly to avoid name clash if Atom type is also named Atom
     Lambda(LambdaExpr),
     If(IfExpr),
     LetRec(LetRecExpr),
-    Composition(CompositionExprRhs),
+    Quantifier(QuantifierExpr), // Added for quantifier expressions
+    TypeCalculation(TypeCalculationExpr), // Added for |{...}|
+
+    // Variants for Pratt Parser output
+    InfixOp {
+        lhs: Box<Expression>,
+        op: InfixOperator,
+        rhs: Box<Expression>,
+    },
+    PrefixOp {
+        op: PrefixOperator,
+        operand: Box<Expression>,
+    },
+    PostfixOp {
+        operand: Box<Expression>,
+        op: PostfixOperator,
+    },
+    TernaryOp {
+        // Specific structure for ternary a ? b : c
+        condition: Box<Expression>,
+        if_true: Box<Expression>,
+        if_false: Box<Expression>,
+    },
 }
 
 /// Represents the atomic building blocks of expressions.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Atom {
     FunctionApp { func: String, args: Vec<Expression> },
     ModuleAccess { path: Vec<String> }, // e.g., Mod.Sub.func
     Identifier(String),
     Integer(i64),
+    Boolean(bool), // Added Boolean
     Symbol(String),
-    Tuple(Box<Expression>, Box<Expression>), // Assuming 2-tuple based on grammar
-    Set(Box<SetExpr>),                       // Added Set variant
-    Paren(Box<Expression>),                  // Parenthesized expression
-    StringLiteral(String),                   // For `"ident"` in grammar
+    Tuple(Vec<Expression>), // Allow variable length tuples
+    Set(Box<SetExpr>),      // Added Set variant
+    Paren(Box<Expression>), // Parenthesized expression
+    StringLiteral(String),  // For `"ident"` in grammar
+}
+
+/// Placeholder for Quantifier expressions
+#[derive(Debug, Clone, PartialEq)]
+pub struct QuantifierExpr {
+    pub quantifier: String, // "$forall" or "$exists" or "$exists!"
+    pub vars: Vec<String>,
+    pub domain: Box<Expression>,
+    pub condition: Option<Box<Expression>>, // Constraint expression
+    pub body: Box<Expression>,
+}
+
+/// Placeholder for Type Calculation expressions |{...}|
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypeCalculationExpr {
+    pub set: SetExpr, // Contains the inner set expression
+}
+
+/// Represents a primitive block definition.
+#[derive(Debug, Clone)]
+pub struct PrimitiveDef {
+    pub name: String,
+    pub elements: Vec<PrimitiveElement>, // Assuming elements are like category elements for now
+}
+
+/// Represents elements within a primitive block.
+/// Currently using MappingDecl, adjust if primitives have different structure.
+#[derive(Debug, Clone)]
+pub enum PrimitiveElement {
+    Mapping(MappingDecl),
+    // Add other primitive element types if necessary
+}
+
+// --- NEW Type Expression AST Node ---
+/// Represents a parsed type expression.
+#[derive(Debug, Clone, PartialEq)]
+pub enum TypeExpr {
+    /// A base type identifier (e.g., `T`, `Bool`, `MyType`).
+    Base(String),
+    /// A symbolic type (`Sym`).
+    Sym,
+    /// A product type (e.g., `A * B`).
+    Product(Box<TypeExpr>, Box<TypeExpr>),
+    /// An arrow (function) type (e.g., `A -> B`).
+    Arrow(Box<TypeExpr>, Box<TypeExpr>),
+    /// A set type (e.g., `{A}`).
+    Set(Box<TypeExpr>),
+    /// A list type (e.g., `[A]`).
+    List(Box<TypeExpr>),
+    /// An optional type (e.g., `?A`).
+    Optional(Box<TypeExpr>),
+    /// A linear type (e.g., `!A`).
+    Linear(Box<TypeExpr>),
+    /// A tuple type (e.g., `(A, B, C)`).
+    Tuple(Vec<TypeExpr>),
+    /// Placeholder for errors or unparsed types during development.
+    /// TODO: Remove or refine error handling.
+    Unknown(String),
 }

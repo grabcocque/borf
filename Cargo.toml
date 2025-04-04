@@ -16,6 +16,7 @@ path = "src/main.rs"
 [dependencies]
 pest = "2.7.10"
 pest_derive = "2.7.10"
+lazy_static = "1.4.0"
 
 # Error handling
 thiserror = "1.0"
