@@ -3,170 +3,200 @@
 //! This module provides functions for parsing laws (composition, forall, exists),
 //! constraints, and related expressions.
 
-use super::ast::{Constraint, ConstraintExpr, Law, SetCondition, SetExpr};
-use crate::error::{BorfError, SyntaxError};
-use crate::parser::{get_named_source, pair_to_span, Rule};
+use super::ast::{Constraint, ConstraintExpr, Law, LawDefinition, SetCondition, SetExpr};
+use super::error::{BorfError, SyntaxError};
+use super::Rule;
+use super::{get_named_source, pair_to_span};
 use pest::iterators::Pair;
 
-/// Parses a law declaration from a pest pair.
+/// Parses a named law declaration from a pest pair.
 ///
-/// Laws can be composition laws, universal quantifications, or existential quantifications.
+/// Expects the input pair to be a `law_decl` rule, which must contain a `named_law` rule.
 ///
 /// # Arguments
 ///
-/// * `pair` - A pest Pair representing a law
+/// * `pair` - A pest Pair representing a `law_decl` rule
 ///
 /// # Returns
 ///
-/// * `Result<Law, Box<BorfError>>` - The parsed law or an error
+/// * `Result<Law, Box<BorfError>>` - The parsed named law or an error
 pub fn parse_law(pair: Pair<Rule>) -> Result<Law, Box<BorfError>> {
-    let inner = pair.into_inner().next().unwrap();
-    match inner.as_rule() {
-        Rule::composition_law => {
-            let mut parts = inner.into_inner();
-            let lhs = parts.next().unwrap().as_str().to_string();
-            // Skip the $comp part
-            let middle = parts.next().unwrap().as_str().to_string();
-            // Skip the === part
-            let rhs = parts.next().unwrap().as_str().to_string();
-            Ok(Law::Composition {
-                lhs,
-                op: "$comp".to_string(),
-                middle,
-                rhs,
-            })
-        }
-        Rule::forall_law => {
-            let forall_expr = inner.into_inner().next().unwrap();
-            parse_forall_expr(forall_expr)
-        }
-        Rule::exists_law => {
-            let exists_expr = inner.into_inner().next().unwrap();
-            parse_exists_expr(exists_expr)
+    // law_decl should contain exactly one named_law
+    let pair_clone = pair.clone(); // Clone for potential error reporting
+    let named_law_pair = pair.into_inner().next().ok_or_else(|| {
+        let span = pair_to_span(&pair_clone); // Use the clone here
+        let src = get_named_source(pair_clone.as_str()); // Use the clone here
+        Box::new(BorfError::SyntaxError(SyntaxError::new(
+            "Empty law declaration",
+            src,
+            span,
+            "Law declarations cannot be empty.",
+            "Empty law",
+        )))
+    })?;
+
+    if named_law_pair.as_rule() != Rule::named_law {
+        let span = pair_to_span(&named_law_pair);
+        let src = get_named_source(named_law_pair.as_str());
+        return Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
+            &format!(
+                "Expected a named_law within law_decl, found {:?}",
+                named_law_pair.as_rule()
+            ),
+            src,
+            span,
+            "Internal error: law_decl grammar rule should enforce containing only named_law.",
+            "Invalid law structure",
+        ))));
+    }
+
+    // Parse the parts of named_law: "law." ~ ident ~ "=" ~ (definition) ~ ";"
+    let mut named_parts = named_law_pair.into_inner();
+    let name_pair = named_parts.next().unwrap(); // Should be the ident after "law."
+    let name = name_pair.as_str().to_string();
+
+    let definition_pair = named_parts.next().unwrap(); // The expression after "="
+
+    let definition = match definition_pair.as_rule() {
+        Rule::forall_expr => parse_forall_expr_definition(definition_pair)?,
+        Rule::exists_expr => parse_exists_expr_definition(definition_pair)?,
+        Rule::composition_law_expr => parse_composition_law_definition(definition_pair)?,
+        Rule::constraint_expr => {
+            // Parse the constraint expression and wrap it in LawDefinition::Constraint
+            let constraint = parse_constraint_expr(definition_pair)?;
+            LawDefinition::Constraint(constraint)
         }
         _ => {
-            let span = pair_to_span(&inner);
-            let src = get_named_source(inner.as_str());
-            Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
+            // This case should technically be unreachable if the grammar is correct
+            let span = pair_to_span(&definition_pair);
+            let src = get_named_source(definition_pair.as_str());
+            return Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
                 &format!(
-                    "Expected composition law or quantified expression, found {:?}",
-                    inner.as_rule()
+                    "Unexpected definition type {:?} for named law '{}'",
+                    definition_pair.as_rule(),
+                    name
                 ),
                 src,
                 span,
-                "Laws must be either composition laws (e.g., a . b = c) or quantified expressions (forall/exists)",
-                "Invalid law",
-            ))))
+                "Internal Error: Grammar mismatch in named_law rule.",
+                "Invalid named law content",
+            ))));
         }
-    }
+    };
+
+    Ok(Law { name, definition })
 }
 
-/// Parses a universal quantification (forall) expression.
-///
-/// Universal quantifications express properties that hold for all elements in a domain.
+/// Parses the definition of a universal quantification (forall) expression.
 ///
 /// # Arguments
 ///
-/// * `pair` - A pest Pair representing a forall expression
+/// * `pair` - A pest Pair representing a forall_expr rule
 ///
 /// # Returns
 ///
-/// * `Result<Law, Box<BorfError>>` - The parsed forall expression or an error
-pub fn parse_forall_expr(pair: Pair<Rule>) -> Result<Law, Box<BorfError>> {
+/// * `Result<LawDefinition, Box<BorfError>>` - The parsed forall definition or an error
+fn parse_forall_expr_definition(pair: Pair<Rule>) -> Result<LawDefinition, Box<BorfError>> {
     let inner_pairs = pair.into_inner().collect::<Vec<_>>();
     let mut vars = Vec::new();
     let mut domain = String::new();
     let mut constraint = None;
 
     // Process based on the forall_expr pattern: "$forall" ~ ident ~ ("," ~ ident)* ~ "$in" ~ ident ~ ":" ~ constraint_expr
-    // First token after $forall should be an identifier
     if !inner_pairs.is_empty() && inner_pairs[0].as_rule() == Rule::ident {
         vars.push(inner_pairs[0].as_str().to_string());
-
-        // Get additional identifiers before "$in"
         let mut i = 1;
         while i < inner_pairs.len() && inner_pairs[i].as_rule() == Rule::ident {
             vars.push(inner_pairs[i].as_str().to_string());
             i += 1;
         }
-
-        // Next non-ident token should be the domain
         if i < inner_pairs.len() {
             domain = inner_pairs[i].as_str().to_string();
             i += 1;
         }
-
-        // The rest should be the constraint after the ":"
         if i < inner_pairs.len() && inner_pairs[i].as_rule() == Rule::constraint_expr {
             constraint = Some(parse_constraint_expr(inner_pairs[i].clone())?);
         }
     }
 
-    // If no constraint was parsed, use a default one
     let final_constraint = constraint.unwrap_or_else(|| Constraint::Equality {
         lhs: Box::new(ConstraintExpr::Identifier("true".to_string())),
         rhs: Box::new(ConstraintExpr::Identifier("true".to_string())),
     });
 
-    Ok(Law::ForAll {
+    Ok(LawDefinition::ForAll {
         vars,
         domain,
         constraint: final_constraint,
     })
 }
 
-/// Parses an existential quantification (exists) expression.
-///
-/// Existential quantifications express that at least one element exists
-/// in a domain satisfying a constraint.
+/// Parses the definition of an existential quantification (exists) expression.
 ///
 /// # Arguments
 ///
-/// * `pair` - A pest Pair representing an exists expression
+/// * `pair` - A pest Pair representing an exists_expr rule
 ///
 /// # Returns
 ///
-/// * `Result<Law, Box<BorfError>>` - The parsed exists expression or an error
-pub fn parse_exists_expr(pair: Pair<Rule>) -> Result<Law, Box<BorfError>> {
+/// * `Result<LawDefinition, Box<BorfError>>` - The parsed exists definition or an error
+fn parse_exists_expr_definition(pair: Pair<Rule>) -> Result<LawDefinition, Box<BorfError>> {
     let inner_pairs = pair.into_inner().collect::<Vec<_>>();
     let mut vars = Vec::new();
     let mut domain = String::new();
     let mut constraint = None;
 
     // Process based on the exists_expr pattern similar to forall
-    // First token after $exists should be an identifier
     if !inner_pairs.is_empty() && inner_pairs[0].as_rule() == Rule::ident {
         vars.push(inner_pairs[0].as_str().to_string());
-
-        // Get additional identifiers before "$in"
         let mut i = 1;
         while i < inner_pairs.len() && inner_pairs[i].as_rule() == Rule::ident {
             vars.push(inner_pairs[i].as_str().to_string());
             i += 1;
         }
-
-        // Next non-ident token should be the domain
         if i < inner_pairs.len() {
             domain = inner_pairs[i].as_str().to_string();
             i += 1;
         }
-
-        // The rest should be the constraint after the ":"
         if i < inner_pairs.len() && inner_pairs[i].as_rule() == Rule::constraint_expr {
             constraint = Some(parse_constraint_expr(inner_pairs[i].clone())?);
         }
     }
 
-    // If no constraint was parsed, use a default one
     let final_constraint = constraint.unwrap_or_else(|| Constraint::Equality {
         lhs: Box::new(ConstraintExpr::Identifier("true".to_string())),
         rhs: Box::new(ConstraintExpr::Identifier("true".to_string())),
     });
 
-    Ok(Law::Exists {
+    Ok(LawDefinition::Exists {
         vars,
         domain,
         constraint: final_constraint,
+    })
+}
+
+/// Parses the definition of a composition law expression.
+///
+/// # Arguments
+///
+/// * `pair` - A pest Pair representing a composition_law_expr rule
+///
+/// # Returns
+///
+/// * `Result<LawDefinition, Box<BorfError>>` - The parsed composition definition or an error
+fn parse_composition_law_definition(pair: Pair<Rule>) -> Result<LawDefinition, Box<BorfError>> {
+    // composition_law_expr = { ident ~ "$comp" ~ ident ~ "===" ~ ident }
+    let mut parts = pair.into_inner();
+    let lhs = parts.next().unwrap().as_str().to_string();
+    // Skip the $comp part (pest handles it as a literal in the rule)
+    let middle = parts.next().unwrap().as_str().to_string();
+    // Skip the === part (pest handles it)
+    let rhs = parts.next().unwrap().as_str().to_string();
+    Ok(LawDefinition::Composition {
+        lhs,
+        op: "$comp".to_string(), // Assuming $comp is the intended op here
+        middle,
+        rhs,
     })
 }
 

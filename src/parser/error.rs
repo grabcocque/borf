@@ -7,7 +7,7 @@ use thiserror::Error;
 pub use miette::{NamedSource, SourceSpan};
 
 // Forward declare the Rule enum from the parser module
-pub use crate::parser::Rule;
+pub use pest::RuleType as Rule;
 
 /// Main source cache to keep track of source files for better error reporting
 #[derive(Debug, Default, Clone)]
@@ -211,7 +211,7 @@ impl CategoryParseError {
 #[diagnostic(
     code(borf::e0002),
     url("https://docs.borf-lang.org/errors/e0002"),
-    help("Check the mapping syntax: name:domain $to codomain")
+    help("Check the mapping syntax: name:domain -> codomain")
 )]
 pub struct MappingParseError {
     pub message: String,
@@ -789,9 +789,7 @@ impl RelatedError {
 pub fn get_help_message(error_type: &str) -> String {
     match error_type {
         "category_definition" => "Categories should be defined as @Category: { ... }".to_string(),
-        "mapping_definition" => {
-            "Mappings should be defined as name:domain $to codomain".to_string()
-        }
+        "mapping_definition" => "Mappings should be defined as name:domain -> codomain".to_string(),
         "composition" => "Composition is written as f $comp g".to_string(),
         "export" => "Export is written as @export { ... }".to_string(),
         _ => format!("Check the syntax for {}", error_type),
@@ -821,8 +819,8 @@ pub fn make_span_from_line_col(line: usize, column: usize, length: usize) -> Sou
 }
 
 // Utilities for handling Pest errors
-pub fn convert_pest_error(
-    error: pest::error::Error<Rule>,
+pub fn convert_pest_error<R: pest::RuleType>(
+    error: pest::error::Error<R>,
     source_name: &str,
     source: &str,
 ) -> BorfError {

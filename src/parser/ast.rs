@@ -57,6 +57,8 @@ pub enum CategoryElement {
     StructureMapping(StructureMapping),
     /// A function definition with parameters and body
     FunctionDef(FunctionDef),
+    /// A constraint declared directly within a category
+    ConstraintDecl(Constraint),
 }
 
 /// Represents an object declaration within a category.
@@ -75,8 +77,8 @@ pub struct ObjectDecl {
 /// specifying domains, codomains, and the type of mapping.
 #[derive(Debug, Clone)]
 pub struct MappingDecl {
-    /// Name of the mapping
-    pub name: String,
+    /// Name(s) of the mapping (can be multiple comma-separated)
+    pub names: Vec<String>,
     /// Domain (source) of the mapping
     pub domain: String,
     /// Type of the domain (simple or set comprehension)
@@ -99,7 +101,7 @@ pub enum DomainType {
 /// Specifies the type of relationship in a mapping.
 #[derive(Debug, Clone, PartialEq)]
 pub enum MappingType {
-    /// Standard mapping relation ($to)
+    /// Standard mapping relation (->)
     To,
     /// Subset relation ($subseteq)
     Subseteq,
@@ -117,16 +119,27 @@ pub enum MappingType {
     CatEquiv,
     /// Compatibility relation ($omega)
     Compatibility,
+    /// Standard function arrow (->)
+    FunctionArrow,
 }
 
-/// Represents a law within a category.
+/// Represents a named law within a category.
 ///
-/// Laws define mathematical properties and constraints that should be
-/// upheld by objects and mappings within a category. They can be expressed
-/// as composition laws, universal quantifications (forall), or existential
-/// quantifications (exists).
+/// Laws must have a name (e.g., law.refl) and a definition.
 #[derive(Debug, Clone)]
-pub enum Law {
+pub struct Law {
+    /// The name of the law (e.g., "refl")
+    pub name: String,
+    /// The definition of the law (forall, exists, composition)
+    pub definition: LawDefinition,
+}
+
+/// Represents the definition of a law within a category.
+///
+/// Law definitions specify the actual logical content of a law,
+/// separate from its name.
+#[derive(Debug, Clone)]
+pub enum LawDefinition {
     /// A composition law specifying how functions compose
     Composition {
         /// Left-hand side of the composition
@@ -156,6 +169,8 @@ pub enum Law {
         /// Constraint that must be satisfied
         constraint: Constraint,
     },
+    /// A law defined directly by a constraint expression
+    Constraint(Constraint),
 }
 
 /// Represents a constraint or condition in a law.
@@ -292,6 +307,12 @@ pub enum SetExpr {
         /// Right-hand set in the product
         rhs: String,
     },
+    /// A literal set defined by enumerating elements: `{elem1, elem2, ...}`
+    Literal(SetLiteral),
+    /// A set defined by comprehension: `{ var $in domain | condition }`
+    NewComprehension(SetComprehension),
+    /// A set defined by an operation on other sets: `set1 $op set2`
+    Operation(SetOperation),
 }
 
 /// Represents a condition in a set comprehension.
@@ -435,5 +456,94 @@ pub struct FunctionDef {
     /// The parameters of the function
     pub params: Vec<String>,
     /// The body expression of the function
-    pub body: String,
+    pub body: Expression,
+}
+
+// --- Set Expression Related Types ---
+
+/// Represents a literal set enumeration.
+#[derive(Debug, Clone)]
+pub struct SetLiteral {
+    /// The elements of the set.
+    /// Using Expression for now, as elements can be idents, ints, symbols, tuples according to grammar.
+    pub elements: Vec<Expression>,
+}
+
+/// Represents a set comprehension.
+#[derive(Debug, Clone)]
+pub struct SetComprehension {
+    /// The variable being bound.
+    pub variable: String,
+    /// The domain set the variable comes from.
+    pub domain: String,
+    /// The optional condition filtering the elements.
+    /// Using Expression for generality, though grammar uses constraint_expr.
+    /// Needs refinement based on actual constraint parsing.
+    pub condition: Option<Box<Expression>>,
+}
+
+/// Represents a binary operation on sets.
+#[derive(Debug, Clone)]
+pub struct SetOperation {
+    /// Left-hand side set identifier.
+    pub lhs: String,
+    /// The set operator (e.g., $cup, $cap, $in).
+    pub op: String,
+    /// Right-hand side set identifier.
+    pub rhs: String,
+}
+
+// --- Expression AST Nodes (Lambda, If, LetRec, Composition) ---
+
+#[derive(Debug, Clone)]
+pub struct LambdaExpr {
+    pub params: Vec<String>,
+    pub body: Box<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub struct IfExpr {
+    pub condition: Box<Expression>,
+    pub then_branch: Box<Expression>,
+    pub else_branch: Box<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LetRecExpr {
+    pub name: String,
+    pub params: Vec<String>,
+    pub bound_expr: Box<Expression>,
+    pub body: Box<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CompositionExprRhs {
+    // Renamed to avoid conflict with TopLevelItem::CompositionExpr
+    pub left: String, // Assuming simple identifiers for now based on grammar: ident comp_op ident
+    pub op: String,
+    pub right: String,
+}
+
+/// Represents the different forms an expression can take based on the grammar.
+#[derive(Debug, Clone)]
+pub enum Expression {
+    AtomExpr(Atom), // Renamed variant slightly to avoid name clash if Atom type is also named Atom
+    Lambda(LambdaExpr),
+    If(IfExpr),
+    LetRec(LetRecExpr),
+    Composition(CompositionExprRhs),
+}
+
+/// Represents the atomic building blocks of expressions.
+#[derive(Debug, Clone)]
+pub enum Atom {
+    FunctionApp { func: String, args: Vec<Expression> },
+    ModuleAccess { path: Vec<String> }, // e.g., Mod.Sub.func
+    Identifier(String),
+    Integer(i64),
+    Symbol(String),
+    Tuple(Box<Expression>, Box<Expression>), // Assuming 2-tuple based on grammar
+    Set(Box<SetExpr>),                       // Added Set variant
+    Paren(Box<Expression>),                  // Parenthesized expression
+    StringLiteral(String),                   // For `"ident"` in grammar
 }

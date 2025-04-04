@@ -7,7 +7,7 @@ This project aims to implement a gradually typed language based on the interacti
 *   **Parser:** A functional parser for the proposed Borf syntax has been implemented using Pest.
     *   Supports category definitions (`@Category: { ... }`).
     *   Supports pipeline definitions (`@pipeline Name<Base> { ... }`).
-    *   Parses basic object declarations (`N; E;`) and mapping declarations (`f: A $to B;`, `p: M * M $to M;`).
+    *   Parses basic object declarations (`N; E;`) and mapping declarations (`f: A -> B;`, `p: M * M -> M;`).
     *   Parses basic law declarations (`f $comp g === h;`, `$forall m $in M: f(m) = g(m);`).
     *   Parses processing expressions:
         *   Pipe-like: `IO | >a | >w`

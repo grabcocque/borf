@@ -3,8 +3,9 @@
 //! This module provides functions for parsing import and export directives.
 
 use super::ast::{ExportDirective, ImportDirective};
-use crate::error::{BorfError, SyntaxError};
-use crate::parser::{get_named_source, pair_to_span, Rule};
+use super::error::{BorfError, SyntaxError};
+use super::Rule;
+use crate::parser::{get_named_source, pair_to_span};
 use pest::iterators::Pair;
 
 /// Parses an export directive from a pest pair.

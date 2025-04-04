@@ -1,5 +1,5 @@
 // Use the library crate
-use borf::error::format_error;
+use borf::parser::error::format_error;
 use borf::parser::{self, set_current_source, BorfParser, Rule, TopLevelItem};
 use pest::Parser;
 use std::env;
@@ -21,7 +21,7 @@ fn test_direct_parse(input: &str, rule: Rule) -> bool {
         Err(e) => {
             // Create pretty error for display
             set_current_source("test.borf", input.to_string());
-            let error = borf::error::convert_pest_error(e, "test.borf", input);
+            let error = borf::parser::error::convert_pest_error(e, "test.borf", input);
             println!("Failed: {}", format_error(error));
             false
         }
@@ -38,7 +38,7 @@ fn test_category_parsing() {
 
     // Test mapping declaration
     println!("Testing mapping_decl parsing:");
-    let test_mapping = "f: A $to B";
+    let test_mapping = "f: A -> B";
     test_direct_parse(test_mapping, Rule::mapping_decl);
 
     // Test declaration with semicolon
@@ -48,7 +48,7 @@ fn test_category_parsing() {
 
     // Test category content (now as part of a minimal statement)
     println!("Testing category content parsing:");
-    let test_content = "@Test: { A; B; f: A $to B; }";
+    let test_content = "@Test: { A; B; f: A -> B; }";
     test_direct_parse(test_content, Rule::category_statement);
 
     // Test very simple category
@@ -58,7 +58,7 @@ fn test_category_parsing() {
 
     // Now test a category with some content
     println!("Testing simple category statement parsing:");
-    let simple_category = "@Category: { A; B; f: A $to B; }";
+    let simple_category = "@Category: { A; B; f: A -> B; }";
     if test_direct_parse(simple_category, Rule::category_statement) {
         println!("Simple category parses correctly!");
     } else {
@@ -108,18 +108,24 @@ fn load_and_parse_prelude() -> Result<Vec<TopLevelItem>, String> {
                     println!("Got program: {:?}", program.as_rule());
 
                     // Continue with the normal parsing
-                    parser::parse_program(&prelude_content)
-                        .map_err(|e| format!("{}", format_error(*e)))
+                    Ok(parser::parse_program(&prelude_content).map_err(|e| {
+                        // Attempt to provide better context for Pest errors
+                        let error = format_error(*e);
+                        format!("{:?}", error)
+                    })?)
                 }
                 Err(e) => {
                     // Create pretty error display for output
-                    let display_error =
-                        borf::error::convert_pest_error(e.clone(), PRELUDE_PATH, &prelude_content);
+                    let display_error = borf::parser::error::convert_pest_error(
+                        e.clone(),
+                        PRELUDE_PATH,
+                        &prelude_content,
+                    );
                     println!("PEG grammar parse failed: {}", format_error(display_error));
 
                     // Create a new error for the return value
                     let return_error =
-                        borf::error::convert_pest_error(e, PRELUDE_PATH, &prelude_content);
+                        borf::parser::error::convert_pest_error(e, PRELUDE_PATH, &prelude_content);
                     Err(format!(
                         "PEG grammar parse failed: {}",
                         format_error(return_error)

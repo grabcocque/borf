@@ -4,8 +4,9 @@
 //! composition expressions, and pipeline definitions.
 
 use super::ast::{AppExpr, AppExprArg, CompositionExpr, PipeExpr, PipelineDef};
-use crate::error::{BorfError, SyntaxError};
-use crate::parser::{get_named_source, pair_to_span, Rule};
+use super::error::{BorfError, SyntaxError};
+use super::Rule;
+use crate::parser::{get_named_source, pair_to_span};
 use pest::iterators::Pair;
 
 /// Parses a pipe expression from a pest pair.

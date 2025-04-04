@@ -172,11 +172,10 @@ than the last. Approach with caution and awe. Begone!
 
 --[[ Core categorical structures ]]
 @Cat: {  -- Category
-  O;                              -- Objects
-  M;                              -- Morphisms
+  O;M;                            -- Objects and morphisms
   dom,cod: M->O;                  -- Domain/codomain maps
   id: O->M;                       -- Identity morphisms
-  .: M*M->M | cod(g) $veq dom(f);  -- Composition (infix), fixed condition syntax
+  .: M*M->M | cod(g) $veq dom(f); -- Composition (infix), fixed condition syntax
 
   -- Categorical equivalence (isomorphism)
   $ceq: O*O->Bool;                -- Categorical equivalence

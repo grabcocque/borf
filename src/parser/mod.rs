@@ -4,7 +4,9 @@
 
 pub mod ast;
 pub mod category;
+pub mod common_expr;
 pub mod directives;
+pub mod error;
 pub mod expressions;
 pub mod laws;
 
@@ -18,18 +20,16 @@ pub use directives::{parse_export_directive, parse_import_directive};
 pub use expressions::{
     parse_app_expr, parse_composition_expr, parse_pipe_expr, parse_pipeline_def,
 };
-pub use laws::{parse_exists_expr, parse_forall_expr, parse_law};
+pub use laws::parse_law;
 
-use crate::error::{
-    convert_pest_error, make_span, BorfError, NamedSource, SourceSpan, SyntaxError,
-};
+use error::{convert_pest_error, make_span, BorfError, NamedSource, SourceSpan, SyntaxError};
 use pest::iterators::Pair;
 use pest::Parser;
 use pest_derive::Parser;
 
 /// The pest parser struct generated from the grammar defined in `borf.pest`.
 #[derive(Parser)]
-#[grammar = "borf.pest"]
+#[grammar = "parser/borf.pest"]
 pub struct BorfParser;
 
 // Storage for tracking file contents to improve error reporting
