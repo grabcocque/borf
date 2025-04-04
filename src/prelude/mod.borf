@@ -374,7 +374,7 @@
 
 
 --[[ Termination analysis ]]
-@Term: {  -- Termination analysis
+@Term: {
   B; P; $pi: P->Bool; w: P->P;    -- Required for Net compatibility
   step; red; normal; hist;        -- From Red (Interfaces/Signatures)
 
@@ -437,7 +437,7 @@
 
 
 --[[ Core module ]]
-@Core: {  -- Core module
+@Core: {
   -- Required for Mod compatibility
   E;                             -- Entities
   $tau: E->Sym;                  -- Type of entities (Reflecting change in @Mod)
