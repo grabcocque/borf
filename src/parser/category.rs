@@ -8,8 +8,8 @@ use super::ast::{
     MappingType, ObjectDecl, StructureMapping,
 };
 use super::error::{BorfError, SyntaxError};
-use super::Rule;
 use crate::parser::laws::{parse_constraint_expr, parse_law};
+use crate::parser::Rule;
 use crate::parser::{common_expr::parse_expression, get_named_source, pair_to_span};
 use pest::iterators::Pair;
 
@@ -219,7 +219,7 @@ pub fn parse_structure_mapping(pair: Pair<Rule>) -> Result<StructureMapping, Box
 ///
 /// * `Result<FunctionDef, Box<BorfError>>` - The parsed function definition or an error
 pub fn parse_function_def(pair: Pair<Rule>) -> Result<FunctionDef, Box<BorfError>> {
-    // Grammar: function_def_decl = { ident ~ ":" ~ domain ~ "->" ~ codomain ~ "=" ~ expression ~ ";" }
+    // Grammar: function_def_decl = { ident ~ ":" ~ type_expr ~ "->" ~ type_expr ~ "=" ~ expression ~ ";" }
     let pair_clone = pair.clone(); // Clone for error reporting
     let mut inner = pair.into_inner();
 
@@ -230,14 +230,19 @@ pub fn parse_function_def(pair: Pair<Rule>) -> Result<FunctionDef, Box<BorfError
         .to_string();
 
     // Iterate through the remaining parts, looking for domain, codomain, and expression
-    let mut _domain_pair: Option<Pair<Rule>> = None;
-    let mut _codomain_pair: Option<Pair<Rule>> = None;
+    let mut domain_pair: Option<Pair<Rule>> = None;
+    let mut codomain_pair: Option<Pair<Rule>> = None;
     let mut body_pair: Option<Pair<Rule>> = None;
 
     for current_pair in inner {
         match current_pair.as_rule() {
-            Rule::domain => _domain_pair = Some(current_pair),
-            Rule::codomain => _codomain_pair = Some(current_pair),
+            Rule::type_expr => {
+                if domain_pair.is_none() {
+                    domain_pair = Some(current_pair);
+                } else {
+                    codomain_pair = Some(current_pair);
+                }
+            }
             Rule::expression => body_pair = Some(current_pair),
             _ => {} // Ignore literals like ':', '->', '=', ';' and the ident rule for name
         }

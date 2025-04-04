@@ -5,8 +5,8 @@
 
 use super::ast::{Constraint, ConstraintExpr, Law, LawDefinition, SetCondition, SetExpr};
 use super::error::{BorfError, SyntaxError};
-use super::Rule;
 use super::{get_named_source, pair_to_span};
+use crate::parser::Rule;
 use pest::iterators::Pair;
 
 /// Parses a named law declaration from a pest pair.
@@ -410,8 +410,7 @@ fn parse_set_expr(pair: Pair<Rule>) -> Result<ConstraintExpr, Box<BorfError>> {
             .collect();
 
         // Check for optional condition
-        let condition = if inner_pairs.len() > 1 && inner_pairs[1].as_rule() == Rule::set_condition
-        {
+        let condition = if inner_pairs.len() > 1 && inner_pairs[1].as_str().starts_with("|") {
             let mut cond_pairs = inner_pairs[1].clone().into_inner();
             let func1 = cond_pairs
                 .next()

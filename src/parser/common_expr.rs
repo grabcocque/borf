@@ -1,6 +1,8 @@
 //! Parsers for common expression types in the Borf language.
 
-use super::ast::{Atom, CompositionExprRhs, Expression, IfExpr, LambdaExpr, LetRecExpr};
+use super::ast::{
+    Atom, CompositionExprRhs, Expression, IfExpr, LambdaExpr, LetRecExpr, SetExpr, SetLiteral,
+};
 use super::error::{BorfError, SyntaxError};
 use crate::parser::{get_named_source, pair_to_span, Rule};
 use pest::iterators::Pair;
@@ -32,6 +34,17 @@ pub fn parse_expression(pair: Pair<Rule>) -> Result<Expression, Box<BorfError>> 
         Rule::if_expr => Ok(Expression::If(parse_if_expr(pair)?)),
         Rule::let_rec => Ok(Expression::LetRec(parse_let_rec(pair)?)),
         Rule::composition => Ok(Expression::Composition(parse_composition_rhs(pair)?)),
+        Rule::set_expr => {
+            // Handle set expressions
+            // For now, just wrap it in an Atom representation
+            Ok(Expression::AtomExpr(Atom::Set(Box::new(SetExpr::Literal(
+                SetLiteral {
+                    elements: vec![Expression::AtomExpr(Atom::Identifier(
+                        pair.as_str().to_string(),
+                    ))],
+                },
+            )))))
+        }
         // Handle cases where an atom rule might be passed directly
         Rule::function_app
         | Rule::module_access
@@ -220,44 +233,32 @@ fn parse_let_rec(pair: Pair<Rule>) -> Result<LetRecExpr, Box<BorfError>> {
 
     let name = inner.next().unwrap().as_str().to_string();
 
-    let params_pair = inner.next().unwrap(); // lambda_params
+    // Parse the parameters
     let mut params = Vec::new();
-    // Handle both single ident and parenthesized param list
-    match params_pair.as_rule() {
-        Rule::lambda_params => {
-            for param_ident in params_pair.into_inner() {
-                if param_ident.as_rule() == Rule::ident {
-                    params.push(param_ident.as_str().to_string());
-                }
-            }
-        }
-        Rule::ident => {
-            // Case where lambda_params directly matches a single ident
-            params.push(params_pair.as_str().to_string());
-        }
-        _ => {
-            return Err(create_syntax_error(
-                &format!(
-                    "Unexpected rule for let rec parameters: {:?}",
-                    params_pair.as_rule()
-                ),
-                &params_pair,
-                "Let rec parameters should be identifiers or a list of identifiers.",
-                "Invalid let rec parameters",
-            ))
+    while let Some(param) = inner.next() {
+        if param.as_rule() == Rule::ident {
+            params.push(param.as_str().to_string());
+        } else {
+            // Found something other than an identifier, must be the "=" or an expression
+            // We'll leave it to the next part to handle
+            break;
         }
     }
 
-    let bound_expr_pair = inner.next().unwrap(); // expression after "="
-    let bound_expr = parse_expression(bound_expr_pair)?;
+    // The next item should be the equals sign or expression after equals
+    // Then the body expression of the let-rec function
+    let bound_expr = inner.next().unwrap(); // Should be the expression rule
+    let bound = parse_expression(bound_expr)?;
 
-    let body_pair = inner.next().unwrap(); // expression after "in"
-    let body = parse_expression(body_pair)?;
+    // Look for "in" (handled by grammar)
+    // Then the expression after the "in" keyword
+    let body_expr = inner.next().unwrap(); // Expression after "in"
+    let body = parse_expression(body_expr)?;
 
     Ok(LetRecExpr {
         name,
         params,
-        bound_expr: Box::new(bound_expr),
+        bound_expr: Box::new(bound),
         body: Box::new(body),
     })
 }

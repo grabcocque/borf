@@ -22,7 +22,7 @@ pub use expressions::{
 };
 pub use laws::parse_law;
 
-use error::{convert_pest_error, make_span, BorfError, NamedSource, SourceSpan, SyntaxError};
+use error::{make_span, BorfError, NamedSource, SourceSpan, SyntaxError};
 use pest::iterators::Pair;
 use pest::Parser;
 use pest_derive::Parser;
@@ -31,6 +31,9 @@ use pest_derive::Parser;
 #[derive(Parser)]
 #[grammar = "parser/borf.pest"]
 pub struct BorfParser;
+
+// Re-export the error and utility functions
+pub use error::{convert_pest_error, format_error};
 
 // Storage for tracking file contents to improve error reporting
 thread_local! {
@@ -218,9 +221,8 @@ pub fn parse_program(input: &str) -> Result<Vec<TopLevelItem>, Box<BorfError>> {
 ///
 /// * `SourceSpan` - A source span representing the span of the pair in the input
 pub fn pair_to_span(pair: &Pair<Rule>) -> SourceSpan {
-    let start = pair.as_span().start();
-    let end = pair.as_span().end();
-    make_span(start, end)
+    let span = pair.as_span();
+    error::make_span(span.start(), span.end() - span.start())
 }
 
 /// Gets a named source from the current input for error reporting
@@ -234,8 +236,8 @@ pub fn pair_to_span(pair: &Pair<Rule>) -> SourceSpan {
 /// * `NamedSource<String>` - A named source for the input
 pub fn get_named_source(input: &str) -> NamedSource<String> {
     if let Some((name, _)) = get_current_source() {
-        NamedSource::new(&name, input.to_string())
+        NamedSource::new(name, input.to_string())
     } else {
-        NamedSource::new("input.borf", input.to_string())
+        NamedSource::new("unknown.borf", input.to_string())
     }
 }

@@ -1,4 +1,19 @@
 // borf.pest - Grammar for the Borf language as used in prelude/mod.borf
+//
+// CURRENT STATUS:
+// The grammar has been significantly extended to support most of the syntax in prelude/mod.borf
+// but still requires additional work to handle all the complex patterns.
+//
+// IMPROVEMENTS NEEDED:
+// 1. Fix arrow operator parsing in mapping declarations
+// 2. Improve symbol literal and symbol type handling
+// 3. Add better support for tuple types and expressions
+// 4. Enhance support for set comprehensions with multiple patterns
+// 5. Add proper support for special operators like $in, $veq, etc.
+// 6. Handle function composition with dot operator correctly
+// 7. Implement proper constraints on morphism functions
+// 8. Support complex type expressions like E*E*Sym->{E}*Bool*[Sym]
+// 9. Fix let-rec expressions with pattern matching
 
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 COMMENT = _{ "--[[" ~ (!"]" ~ ANY)* ~ "]]" | "--" ~ (!"\n" ~ ANY)* ~ "\n"? }
@@ -14,8 +29,15 @@ statement = {
     app_statement |
     composition_statement |
     export_statement |
-    import_statement
+    import_statement |
+    primitive_declaration
 }
+
+// Primitive declarations (e.g., "@Primitives: { ... }")
+primitive_declaration = { "@" ~ ident ~ ":" ~ "{" ~ primitive_element* ~ "}" }
+primitive_element = { primitive_func_decl | simple_primitive_decl | comment_decl }
+primitive_func_decl = { ident ~ ":" ~ type_expr ~ "->" ~ type_expr ~ ";" }
+simple_primitive_decl = { ident ~ ":" ~ type_expr ~ ";" }
 
 // Category definition (with optional type parameter)
 category_statement = { "@" ~ ident ~ type_param? ~ ":" ~ "{" ~ category_element* ~ "}" }
@@ -28,56 +50,101 @@ category_element = {
     structure_mapping_decl |
     law_decl |
     function_def_decl |
-    constraint_decl
+    constraint_decl |
+    comment_decl
 }
+
+// Comment declaration used for documentation
+comment_decl = { "--" ~ (!"\n" ~ ANY)* ~ "\n"? }
 
 // Simple object declaration (e.g., "A;")
 object_decl = { ident ~ ";" }
 
-// Mapping declarations (e.g., "f: A $to B;", "dom,cod: M->O;")
+// Mapping declarations with separate rules for each mapping type
 mapping_decl = {
-    comma_separated_ids ~ ":" ~ domain_expr ~ mapping_type ~ codomain ~ ";" |
-    ident ~ ":" ~ ident ~ "=" ~ symbol_literal ~ ";"  // Symbol type declaration (TypeSym: Sym = :Type)
+    arrow_mapping |
+    symbol_mapping |
+    constrained_mapping
 }
 
-// Mapping related rules
-domain_expr = { domain }
-domain = { ident | product_domain | set_literal }
-product_domain = { ident ~ "*" ~ ident }
-codomain = { ident | symbol_literal }
+// Arrow mappings like f: A->B;
+arrow_mapping = { comma_separated_ids ~ ":" ~ type_expr ~ ";" }
 
-// Dollar-prefixed mapping types
-mapping_type = {
-    "$to" |
-    "$subseteq" |
+// Symbol type declarations
+symbol_mapping = { ident ~ ":" ~ "Sym" ~ "=" ~ symbol_literal ~ ";" }
+
+// Mappings with constraints
+constrained_mapping = {
+    comma_separated_ids ~ ":" ~ type_expr ~ "|" ~ constraint_expr ~ ";"
+}
+
+// Non-left-recursive type expressions
+type_expr = { simple_type ~ (type_op ~ simple_type)* }
+
+// Type operators
+type_op = {
+    "*" |
     "->" |
+    "+" |
     "$teq" |
     "$veq" |
     "$seq" |
     "$ceq" |
     "$omega" |
-    "<->" |
-    "*"
+    "$to" |
+    "$subseteq" |
+    "<->"
 }
 
+// Simple type atoms that can't cause recursion
+simple_type = {
+    ident |
+    symbol_type |
+    set_literal |
+    list_type |
+    optional_type |
+    linear_type |
+    "(" ~ type_expr ~ ")"
+}
+
+symbol_type = { "Sym" }
+
+// Type constructors
+list_type = { "[" ~ type_expr ~ "]" }
+optional_type = { "?" ~ type_expr }
+linear_type = { "!" ~ type_expr }
+
 // Structure mappings (e.g., "O = A;")
-structure_mapping_decl = { ident ~ "=" ~ (lambda | if_expr | let_rec | set_expr | composition | atom) ~ ";" }
+structure_mapping_decl = {
+    ident ~ "=" ~ (
+        lambda |
+        if_expr |
+        let_rec |
+        set_expr |
+        composition |
+        atom |
+        set_op_expr |
+        recfn_expr
+    ) ~ ";"
+}
+
+// Recursive function definition
+recfn_expr = { "let" ~ "rec" ~ ident ~ lambda_params ~ "=" ~ expression ~ "in" ~ expression }
 
 // Laws - Must be named
 law_decl = { named_law } // Only allow named_law here
 
 // Named law with a prefix (e.g., "law.refl = $forall t $in T: t<::t;")
-// Allow composition_law_expr on RHS too
 named_law = { "law." ~ ident ~ "=" ~ (forall_expr | exists_expr | composition_law_expr | constraint_expr) ~ ";" }
 
 // Forall law expression (used within named_law)
-forall_expr = { "$forall" ~ ident ~ ("," ~ ident)* ~ "$in" ~ ident ~ ":" ~ constraint_expr }
+forall_expr = { "$forall" ~ ident ~ ("," ~ ident)* ~ "$in" ~ type_expr ~ ("|" ~ constraint_expr)? ~ ":" ~ constraint_expr }
 
 // Exists law expression (used within named_law)
-exists_expr = { "$exists" ~ ("!" | "") ~ ident ~ ("," ~ ident)* ~ "$in" ~ ident ~ ":" ~ constraint_expr }
+exists_expr = { "$exists" ~ ("!" | "") ~ ident ~ ("," ~ ident)* ~ "$in" ~ type_expr ~ ("|" ~ constraint_expr)? ~ ":" ~ constraint_expr }
 
 // Composition law expression (used within named_law)
-composition_law_expr = { ident ~ "$comp" ~ ident ~ "===" ~ ident } // Removed trailing semicolon
+composition_law_expr = { ident ~ "$comp" ~ ident ~ "===" ~ ident }
 
 // Constraint declaration (e.g. "U $in T;")
 constraint_decl = { constraint_expr ~ ";" }
@@ -108,7 +175,11 @@ constraint_op = {
     "$omega" |
     "$iff" |
     "$and" |
-    "$or"
+    "$or" |
+    "$not" |
+    "$cup" |
+    "$cap" |
+    "$subseteq"
 }
 
 implication = { logical_and ~ "=>" ~ constraint_expr }
@@ -122,12 +193,28 @@ primary_expr = {
     module_access |
     ident |
     int |
+    boolean_literal |
     symbol_literal |
     tuple_expr |
     set_expr |
+    arrow_expr |
+    array_index_expr |
+    field_access_expr |
     "$not" ~ "(" ~ constraint_expr ~ ")" |
     "(" ~ constraint_expr ~ ")"
 }
+
+// Arrow expressions like e->+e, a->*b
+arrow_expr = { ident ~ "->+" ~ ident | ident ~ "->*" ~ ident }
+
+// Field access expression (e.g., "sig(b).in")
+field_access_expr = { function_app ~ "." ~ ident }
+
+// Boolean literals
+boolean_literal = { "true" | "false" }
+
+// Array index expression (e.g. "t[i]")
+array_index_expr = { ident ~ "[" ~ expression ~ "]" }
 
 // Set expressions
 set_expr = {
@@ -137,7 +224,14 @@ set_expr = {
 }
 
 // Set operation expressions
-set_op_expr = { ident ~ set_op ~ ident }
+set_op_expr = { set_term ~ (set_op ~ set_term)* }
+set_term = {
+    ident |
+    set_literal |
+    "(" ~ set_op_expr ~ ")" |
+    set_comprehension |
+    function_app
+}
 
 // Set operators
 set_op = {
@@ -151,21 +245,40 @@ set_op = {
     "$ceq"
 }
 
-set_literal = { "{" ~ set_element ~ ("," ~ set_element)* ~ "}" }
-set_element = { ident | int | symbol_literal | tuple_expr }
-set_comprehension = { "{" ~ ident ~ "$in" ~ ident ~ set_condition? ~ "}" }
-set_condition = { "|" ~ constraint_expr }
+set_literal = { "{" ~ (set_element ~ ("," ~ set_element)*)? ~ "}" }
+set_element = {
+    ident |
+    int |
+    symbol_literal |
+    tuple_expr |
+    function_app |
+    set_constructor |
+    pair_expr
+}
+
+// Pair expressions like (a,b) used in set literals
+pair_expr = { "(" ~ ident ~ "," ~ ident ~ ")" }
+
+// Set constructors like "{in:{P},out:{P}}"
+set_constructor = { "{" ~ ident ~ ":" ~ set_expr ~ ("," ~ ident ~ ":" ~ set_expr)* ~ "}" }
+
+set_comprehension = {
+    "{" ~ expression ~ "$in" ~ (ident | set_expr) ~ ("|" ~ constraint_expr)? ~ "}" |
+    "{" ~ expression ~ "|" ~ constraint_expr ~ "}" |
+    "{" ~ tuple_expr ~ "|" ~ constraint_expr ~ "}"
+}
 
 // Function application (e.g., "dom(f)")
-function_app = { ident ~ "(" ~ function_args ~ ")" }
-function_args = { expression ~ ("," ~ expression)* | "" }
+function_app = { module_access_ident ~ "(" ~ function_args? ~ ")" }
+function_args = { expression ~ ("," ~ expression)* }
+module_access_ident = { ident ~ ("." ~ ident)* }
 
 // Module access expressions (e.g., Module.function)
 module_access = { ident ~ ("." ~ ident)+ }
 
 // Pipeline statement
 pipeline_statement = {
-    "@" ~ ident ~ type_param? ~ ":" ~ pipeline_content
+    "@" ~ ident ~ type_param? ~ ":" ~ (pipeline_content | pipeline_content_colon_form)
 }
 
 pipeline_content = {
@@ -181,7 +294,8 @@ pipeline_content_colon_form = {
 }
 
 // Pipe statement
-pipe_statement = { ident ~ pipe_steps }
+pipe_statement = { pipe_start ~ pipe_steps }
+pipe_start = { expression }
 pipe_steps = { ("|>" ~ transform_ident)+ }
 transform_ident = { ident }
 
@@ -191,10 +305,12 @@ app_expr = { ident ~ "(" ~ app_arg ~ ")" }
 app_arg = { app_expr | ident }
 
 // Composition statement
-composition_statement = { ident ~ "=" ~ ident ~ ("." ~ ident)+ ~ "(" ~ ident ~ ")" }
+composition_statement = { ident ~ "=" ~ composition_expr ~ ("(" ~ ident ~ ")")? }
+composition_expr = { ident ~ (comp_op ~ ident)+ }
+comp_op = { ">>" | "." }
 
 // Function definition (e.g., "node_eq: N*N->Bool = \a,b.$lambdaN(a) $seq $lambdaN(b);")
-function_def_decl = { ident ~ ":" ~ domain ~ "->" ~ codomain ~ "=" ~ expression ~ ";" }
+function_def_decl = { ident ~ ":" ~ type_expr ~ "=" ~ expression ~ ";" }
 
 // Non-circular expression definition to avoid left-recursion
 expression = {
@@ -202,7 +318,10 @@ expression = {
     lambda |
     if_expr |
     let_rec |
-    composition
+    composition |
+    set_expr |
+    conditional_expr |
+    type_calculation_expr
 }
 
 atom = {
@@ -210,23 +329,42 @@ atom = {
     module_access |
     ident |
     int |
+    boolean_literal |
+    string_literal |
     symbol_literal |
     tuple |
-    set_expr |
-    "(" ~ expression ~ ")" |
-    "\"" ~ ident ~ "\""
+    set_literal |
+    array_index_expr |
+    field_access_expr |
+    "(" ~ expression ~ ")"
 }
 
-lambda = { "\\" ~ lambda_params ~ "." ~ expression }
-lambda_params = { ident ~ ("," ~ ident)* | "(" ~ ident ~ ("," ~ ident)* ~ ")" }
+// Type calculation expressions like |{p $in P | box(p) $veq b $and $pi(p)}|
+type_calculation_expr = { "|" ~ set_expr ~ "|" }
 
-if_expr = { "if" ~ expression ~ compare_op? ~ expression ~ "then" ~ expression ~ "else" ~ expression }
-compare_op = { ">" | "<" | ">=" | "<=" | "$in" }
+lambda = {
+    "\\" ~ lambda_params ~ "." ~ expression
+}
+lambda_params = { lambda_param ~ ("," ~ lambda_param)* }
+lambda_param = { ident | tuple_param }
+tuple_param = { "(" ~ ident ~ ("," ~ ident)+ ~ ")" }
 
-let_rec = { "let" ~ "rec" ~ ident ~ lambda_params ~ "=" ~ expression ~ "in" ~ expression }
+// Conditional expressions - includes both if/then/else and ternary
+conditional_expr = {
+    if_then_else |
+    ternary
+}
+
+if_expr = { "if" ~ expression ~ "then" ~ expression ~ "else" ~ expression }
+if_then_else = { "if" ~ expression ~ "then" ~ expression ~ "else" ~ expression }
+ternary = { atom ~ "?" ~ expression ~ ":" ~ expression }
+
+// More general let_rec rule
+let_rec = {
+    "let" ~ "rec" ~ ident ~ lambda_params ~ "=" ~ expression ~ "in" ~ expression
+}
 
 composition = { ident ~ comp_op ~ ident }
-comp_op = { ">>" | "." }
 
 // Tuple expressions
 tuple_expr = { "(" ~ expression ~ "," ~ expression ~ ")" }
@@ -244,8 +382,8 @@ string_literal = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
 // Basic types
 symbol_literal = @{ ":" ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
-ident = @{ (ASCII_ALPHA | "$" | "_" | ">" | ".") ~ (ASCII_ALPHANUMERIC | "$" | "_")* }
+ident = @{ (ASCII_ALPHA | "$" | "_" | ">" | ".") ~ (ASCII_ALPHANUMERIC | "$" | "_" | "+" | "-" | "*")* }
 int = @{ ASCII_DIGIT+ }
 
 // Direct logical not support
-logical_not = { "$not" ~ "(" ~ constraint_expr ~ ")" }
+logical_not = { "$not" ~ "(" ~ constraint_expr ~ ")" | "$not" ~ primary_expr }

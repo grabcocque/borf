@@ -5,7 +5,7 @@
 
 use super::ast::{AppExpr, AppExprArg, CompositionExpr, PipeExpr, PipelineDef};
 use super::error::{BorfError, SyntaxError};
-use super::Rule;
+use crate::parser::Rule;
 use crate::parser::{get_named_source, pair_to_span};
 use pest::iterators::Pair;
 

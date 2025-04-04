@@ -149,7 +149,7 @@ fn test_specific_rule(rule_name: &str, input: &str) -> bool {
     let rule = match rule_name {
         "object_decl" => Rule::object_decl,
         "mapping_decl" => Rule::mapping_decl,
-        "domain_expr" => Rule::domain_expr,
+        "type_expr" => Rule::type_expr,
         "category_statement" => Rule::category_statement,
         "structure_mapping_decl" => Rule::structure_mapping_decl,
         "function_def_decl" => Rule::function_def_decl,
