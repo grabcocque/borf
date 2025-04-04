@@ -28,3 +28,6 @@ arbitrary = { version = "1", features = ["derive"], optional = true }
 
 [features]
 fuzzing = ["dep:libfuzzer-sys", "dep:arbitrary"]
+
+[dev-dependencies]
+insta = "1.39.0"

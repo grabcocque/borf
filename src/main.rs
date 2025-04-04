@@ -1,6 +1,6 @@
 // Use the library crate
 use borf::parser::error::format_error;
-use borf::parser::{self, set_current_source, BorfParser, Rule, TopLevelItem};
+use borf::parser::{self, ast::TopLevelItem, BorfParser, Rule};
 use pest::Parser;
 use std::env;
 use std::fs;
@@ -20,7 +20,6 @@ fn test_direct_parse(input: &str, rule: Rule) -> bool {
         }
         Err(e) => {
             // Create pretty error for display
-            set_current_source("test.borf", input.to_string());
             let error = borf::parser::error::convert_pest_error(e, "test.borf", input);
             println!("Failed: {}", format_error(error));
             false
@@ -96,7 +95,6 @@ fn load_and_parse_prelude() -> Result<Vec<TopLevelItem>, String> {
             }
 
             // Store the source for error reporting
-            set_current_source(PRELUDE_PATH, prelude_content.clone());
 
             // Try to parse the file directly with the BorfParser
             let parse_result = BorfParser::parse(Rule::program, &prelude_content);
@@ -110,7 +108,7 @@ fn load_and_parse_prelude() -> Result<Vec<TopLevelItem>, String> {
                     // Continue with the normal parsing
                     Ok(parser::parse_program(&prelude_content).map_err(|e| {
                         // Attempt to provide better context for Pest errors
-                        let error = format_error(*e);
+                        let error = format_error(e);
                         format!("{:?}", error)
                     })?)
                 }
@@ -196,9 +194,6 @@ fn main() {
 
             match fs::read_to_string(file_path) {
                 Ok(input) => {
-                    // Set the file as the current source for error reporting
-                    set_current_source(file_path, input.clone());
-
                     // Test the specific rule
                     if test_specific_rule(rule_name, &input) {
                         println!("Rule test succeeded for {}: '{}'", rule_name, file_path);
@@ -217,9 +212,6 @@ fn main() {
 
             match fs::read_to_string(file_path) {
                 Ok(input) => {
-                    // Set the file as the current source for error reporting
-                    set_current_source(file_path, input.clone());
-
                     match parser::parse_program(&input) {
                         Ok(user_items) => {
                             println!("Successfully parsed {} user_item(s)!", user_items.len());
@@ -234,11 +226,11 @@ fn main() {
                                     TopLevelItem::Export(_) => {
                                         println!("  {}. Export directive", i + 1)
                                     }
-                                    TopLevelItem::Import(import) => {
+                                    TopLevelItem::Import(import_path) => {
                                         println!(
                                             "  {}. Import directive: \"{}\"",
                                             i + 1,
-                                            import.path
+                                            import_path
                                         )
                                     }
                                     TopLevelItem::ExpressionStatement(_) => {
@@ -248,7 +240,11 @@ fn main() {
                             }
                             // TODO: Combine user_items with prelude_definitions for further processing
                         }
-                        Err(e) => println!("Parse error in {}: {}", file_path, format_error(*e)),
+                        Err(e) => {
+                            // Create pretty error display for output
+                            let error = format_error(e);
+                            println!("Error parsing file {}: {}", file_path, error)
+                        }
                     }
                 }
                 Err(e) => println!("Error reading file {}: {}", file_path, e),

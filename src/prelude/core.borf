@@ -1,0 +1,190 @@
+--[[
+  prelude.borf - Foundational definitions for the Borf language ecosystem.
+
+  Defines core types, relations, categorical structures, modules, graphs,
+  interaction nets, IO, rewriting, reduction, termination analysis,
+  transformation pipelines, and a basic standard library. Emphasizes structural
+  subtyping, clear equivalence domains, placeholder primitives for runtime
+  interaction, Map and Sequence types.
+]]
+
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- ~~~ Core Module (Exports) ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+@Core: { -- Aggregates and exports the core prelude definitions
+  -- Required Module System declarations for self-representation
+  E                             -- Entities (all defined below)
+  $tau: E->Sym                  -- Entity type function
+  $delta: E*E->Bool             -- Dependency relation
+  vis: E->Bool                  -- Visibility predicate
+
+  -- Module dependencies (replaces import statements)
+  -- Format: (importing_module, imported_module, is_exported)
+  deps = {
+    -- Core imports all these modules
+    (@Core, Primitives, true),
+    (@Core, FLogic, true),
+    (@Core, T, true),
+    (@Core, R, true),
+    (@Core, Cat, true),
+    (@Core, Grph, true),
+    (@Core, Wire, true),
+    (@Core, Net, true),
+    (@Core, IO, true),
+    (@Core, Rewrite, true),
+    (@Core, Term, true),
+    (@Core, Red, true),
+    (@Core, StdLib, true),
+    (@Core, Xform, true),
+    (@Core, Mod, true),
+  }
+
+  -- Core Modules/Types defined in this prelude
+  typ = {
+    T.T, R.R, Cat.Cat, Mod.Mod, Grph.Grph, Wire.Wire, Net.Net, IO.IO, Rewrite.Rewrite, Red.Red, Term.Term, Xform.Xform, Primitives.Primitives, FLogic.FLogic, StdLib.StdLib, -- Module References
+    T.Sym, T.Any, T.Void, Rewrite.Pattern, -- Base/Core types from T & Rewrite
+    T.Seq, -- Sequence type constructor identifier from T
+    FLogic.!Result -- Fallible result type from FLogic
+    -- Note: Map is represented by the ':->' operator, List by [], Optional by ? (Defined in T)
+  }
+
+  -- Core Operators/Relations
+  op = {
+    T.<::, T.~, T.$teq, R.$omega, R.$veq, R.$seq, Cat.$ceq, Cat.., T.->, T.->+, T.*, T.+, T.?, T.!, T.:->, -- Type/Cat ops
+    Primitives.$cup, Primitives.$cap, Primitives.$subseteq, Primitives.$in, -- Set ops 
+    Primitives.$forall, Primitives.$exists, Primitives.$and, Primitives.$or, Primitives.$not, Primitives.$implies, Primitives.$iff, -- Logical ops
+    Primitives.$pipe, Primitives.$fcomp, -- Pipeline/Composition ops
+    FLogic.-o> -- Linear arrow from FLogic
+  }
+
+  -- Core Symbols (for classification)
+  syms = {Mod.TypeSym, Mod.OpSym, Mod.FnSym, Mod.ModSym}
+
+  -- Core Functions/Interfaces (including primitives and StdLib)
+  fn = {
+    -- Primitives
+    Primitives.$rho, Primitives.$map, Primitives.$fold, Primitives.$concat, Primitives.$transpose,
+    Primitives.$at, Primitives.$slice, Primitives.$where, Primitives.$compose, Primitives.$ceq,
+    Primitives.$typeof, Primitives.$oplus, Primitives.$ominus, Primitives.$match, Primitives.$eval,
+    Primitives.$format, Primitives.$state, Primitives.$io, Primitives.$insert, Primitives.$lookup,
+    Primitives.$cons, Primitives.$head, Primitives.$tail, Primitives.matches,
+    Primitives.a_uses, Primitives.processed, Primitives.extract_data, Primitives.safe_pipeline,
+    Primitives.$is_valid, Primitives.$extract_value, Primitives.apply, Primitives.$ne,
+    Primitives.$append_string,
+    -- Additional primitives (newly added)
+    Primitives.$cup, Primitives.$cap, Primitives.$subseteq, Primitives.$in,
+    Primitives.$forall, Primitives.$exists, Primitives.$and, Primitives.$or, Primitives.$not, 
+    Primitives.$implies, Primitives.$iff, Primitives.$pipe, Primitives.$fcomp,
+
+    -- FLogic Functions/Constructors
+    FLogic.!Success, FLogic.!Failure, FLogic.handle, FLogic.narrow, FLogic.seq, FLogic.alt,
+    FLogic.choice, FLogic.constrain, FLogic.map, FLogic.default, FLogic.parse_int,
+
+    -- Type/Relation Functions
+    T.$teq, R.$veq, R.$seq, R.$omega, Cat.$ceq,
+
+    -- Cat Functions
+    Cat.dom, Cat.cod, Cat.id, Cat.composable, Cat.hom,
+
+    -- Mod Functions
+    Mod.$tau, Mod.$delta, Mod.vis, Mod.components, Mod.is_type, Mod.is_op, Mod.is_fn, Mod.is_mod,
+    Mod.exported, Mod.imports, Mod.$oplus, Mod.validate_module,
+
+    -- Grph Functions
+    Grph.src, Grph.tgt, Grph.$lambdaN, Grph.$lambdaE, Grph.loop, Grph.comp, Grph.node_eq,
+
+    -- Wire Functions
+    Wire.box, Wire.w, Wire.$tauP, Wire.$tauB, Wire.sig,
+
+    -- Net Functions
+    Net.$pi, Net.applies, Net.ports, Net.conn,
+
+    -- IO Functions
+    IO.io_agent, IO.io, IO.read, IO.write, IO.data, IO.err, IO.ok, IO.unused_agents,
+    IO.read_file, IO.write_file, IO.read_cons, IO.write_cons,
+
+    -- Rewrite Functions
+    Rewrite.match, Rewrite.rewrite, Rewrite.neighborhood, Rewrite.pattern_graph,
+    Rewrite.consistent, Rewrite.connected, Rewrite.io_rule,
+
+    -- Red Functions
+    Red.step, Red.strategy, Red.history, Red.red, Red.normal, Red.prioritize_io, Red.io_strategy,
+
+    -- Term Functions
+    Term.terminates, Term.detect_cycles, Term.apply_k, Term.reaches_normal_form, Term.has_cycle,
+    Term.io_processed, Term.io_agents_processed, Term.io_terminates,
+
+    -- Xform Functions
+    Xform.xform, Xform.string_to_net, Xform.net_to_string, Xform.graph_to_wire, Xform.wire_to_net,
+    Xform.net_to_rewrite, Xform.rewrite_to_red, Xform.map, Xform.process_files,
+    Xform.string_to_wire, Xform.string_to_runnable_net, Xform.full_pipeline,
+
+    -- StdLib Functions (Map)
+    StdLib.Map.empty, StdLib.Map.insert, StdLib.Map.lookup, StdLib.Map.contains_key,
+    StdLib.Map.is_empty, StdLib.Map.size,
+
+    -- StdLib Functions (Seq) - Conceptual
+    StdLib.Seq.empty, StdLib.Seq.cons, StdLib.Seq.head, StdLib.Seq.tail, StdLib.Seq.is_empty,
+    
+    -- StdLib Functions (List)
+    StdLib.List.empty, StdLib.List.cons, StdLib.List.append, StdLib.List.concat, StdLib.List.head,
+    StdLib.List.tail, StdLib.List.map, StdLib.List.filter, StdLib.List.fold,
+    StdLib.List.is_empty, StdLib.List.size
+  }
+
+  -- Aggregate all entities
+  E = typ $cup op $cup fn $cup syms
+
+  -- Implement Dependency Relation using the deps set
+  $delta = \a,b. $exists _e $in deps: _e $seq (a,b,true) $or _e $seq (a,b,false)
+
+  -- Check if a module is imported by another
+  is_imported = \importer,imported. $exists _e $in deps: _e $seq (importer,imported,true) $or _e $seq (importer,imported,false)
+  
+  -- Check if a module is exported by another
+  is_exported = \exporter,exported. $exists _e $in deps: _e $seq (exporter,exported,true)
+
+  -- Classify Core Entities
+  $tau = \e. {
+    match e: E {
+      _ $in typ -> Mod.TypeSym
+      _ $in op  -> Mod.OpSym
+      _ $in fn  -> Mod.FnSym
+      _ $in syms -> Mod.TypeSym -- Classify Symbols as Types for now
+      _ $in {T,R,Cat,Mod,Grph,Wire,Net,IO,Rewrite,Red,Term,Xform,Primitives,FLogic,StdLib,Core} -> Mod.ModSym
+      _ -> Mod.TypeSym -- Default case
+    }
+  }
+
+  -- Export all defined entities by default
+  vis = \e. true
+
+  -- Module Components (conform to @Mod structure)
+  components = \m. {
+    match m {
+      @Core -> E
+      _ -> {} -- Empty set for non-Core modules (should never be called)
+    }
+  }
+    
+  -- Structural Compatibility with Category Theory (@Cat and @Mod)
+  O = {m | m $in E $and $tau(m) $teq Mod.ModSym} -- Objects are modules
+  M = {(a,b) | a,b $in O $and $delta(a,b)}      -- Morphisms are dependencies
+  
+  -- Module Dependencies (conform to @Mod structure)
+  imports = \m. {
+    {n | $exists e $in deps: e $seq (m,n,true) $or e $seq (m,n,false)}
+  }
+  
+  -- Export status checking (conform to @Mod structure)
+  exported = \m,e. {
+    match m {
+      @Core -> e $in E $and vis(e)
+      _ -> $exists _e $in deps: _e $seq (@Core, m, true) -- Check if module is exported by Core
+    }
+  }
+
+  -- Check if a module exports another module
+  exports_module = \exporter,exported. $exists _e $in deps: _e $seq (exporter,exported,true)
+}
+

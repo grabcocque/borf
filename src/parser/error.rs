@@ -87,53 +87,53 @@ pub enum BorfError {
     // Parser errors with source spans
     #[error(transparent)]
     #[diagnostic(code(borf::parser::unexpected_token))]
-    UnexpectedToken(#[from] UnexpectedTokenError),
+    UnexpectedToken(#[from] Box<UnexpectedTokenError>),
 
     #[error(transparent)]
     #[diagnostic(code(borf::parser::malformed_category))]
-    MalformedCategory(#[from] CategoryParseError),
+    MalformedCategory(#[from] Box<CategoryParseError>),
 
     #[error(transparent)]
     #[diagnostic(code(borf::parser::mapping))]
-    MappingError(#[from] MappingParseError),
+    MappingError(#[from] Box<MappingParseError>),
 
     #[error(transparent)]
     #[diagnostic(code(borf::parser::composition))]
-    CompositionError(#[from] CompositionParseError),
+    CompositionError(#[from] Box<CompositionParseError>),
 
     #[error(transparent)]
     #[diagnostic(code(borf::parser::syntax))]
-    SyntaxError(#[from] SyntaxError),
+    SyntaxError(#[from] Box<SyntaxError>),
 
     // Semantic errors
     #[error(transparent)]
     #[diagnostic(code(borf::semantic::undefined_symbol))]
-    UndefinedSymbol(#[from] UndefinedSymbolError),
+    UndefinedSymbol(#[from] Box<UndefinedSymbolError>),
 
     #[error(transparent)]
     #[diagnostic(code(borf::semantic::type_error))]
-    TypeError(#[from] TypeError),
+    TypeError(#[from] Box<TypeError>),
 
     #[error(transparent)]
     #[diagnostic(code(borf::semantic::inconsistent_composition))]
-    InconsistentComposition(#[from] InconsistentCompositionError),
+    InconsistentComposition(#[from] Box<InconsistentCompositionError>),
 
     #[error(transparent)]
     #[diagnostic(code(borf::semantic::category_structure))]
-    CategoryStructureError(#[from] CategoryStructureError),
+    CategoryStructureError(#[from] Box<CategoryStructureError>),
 
     #[error(transparent)]
     #[diagnostic(code(borf::semantic::symbol_error))]
-    SymbolError(#[from] SymbolError),
+    SymbolError(#[from] Box<SymbolError>),
 
     // Runtime errors
     #[error(transparent)]
     #[diagnostic(code(borf::runtime::reduction_error))]
-    ReductionError(#[from] ReductionError),
+    ReductionError(#[from] Box<ReductionError>),
 
     #[error(transparent)]
     #[diagnostic(code(borf::runtime::termination_error))]
-    TerminationError(#[from] TerminationError),
+    TerminationError(#[from] Box<TerminationError>),
 
     // Legacy fallback for migration
     #[error("Parser error: {0}")]
@@ -163,7 +163,7 @@ pub enum BorfError {
         help("This part of the parser or AST building is not yet complete.")
     )]
     NotYetImplemented {
-        feature: String, // Name of the feature/function
+        feature: String,
         #[source_code]
         src: Option<NamedSource<String>>,
         #[label("Not implemented here")]
@@ -822,7 +822,12 @@ pub fn format_warning<E: Diagnostic + Send + Sync + 'static>(warning: E) -> Repo
 
 // Utility to create SourceSpan from indexes
 pub fn make_span(start: usize, end: usize) -> SourceSpan {
-    SourceSpan::new(start.into(), end - start)
+    if end <= start {
+        // If end is less than or equal to start, use a minimum span of 1
+        SourceSpan::new(start.into(), 1)
+    } else {
+        SourceSpan::new(start.into(), end - start)
+    }
 }
 
 // Utility to create SourceSpan from line and column information
@@ -898,7 +903,11 @@ pub fn convert_pest_error<R: pest::RuleType>(
     let expected = expected_tokens.join(", ");
 
     // Create a new UnexpectedTokenError with properly typed values
-    BorfError::UnexpectedToken(UnexpectedTokenError::new(source_code, span, &expected))
+    BorfError::UnexpectedToken(Box::new(UnexpectedTokenError::new(
+        source_code,
+        span,
+        &expected,
+    )))
 }
 
 // Export conversions from old error types to new ones
@@ -908,14 +917,14 @@ pub fn upgrade_parser_error(
     source: &str,
     span: SourceSpan,
 ) -> BorfError {
-    BorfError::SyntaxError(SyntaxError {
+    BorfError::SyntaxError(Box::new(SyntaxError {
         message: message.to_string(),
         src: NamedSource::new(source_name, source.to_string()),
         span,
         help: get_help_message("syntax"),
         label: "Syntax error occurred here".to_string(),
         related: Vec::new(),
-    })
+    }))
 }
 
 // Utility function to convert string slice to owned string

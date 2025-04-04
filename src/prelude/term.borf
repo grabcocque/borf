@@ -1,0 +1,83 @@
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- ~~~ Termination Analysis ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+@Term: { -- Analyzes whether reduction terminates
+  -- Context: Assumes Net structure and Reduction components/interfaces
+  B; P; w: P->P; $pi: P->Bool; step: Net->Net; red: Net->Net; normal: Net->Bool; history: Net->[Net]
+
+  -- Termination Predicate (Interface/Signature)
+  terminates: Net -> Bool        -- Predicate: Does reduction of this net terminate?
+
+  -- Cycle Detection (Interface/Signature)
+  -- Finds pairs of indices (i, j) where i < j and net[i] is structurally equal ($seq) to net[j]
+  detect_cycles: [Net] -> {(Z,Z)}
+
+  -- Apply k reduction steps (Interface/Signature)
+  apply_k: Z*Net -> Net = \k, n. {
+    match k <= 0 {
+      true -> n
+      false -> apply_k(k-1, Red.step(n)) -- Recursively apply reduction step
+    }
+  }
+
+  -- Default Termination Definition
+  -- Terminates if it reaches normal form OR enters a cycle detected in its history.
+  -- Note: For infinite non-cyclic reductions, this definition might be insufficient.
+  terminates = \n. reaches_normal_form(n) $or has_cycle(Red.history(n))
+
+  -- Helper: Check if normal form is reachable within a bounded number of steps (practical check)
+  -- A full check requires more advanced techniques (e.g., well-founded orderings).
+  reaches_normal_form: Net -> Bool = \n. $exists k $in Z+: Red.normal(apply_k(k, n)) -- Checks if some future state is normal
+
+  -- Helper: Check for cycles in history (Uses Primitive and Interface)
+  has_cycle: [Net] -> Bool = \trace. StdLib.ne(detect_cycles(trace)) -- Checks if the cycle detection found any cycles
+  -- Default cycle detection implementation (potentially expensive)
+  detect_cycles = \t. {(i,j) | i $in 0..($rho(t)-2), j $in (i+1)..($rho(t)-1) $and Primitives.$seq(t[i], t[j])} -- Use $seq for structural cycle detection
+
+  -- IO Termination Properties (Uses Primitive)
+  io_processed: B -> Bool = IO.processed -- Use IO.processed instead of Primitive.processed
+  -- Checks if all IO agents in the final (normal form) net have been processed.
+  io_agents_processed: Net -> Bool = \n_final. {
+    $forall b $in {agent $in B | IO.io_agent(agent) $and agent $in n_final}: io_processed(b)
+  }
+  -- IO termination means standard termination AND all IO agents completed.
+  io_terminates: Net -> Bool = \n. {
+    let n_final = Red.red(n) -- Reduce to normal form first
+    in terminates(n) $and Red.normal(n_final) $and io_agents_processed(n_final)
+  }
+
+  -- ~~~ Core Module Pattern (Entities Aggregation) ~~~
+  -- Core Types
+  typ = {
+    
+  }
+
+  -- Core Operators
+  op = {
+    
+  }
+
+  -- Core Functions
+  fn = {
+    terminates, detect_cycles, apply_k, reaches_normal_form, has_cycle, 
+    io_processed, io_agents_processed, io_terminates
+  }
+
+  -- Aggregate all entities
+  E = typ $cup op $cup fn
+
+  -- Classify entities
+  $tau = \e. {
+    match e: E {
+      _ $in typ -> Mod.TypeSym
+      _ $in op -> Mod.OpSym
+      _ $in fn -> Mod.FnSym
+      _ -> Mod.TypeSym -- Default case
+    }
+  }
+
+  -- Export all entities by default
+  vis = \e. true
+}
+
+-- export Term; 

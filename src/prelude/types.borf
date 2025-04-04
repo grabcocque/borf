@@ -1,0 +1,121 @@
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- ~~~ Type System Foundations ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+@T: {  -- The universe of types and their relations
+  T $in T                        -- The type of all types
+  <:: T*T->Bool                  -- Subtyping relation (infix, structural)
+  ~: Any->Bool                   -- Type membership predicate (e.g., x ~ Int)
+  $teq: T*T->Bool                -- Type equivalence (symmetric, reflexive, transitive)
+
+  -- Core Type Laws (Subtyping & Equivalence)
+  law.subtype_refl = $forall t $in T: t <:: t
+  law.subtype_trans = $forall a,b,c $in T: (a <:: b $and b <:: c) => a <:: c
+  -- Antisymmetry implies equivalence
+  law.subtype_antisymm = $forall a,b $in T: (a <:: b $and b <:: a) => (a $teq b)
+  law.teq_refl = $forall t $in T: t $teq t
+  law.teq_symm = $forall a,b $in T: a $teq b => b $teq a
+  law.teq_trans = $forall a,b,c $in T: (a $teq b $and b $teq c) => a $teq c
+  -- Subtyping implies type equivalence is coarser
+  law.teq_implies_subtype = $forall a,b $in T: a $teq b => (a <:: b $and b <:: a)
+
+  -- Base Types
+  U $in T; B $in T; N $in T; Z $in T; Q $in T; R $in T; C $in T; H $in T; S $in T; Sym $in T
+  -- Unit, Bool, Nat, Int, Rational, Real, Complex, Quaternion, String, Symbol
+  Any $in T                      -- Top type
+  Void $in T                     -- Bottom type (uninhabited)
+
+  -- Base Type Hierarchy Examples
+  law.base_subtyping = (N <:: Z) $and (Z <:: Q) $and (Q <:: R) $and (R <:: C) $and (C <:: H)
+  law.top_bottom = ($forall t $in T: Void <:: t) $and ($forall t $in T: t <:: Any)
+
+  -- Type Constructors (Binary: Product, Sum, Function, Map)
+  law.constructors_binary = $forall a,b $in T: {
+    a*b $in T;      -- Product Type
+    a+b $in T;      -- Sum Type
+    a->b $in T;     -- Function Type (Contravariant in arg, Covariant in result)
+    a :-> b $in T   -- Map Type (Covariant in value)
+  }
+  -- Type Constructors (Unary: List, Set, Optional, Linear, Sequence)
+  law.constructors_unary = $forall a $in T: {
+    [a] $in T;      -- List Type (Covariant)
+    {a} $in T;      -- Set Type
+    ?a $in T;       -- Optional Type (Covariant)
+    !a $in T;       -- Linear Type (Invariant)
+    Seq a $in T     -- Sequence Type (Covariant)
+  }
+
+  -- Subtyping Rules (Structural)
+  law.prod_sub = $forall a,b,c,d $in T: (a <:: c $and b <:: d) => (a*b <:: c*d)
+  law.sum_sub = $forall a,b,c,d $in T: (a <:: c $and b <:: d) => (a+b <:: c+d)
+  law.fn_sub = $forall a,b,c,d $in T: (c <:: a $and b <:: d) => ((a->b) <:: (c->d)) -- Note contravariance
+  law.map_sub = $forall k,v1,v2 $in T: (v1 <:: v2) => ((k :-> v1) <:: (k :-> v2)) -- Invariant in key, Covariant in value
+  law.list_sub = $forall a,b $in T: (a <:: b) => ([a] <:: [b])
+  law.set_sub = $forall a,b $in T: (a <:: b) => ({a} <:: {b})
+  law.opt_sub = $forall a,b $in T: (a <:: b) => (?a <:: ?b)
+  law.seq_sub = $forall a,b $in T: (a <:: b) => ((Seq a) <:: (Seq b))
+
+  -- Type Constructor Equivalence Laws (Congruence - derived from antisymmetry)
+  law.prod_eq = $forall a,b,c,d $in T: (a $teq c $and b $teq d) => (a*b $teq c*d)
+  law.sum_eq = $forall a,b,c,d $in T: (a $teq c $and b $teq d) => (a+b $teq c+d)
+  law.fn_eq = $forall a,b,c,d $in T: (a $teq c $and b $teq d) => (a->b $teq c->d)
+  law.map_eq = $forall k1,v1,k2,v2 $in T: (k1 $teq k2 $and v1 $teq v2) => ((k1 :-> v1) $teq (k2 :-> v2))
+  law.list_eq = $forall a,b $in T: (a $teq b) => ([a] $teq [b])
+  law.set_eq = $forall a,b $in T: (a $teq b) => ({a} $teq {b})
+  law.opt_eq = $forall a,b $in T: (a $teq b) => (?a $teq ?b)
+  law.lin_eq = $forall a,b $in T: (a $teq b) => (!a $teq !b)
+  law.seq_eq = $forall a,b $in T: (a $teq b) => ((Seq a) $teq (Seq b))
+
+  -- Linear Type Usage Law (Relies on Primitive)
+  law.linear_usage = $forall a $in T, x $in !a: Primitives.use_once(x) -- Ensures linear values are used
+
+  -- Potential Sequence Laws (Conceptual - may need primitives for laziness)
+  -- law.seq_laziness = ... (Requires primitives for delay/force/transducers)
+  -- law.list_to_seq = $forall l:[a]: $exists s:(Seq a): ... (Conversion possible)
+  -- law.seq_to_list = $forall s:(Seq a): $exists l:[a]: ... (Conversion possible, forces evaluation)
+
+  -- Example
+  example.subtype = (N <:: Z) => ([N] <:: [Z]) -- List of Naturals is subtype of List of Integers
+  example.equiv = (N <:: Z $and Z <:: N) $iff false $or_else ((N $teq Z) $iff false $or_else true) -- N is not equivalent to Z
+
+  law.linear_never_sub_non_linear = $forall !a, b: $not(!a <:: b)
+
+  -- ~~~ Core Module Pattern (Entities Aggregation) ~~~
+  -- Core Types
+  typ = {
+    T, U, B, N, Z, Q, R, C, H, S, Sym, Any, Void, Seq
+  }
+
+  -- Core Operators
+  op = {
+    <::, ~, $teq, ->, ->+, *, +, ?, !, :->
+  }
+
+  -- Core Functions (law records)
+  fn = {
+    law.subtype_refl, law.subtype_trans, law.subtype_antisymm,
+    law.teq_refl, law.teq_symm, law.teq_trans, law.teq_implies_subtype,
+    law.base_subtyping, law.top_bottom, law.constructors_binary, law.constructors_unary,
+    law.prod_sub, law.sum_sub, law.fn_sub, law.map_sub, law.list_sub, law.set_sub, law.opt_sub, law.seq_sub,
+    law.prod_eq, law.sum_eq, law.fn_eq, law.map_eq, law.list_eq, law.set_eq, law.opt_eq, law.lin_eq, law.seq_eq,
+    law.linear_usage, law.linear_never_sub_non_linear,
+    example.subtype, example.equiv
+  }
+
+  -- Aggregate all entities
+  E = typ $cup op $cup fn
+
+  -- Classify entities
+  $tau = \e. {
+    match e: E {
+      _ $in typ -> Mod.TypeSym
+      _ $in op -> Mod.OpSym
+      _ $in fn -> Mod.FnSym
+      _ -> Mod.TypeSym -- Default case
+    }
+  }
+
+  -- Export all entities by default
+  vis = \e. true
+}
+
+-- export T; 

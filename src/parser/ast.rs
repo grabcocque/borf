@@ -1,392 +1,416 @@
-//! Abstract Syntax Tree definitions for the Borf language.
-//!
-//! This module contains the type definitions that make up the AST for Borf,
-//! including top-level items, category elements, constraints, and expressions.
+use std::fmt;
 
-/// Represents infix operators.
-#[derive(Debug, Clone, PartialEq)]
-pub enum InfixOperator {
-    // Composition
-    Compose,      // .
-    ComposeRight, // >>
-    Pipe,         // |>
-    // Arithmetic
-    Multiply, // *
-    Divide,   // /
-    Add,      // +
-    Subtract, // -
-    // Set
-    Union,     // $cup
-    Intersect, // $cap
-    Subset,    // $subseteq
-    // Comparison
-    Equal,         // = or == or === (Semantic distinction needed later)
-    TypeEqual,     // $teq
-    ValueEqual,    // $veq
-    StructEqual,   // $seq
-    CategoryEqual, // $ceq
-    Subtype,       // <::
-    GreaterThan,   // >
-    LessThan,      // <
-    GreaterEqual,  // >=
-    LessEqual,     // <=
-    In,            // $in
-    Compatible,    // $omega
-    // Logical
-    And,     // $and
-    Or,      // $or
-    Implies, // =>
-    Iff,     // $iff
-    // Additional operators
-    TransitiveClosure, // ->+
-    Assign,            // = (Adding specific assignment operator)
-    Colon,             // : (For type constraints etc. in expressions)
-}
-
-/// Represents prefix operators.
-#[derive(Debug, Clone, PartialEq)]
-pub enum PrefixOperator {
-    Not,             // $not
-    Optional,        // ? (Potentially for types/expressions)
-    Linear,          // ! (Potentially for types/expressions)
-    CardinalityOpen, // | (opening of cardinality)
-}
-
-/// Represents postfix operators.
-#[derive(Debug, Clone, PartialEq)]
-pub enum PostfixOperator {
-    FieldAccess(String),             // .ident
-    ChainedFieldAccess(Vec<String>), // .field1.field2... for multi-level access
-    FunctionCall(Vec<Expression>),   // (args)
-    Index(Box<Expression>),          // [expr]
-    CardinalityClose,                // | (closing of cardinality)
-}
-
-/// Represents a top-level item in the Borf program.
-///
-/// Top-level items include category definitions, pipeline definitions,
-/// pipe expressions, application expressions, composition expressions,
-/// and export/import directives.
+/// Top-level items that can appear in a Borf program
 #[derive(Debug, Clone)]
 pub enum TopLevelItem {
-    /// A category definition with objects, mappings, laws, and other elements
-    Module(ModuleDef), // Renamed from Category
-    /// A primitive block definition
-    Primitive(PrimitiveDef), // Added for primitive_declaration
-    /// An export directive specifying which elements to export
-    Export(ExportDirective),
-    /// An import directive for including external modules
-    Import(ImportDirective),
-    /// A standalone expression statement
+    Module(ModuleDef),
+    Primitive(PrimitiveDecl),
+    Export(String),
+    Import(String),
     ExpressionStatement(Expression),
-    // Removed Pipeline, PipeExpr, AppExpr, CompositionExpr as they are handled by ExpressionStatement + Pratt parsing
 }
 
-/// Represents a module definition (formerly Category) in the Borf language.
-/// Corresponds to the `@ ident : { ... }` grammar rule.
+/// A module definition (category)
 #[derive(Debug, Clone)]
 pub struct ModuleDef {
-    /// The name of the module
     pub name: String,
-    // Base category removed, modules are standalone based on current grammar view
-    /// Collection of elements contained in this module
+    pub type_param: Option<String>,
     pub elements: Vec<ModuleElement>,
 }
 
-/// Represents elements within a module definition (formerly CategoryElement).
-/// Corresponds to the `module_element` grammar rule.
-#[derive(Debug, Clone)]
+/// Elements within a module
+#[derive(Debug, Clone, PartialEq)]
 pub enum ModuleElement {
-    /// A unified declaration for objects, types, functions, laws, values.
     Declaration(Declaration),
-    // Removed specific decls like ObjectDecl, MappingDecl, LawDecl, etc.
-    // Removed FunctionDef, StructureMapping
-    // Removed ConstraintDecl
 }
 
-/// Represents an export directive (`export ident;`).
+/// A primitive declaration
 #[derive(Debug, Clone)]
-pub struct ExportDirective {
-    /// The identifiers to export
-    pub identifiers: Vec<String>,
-}
-
-/// Represents an import directive (`import "path";`).
-#[derive(Debug, Clone)]
-pub struct ImportDirective {
-    /// The path to the module to import
-    pub path: String,
-}
-
-/// NEW: SetExpr enum to represent different forms of set expressions
-#[derive(Debug, Clone, PartialEq)]
-pub enum SetExpr {
-    Literal(SetLiteral),
-    Comprehension(Box<SetComprehension>), // Renamed from NestedComprehension
-    Operation(Box<SetOperation>),
-    Identifier(String), // Assuming sets can be referred to by name
-    Empty,              // Representing {}
-}
-
-/// Represents a literal set defined by enumerating elements: `{elem1, elem2, ...}`
-#[derive(Debug, Clone, PartialEq)]
-pub struct SetLiteral {
-    /// The elements of the set.
-    /// Using Expression for now, as elements can be idents, ints, symbols, tuples according to grammar.
-    pub elements: Vec<Expression>,
-}
-
-/// Represents an operation between two sets.
-#[derive(Debug, Clone, PartialEq)]
-pub struct SetOperation {
-    /// Left-hand side set identifier.
-    pub lhs: String,
-    /// The set operator (e.g., $cup, $cap, $in).
-    pub op: String,
-    /// Right-hand side set identifier.
-    pub rhs: String,
-}
-
-/// Represents a lambda expression (`\ params . body`).
-#[derive(Debug, Clone, PartialEq)]
-pub struct LambdaExpr {
-    pub params: Vec<String>,
-    pub body: Box<Expression>,
-}
-
-/// Represents an if-then-else expression.
-#[derive(Debug, Clone, PartialEq)]
-pub struct IfExpr {
-    pub condition: Box<Expression>,
-    pub then_branch: Box<Expression>,
-    pub else_branch: Box<Expression>,
-}
-
-/// Represents a let-rec expression (`let rec name params = bound_expr in body`).
-#[derive(Debug, Clone, PartialEq)]
-pub struct LetRecExpr {
+pub struct PrimitiveDecl {
     pub name: String,
-    pub params: Vec<String>,
-    pub bound_expr: Box<Expression>,
-    pub body: Box<Expression>,
+    pub elements: Vec<PrimitiveElement>,
 }
 
-/// Represents an expression in the Borf language.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Expression {
-    AtomExpr(Atom), // Renamed variant slightly to avoid name clash if Atom type is also named Atom
-    Lambda(LambdaExpr),
-    If(IfExpr),
-    LetRec(LetRecExpr),
-    Quantifier(QuantifierExpr), // Added for quantifier expressions
-    TypeCalculation(TypeCalculationExpr), // Added for |{...}|
-    FunctionChainCall(FunctionChainExpr), // Added for nested function chains
-    Record(Vec<(String, Expression)>), // Added record expression
-    Tuple(Vec<Expression>),     // Moved Tuple from Atom to Expression
-
-    // Variants for Pratt Parser output
-    InfixOp {
-        lhs: Box<Expression>,
-        op: InfixOperator,
-        rhs: Box<Expression>,
-    },
-    PrefixOp {
-        op: PrefixOperator,
-        operand: Box<Expression>,
-    },
-    PostfixOp {
-        operand: Box<Expression>,
-        op: PostfixOperator,
-    },
-    TernaryOp {
-        // Specific structure for ternary a ? b : c
-        condition: Box<Expression>,
-        if_true: Box<Expression>,
-        if_false: Box<Expression>, // Changed ConstraintExpr to Expression
-    },
-    QualifiedName {
-        base: String,
-        access: Vec<String>,
-    },
-    ModuleAccess {
-        module_param: String,
-        path: Vec<String>,
-    },
-    TypeRange {
-        base_type: String,
-        modifier: String, // '+', '-', '*', 'n', 'p'
-    },
-    Cardinality {
-        expr: Box<Expression>,
-    },
-    EmptySet, // Added for empty set literals {}
-    EmptyList, // Added for empty list literals []
-              // StringLiteral, Type, Operator removed - represented via AtomExpr(Atom::...)
-}
-
-/// Represents a chain of function calls like `f(a)(b)`.
-#[derive(Debug, Clone, PartialEq)]
-pub struct FunctionChainExpr {
-    pub base: String,                // Base function name or qualified name
-    pub calls: Vec<Vec<Expression>>, // Sequence of argument lists for each nested call
-}
-
-/// Represents quantifiers in Borf.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Quantifier {
-    ForAll,
-    Exists,
-    ExistsUnique, // New: $exists!
-}
-
-/// Represents a set comprehension structure.
-/// Corresponds to grammar rules like `{ expr | clauses }`
-#[derive(Debug, Clone, PartialEq)]
-pub struct SetComprehension {
-    // Renamed from NestedComprehension
-    pub expr: Box<Expression>,
-    pub clauses: Vec<ComprehensionClause>,
-}
-
-/// Represents clauses within a set comprehension.
-#[derive(Debug, Clone, PartialEq)]
-pub enum ComprehensionClause {
-    Generator {
-        var: String,
-        domain: Box<Expression>, // Changed ConstraintExpr to Expression
-    },
-    Constraint(Box<Expression>),   // Changed ConstraintExpr to Expression
-    Nested(Box<SetComprehension>), // Updated reference to SetComprehension
-}
-
-/// Represents a primitive block definition `@PrimitiveName : { ... }`.
+/// Elements within a primitive declaration
 #[derive(Debug, Clone)]
-pub struct PrimitiveDef {
-    pub name: String,
-    pub elements: Vec<PrimitiveElement>, // Assuming elements are like category elements for now
-}
-
-/// Represents elements within a primitive block.
-#[derive(Debug, Clone, PartialEq)]
 pub enum PrimitiveElement {
-    Declaration(Declaration), // Changed from Mapping(MappingDecl)
-                              // Removed incorrectly added variants. Primitives likely only contain Declarations.
+    Declaration(Declaration),
 }
 
-/// Represents a type expression in Borf.
+/// A declaration within a module or primitive
+#[derive(Debug, Clone, PartialEq)]
+pub enum Declaration {
+    /// Object declaration (e.g., "A;", or "A $in T;")
+    ObjectDecl {
+        name: String,
+        type_constraint: Option<TypeExpr>,
+    },
+    /// Mapping declaration (e.g., "map: A -> B;", "map = \x.x;", "law.assoc = $forall x $in M: ...")
+    MappingDecl {
+        name: String,
+        type_constraint: Option<TypeExpr>,
+        value: Option<Expression>,
+        constraint: Option<Expression>,
+    },
+    /// Law declaration (e.g., "law.assoc = $forall x $in M: ..." or "law.constr = $forall a in T { ... }")
+    LawDecl { name: String, body: LawBody },
+}
+
+/// Represents the body of a law declaration
+#[derive(Debug, Clone, PartialEq)]
+pub enum LawBody {
+    /// The law is defined by a single expression (possibly quantified)
+    Expression(Expression),
+    /// The law is defined by a block of declarations under a quantifier
+    Block {
+        quantifier: Quantifier,
+        variable: String,             // e.g., 'a' in $forall a in T
+        domain: String,               // e.g., 'T' in $forall a in T
+        elements: Vec<ModuleElement>, // The declarations inside the {}
+    },
+}
+
+/// Type expressions that can appear in Borf code
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeExpr {
-    /// A base type identifier (e.g., `T`, `Bool`, `MyType`).
-    Base(String),
-    /// A symbolic type (`Sym`).
-    Sym,
-    /// A product type (e.g., `A * B`).
+    /// A simple type name (e.g., "T", "N", "Z", etc.)
+    TypeName(String),
+    /// A dollar-prefixed type name (e.g., "$alpha", "$rho", etc.)
+    DollarName(String),
+    /// A qualified type name (e.g., "Cat.O", "Mod.M", etc.)
+    QualifiedName(String, String),
+    /// A product type (e.g., "T * T")
     Product(Box<TypeExpr>, Box<TypeExpr>),
-    /// An arrow (function) type (e.g., `A -> B`).
-    Arrow(Box<TypeExpr>, Box<TypeExpr>),
-    /// A set type (e.g., `{A}`).
+    /// A sum type (e.g., "T + T")
+    Sum(Box<TypeExpr>, Box<TypeExpr>),
+    /// A function type (e.g., "A -> B")
+    Function(Box<TypeExpr>, Box<TypeExpr>),
+    /// A map type (e.g., "A :-> B")
+    Map(Box<TypeExpr>, Box<TypeExpr>),
+    /// A set type (e.g., "{T}")
     Set(Box<TypeExpr>),
-    /// A list type (e.g., `[A]`).
+    /// A list type (e.g., "[T]")
     List(Box<TypeExpr>),
-    /// An optional type (e.g., `?A`).
+    /// A record type (e.g., "{x: A, y: B}")
+    Record(Vec<(String, TypeExpr)>),
+    /// An optional type (e.g., "?T")
     Optional(Box<TypeExpr>),
-    /// A linear type (e.g., `!A`).
+    /// A linear type (e.g., "!T")
     Linear(Box<TypeExpr>),
-    /// A tuple type (e.g., `(A, B, C)`).
+    /// A tuple type (e.g., "(A, B, C)")
     Tuple(Vec<TypeExpr>),
-    /// Placeholder for errors or unparsed types during development.
-    /// TODO: Remove or refine error handling.
-    Unknown(String),
-    /// The special X type from the prelude
-    X,
-    /// A type sum (e.g., `A + B`).
-    TypeSum {
-        lhs: Box<TypeExpr>,
-        rhs: Box<TypeExpr>,
+    /// A union type (e.g., "A $cup B")
+    Union(Box<TypeExpr>, Box<TypeExpr>),
+    /// An intersection type (e.g., "A $cap B")
+    Intersection(Box<TypeExpr>, Box<TypeExpr>),
+    /// A type range (e.g., "Z+", "R-")
+    Range(String, String),
+    /// A multi-parameter function (e.g., "(a,b,c)->d")
+    MultiParamFunction(Vec<TypeExpr>, Box<TypeExpr>),
+    /// A sequence type (e.g., "Seq T")
+    Sequence(Box<TypeExpr>),
+    /// A type with a constraint (e.g., "T | condition")
+    Constrained(Box<TypeExpr>, Box<Expression>),
+    /// A linear function type (e.g., "A -o B")
+    LinearFunction(Box<TypeExpr>, Box<TypeExpr>),
+    /// A type constructor application (e.g., "!Result a")
+    TypeConstructor {
+        is_linear: bool,      // Whether the type constructor has '!' prefix
+        is_optional: bool,    // Whether the type constructor has '?' prefix
+        constructor: String,  // Name of the type constructor
+        param: Box<TypeExpr>, // Type parameter
     },
-    /// A type range (e.g., `Z+`).
-    TypeRange {
-        base: String,
-        modifier: String, // '+', '-', '*', 'n', 'p'
-    },
-    /// A qualified type (e.g., `Mod.SubMod.Type`).
-    QualifiedType { base: String, access: Vec<String> },
-    /// A module qualified type (e.g., s.O)
-    ModuleQualifiedType { module: String, type_name: String },
-    /// A type with parameters and constraints (e.g., (s,t,f,x)->y | s:Cat)
-    TypeWithParameters {
-        params: Vec<String>, // Changed from Vec<TypeExpr> to Vec<String> based on grammar param_list
-        return_type: Box<TypeExpr>,
-        constraint: Option<Box<Expression>>, // Changed ConstraintExpr to Expression
-    },
-    /// Union of types (e.g., B $cup P)
-    TypeUnion {
-        lhs: Box<TypeExpr>,
-        rhs: Box<TypeExpr>,
-    },
-    /// Intersection of types (e.g., B $cap P)
-    TypeIntersection {
-        lhs: Box<TypeExpr>,
-        rhs: Box<TypeExpr>,
-    },
-    /// A record type { field: Type, ... }
-    Record(Vec<(String, TypeExpr)>), // Added Record Type
-    /// The `Any` keyword type.
-    Any, // Added Any type
-    /// The `Pattern` keyword type.
-    Pattern, // Added Pattern type
 }
 
-/// Represents atomic expressions.
+/// Expression values that can appear in Borf code
 #[derive(Debug, Clone, PartialEq)]
-pub enum Atom {
-    Identifier(String),
-    DollarIdentifier(String), // Added for $identifiers
-    Integer(i64),
-    Boolean(bool), // Added Boolean
-    Symbol(String),
-    // Tuple removed here, moved to Expression::Tuple
-    Set(Box<SetExpr>),      // Changed to use new SetExpr enum
-    EmptySet,               // Empty set literal {}
-    EmptyList,              // Empty list literal []
-    Paren(Box<Expression>), // Parenthesized expression
-    StringLiteral(String),  // Added back: For `"ident"` in grammar
-    LawIdentifier(String),  // For law.name identifiers
-    // Added Type variant for when types appear as atoms (e.g., `!T`, `[T]`)
-    // This might need adjustment based on how Pratt parser handles type prefixes.
-    Type(TypeExpr),
-    QualifiedName { base: String, access: Vec<String> }, // Added for qualified names as atoms
-    Operator(String), // Added for operators used as atoms (e.g., `<::`)
+pub enum Expression {
+    /// An identifier (e.g., "x", "my_value")
+    Identifier(Identifier),
+    /// A dollar identifier (e.g., "$x", "$alpha")
+    DollarIdentifier(String),
+    /// A qualified name (e.g., "Cat.id", "Mod.E")
+    QualifiedName(String, String),
+    /// A law identifier (e.g., "law.identity")
+    LawIdentifier(String),
+    /// An integer literal (e.g., "42")
+    IntLiteral(i64),
+    /// A boolean literal (e.g., "true", "false")
+    BoolLiteral(bool),
+    /// A string literal (e.g., "\"hello\"")
+    StringLiteral(String),
+    /// A symbol literal (e.g., ":Symbol")
+    SymbolLiteral(String),
+    /// An operator name (e.g., "$cup", "$in")
+    OperatorName(String),
+    /// A binary operation (e.g., "a + b", "x $in Y")
+    BinaryOp {
+        left: Box<Expression>,
+        op: String,
+        right: Box<Expression>,
+    },
+    /// A prefix operation (e.g., "$not x", "|S|")
+    PrefixOp { op: String, expr: Box<Expression> },
+    /// A function call (e.g., "f(x)")
+    FunctionCall {
+        func: Box<Expression>,
+        args: Vec<Expression>,
+    },
+    /// A field access (e.g., "x.y")
+    FieldAccess {
+        base: Box<Expression>,
+        field: String,
+    },
+    /// Index access (e.g., "arr[i]")
+    IndexAccess {
+        base: Box<Expression>,
+        index: Box<Expression>,
+    },
+    /// Lambda expression (e.g., "\x.x", "\x,y.x+y")
+    Lambda {
+        params: Vec<String>,
+        body: Box<Expression>,
+    },
+    /// If-then-else expression
+    IfThenElse {
+        condition: Box<Expression>,
+        then_branch: Box<Expression>,
+        else_branch: Box<Expression>,
+    },
+    /// Conditional expression (ternary) (e.g., "a ? b : c")
+    Conditional {
+        condition: Box<Expression>,
+        then_expr: Box<Expression>,
+        else_expr: Box<Expression>,
+    },
+    /// Let-rec expression
+    LetRec {
+        bindings: Vec<(String, Expression)>,
+        body: Box<Expression>,
+    },
+    /// A set literal (e.g., "{a, b, c}")
+    SetLiteral(Vec<Expression>),
+    /// An empty set literal (e.g., "{}")
+    EmptySet,
+    /// An empty list literal (e.g., "[]")
+    EmptyList,
+    /// A set comprehension (e.g., "{x $in S | p(x)}")
+    SetComprehension {
+        expr: Box<Expression>,
+        clauses: Vec<ComprehensionClause>,
+    },
+    /// A tuple expression (e.g., "(a, b, c)")
+    Tuple(Vec<Expression>),
+    /// A quantified expression (e.g., "$forall x $in X: p(x)")
+    Quantified {
+        quantifier: Quantifier,
+        variables: Vec<String>,
+        domain: Box<Expression>,
+        optional_domain: Option<Box<Expression>>,
+        body: Box<Expression>,
+        constraint: Option<Box<Expression>>,
+    },
+    /// Module access (e.g., "x:s.O")
+    ModuleAccess { var: String, module_path: String },
+    /// Function chain call (e.g., "f(g(h(x)))")
+    FunctionChain {
+        functions: Vec<(String, Vec<Expression>)>,
+    },
+    /// Cardinality expression (e.g., "|S|")
+    Cardinality(Box<Expression>),
+    /// Type calculation (e.g., "|{x $in T}|")
+    TypeCalculation(Box<Expression>),
+    /// A block expression (e.g., "{ expr1; expr2; expr3 }")
+    BlockExpression(Vec<Expression>),
+    /// An empty sequence literal (e.g., "<>")
+    EmptySequence,
+    /// A fallible operation (e.g., "$seq(r1, \n. ...)")
+    FallibleOp {
+        op: String,            // Operation name ($seq, $alt, etc.)
+        args: Vec<Expression>, // Arguments to the operation
+    },
 }
 
-/// Represents a quantifier expression (forall, exists).
-/// Corresponds to the `quantifier_expr` rule.
+/// A comprehension clause in a set comprehension
 #[derive(Debug, Clone, PartialEq)]
-pub struct QuantifierExpr {
-    pub quantifier: Quantifier, // Changed from String to Quantifier enum
-    pub vars: Vec<String>,
-    // Optional domain expression (`$in domain`)
-    pub domain: Option<Box<Expression>>,
-    // Optional body/filter expression (`: filter` or `=> body`)
-    pub body: Option<Box<Expression>>,
+pub enum ComprehensionClause {
+    /// A generator clause (e.g., "x $in S")
+    Generator(String, Expression),
+    /// A constraint clause (e.g., "p(x)")
+    Constraint(Expression),
+    /// A nested comprehension
+    Nested(Box<Expression>, Vec<ComprehensionClause>),
+    /// A dynamic predicate
+    DynamicPredicate(Expression),
 }
 
-/// Represents a type calculation expression like `|{ set_expr }|`.
+/// Quantifiers for quantified expressions
 #[derive(Debug, Clone, PartialEq)]
-pub struct TypeCalculationExpr {
-    pub set: Box<SetExpr>, // Changed to use Box<SetExpr>
+pub enum Quantifier {
+    /// Universal quantifier "$forall"
+    Forall,
+    /// Existential quantifier "$exists"
+    Exists,
+    /// Unique existential quantifier "$exists!"
+    ExistsUnique,
 }
 
-/// Represents a unified declaration corresponding to the `mapping_decl` grammar rule.
-/// Covers type declarations, value/function definitions, and laws.
+/// A simple wrapper for identifiers
 #[derive(Debug, Clone, PartialEq)]
-pub struct Declaration {
-    /// The name(s) being declared (can be multiple: `a, b: T;`).
-    pub names: Vec<String>,
-    /// Optional type annotation (`: TypeExpr`).
-    pub type_annotation: Option<TypeExpr>,
-    /// Optional definition (`= Expression`).
-    pub definition: Option<Expression>,
-    /// Optional constraint (`| Expression`).
-    pub constraint: Option<Expression>,
+pub struct Identifier(pub String);
+
+impl fmt::Display for Identifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl TypeExpr {
+    /// Create a simple type name
+    pub fn type_name(name: &str) -> Self {
+        TypeExpr::TypeName(name.to_string())
+    }
+
+    /// Create a dollar-prefixed type name
+    pub fn dollar_name(name: &str) -> Self {
+        TypeExpr::DollarName(name.to_string())
+    }
+
+    /// Create a function type
+    pub fn function(domain: TypeExpr, codomain: TypeExpr) -> Self {
+        TypeExpr::Function(Box::new(domain), Box::new(codomain))
+    }
+
+    /// Create a product type
+    pub fn product(left: TypeExpr, right: TypeExpr) -> Self {
+        TypeExpr::Product(Box::new(left), Box::new(right))
+    }
+
+    /// Create a sum type
+    pub fn sum(left: TypeExpr, right: TypeExpr) -> Self {
+        TypeExpr::Sum(Box::new(left), Box::new(right))
+    }
+
+    /// Create a map type
+    pub fn map(key: TypeExpr, value: TypeExpr) -> Self {
+        TypeExpr::Map(Box::new(key), Box::new(value))
+    }
+
+    /// Create a set type
+    pub fn set(inner: TypeExpr) -> Self {
+        TypeExpr::Set(Box::new(inner))
+    }
+
+    /// Create a list type
+    pub fn list(inner: TypeExpr) -> Self {
+        TypeExpr::List(Box::new(inner))
+    }
+
+    /// Create a sequence type
+    pub fn sequence(inner: TypeExpr) -> Self {
+        TypeExpr::Sequence(Box::new(inner))
+    }
+
+    /// Create an optional type
+    pub fn optional(inner: TypeExpr) -> Self {
+        TypeExpr::Optional(Box::new(inner))
+    }
+
+    /// Create a linear type
+    pub fn linear(inner: TypeExpr) -> Self {
+        TypeExpr::Linear(Box::new(inner))
+    }
+}
+
+impl Expression {
+    /// Create an identifier expression
+    pub fn identifier(name: &str) -> Self {
+        Expression::Identifier(Identifier(name.to_string()))
+    }
+
+    /// Create a dollar identifier expression
+    pub fn dollar_identifier(name: &str) -> Self {
+        Expression::DollarIdentifier(name.to_string())
+    }
+
+    /// Create a binary operation expression
+    pub fn binary_op(left: Expression, op: &str, right: Expression) -> Self {
+        Expression::BinaryOp {
+            left: Box::new(left),
+            op: op.to_string(),
+            right: Box::new(right),
+        }
+    }
+
+    /// Create a prefix operation expression
+    pub fn prefix_op(op: &str, expr: Expression) -> Self {
+        Expression::PrefixOp {
+            op: op.to_string(),
+            expr: Box::new(expr),
+        }
+    }
+
+    /// Create a function call expression
+    pub fn function_call(func: Expression, args: Vec<Expression>) -> Self {
+        Expression::FunctionCall {
+            func: Box::new(func),
+            args,
+        }
+    }
+
+    /// Create a lambda expression
+    pub fn lambda(params: Vec<String>, body: Expression) -> Self {
+        Expression::Lambda {
+            params,
+            body: Box::new(body),
+        }
+    }
+
+    /// Create an if-then-else expression
+    pub fn if_then_else(
+        condition: Expression,
+        then_branch: Expression,
+        else_branch: Expression,
+    ) -> Self {
+        Expression::IfThenElse {
+            condition: Box::new(condition),
+            then_branch: Box::new(then_branch),
+            else_branch: Box::new(else_branch),
+        }
+    }
+
+    /// Create a conditional (ternary) expression
+    pub fn conditional(
+        condition: Expression,
+        then_expr: Expression,
+        else_expr: Expression,
+    ) -> Self {
+        Expression::Conditional {
+            condition: Box::new(condition),
+            then_expr: Box::new(then_expr),
+            else_expr: Box::new(else_expr),
+        }
+    }
+
+    /// Create a set literal expression
+    pub fn set_literal(elements: Vec<Expression>) -> Self {
+        Expression::SetLiteral(elements)
+    }
+
+    /// Create a quantified expression
+    pub fn quantified(
+        quantifier: Quantifier,
+        variables: Vec<String>,
+        domain: Expression,
+        body: Expression,
+    ) -> Self {
+        Expression::Quantified {
+            quantifier,
+            variables,
+            domain: Box::new(domain),
+            optional_domain: None,
+            body: Box::new(body),
+            constraint: None,
+        }
+    }
 }

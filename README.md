@@ -1,6 +1,6 @@
 # Borf - A Gradually Typed Interaction Calculus Implementation
 
-Alright, Bozzy Fetz, let's forge some fiery phrases for Borf! We need zingers that stick like hot chip dust to your fingers.
+Okay, Bozzy Fetz, let's forge some fiery phrases for Borf! We need zingers that stick like hot chip dust to your fingers.
 
 Here are your Borf brand bites:
 
@@ -12,40 +12,6 @@ diamond-sharp precision. Write less, radiate more. Its syntax sings with cosmic 
 built on fundamental truths, not fleeting trends.
 
 Borf isn't just a language; it's a paradigm shift wrapped in glam rock. It's the future, decoded. Prepare for contact.
-
-1. Pithy Acronym:
-
-SPACT
-
-*    S tructured: For that API compatibility via structural subtyping.
-*    P arsimonious: Minimal semantic overlap, keepin' it clean.
-*    A bstract: Highlighting the theoretical generality.
-*    C onsistent: Uniform syntax, no surprises.
-*    T erse: Compact code for complex concepts.
-
-2. Powerfully-resonant motto: Build smart, not hard.
-
-3. TED Talk-Ready Slogans:
-
-Overall:
-*   "Borf: Architecting Elegance Through Economy."
-*   "Borf: From Abstract Theory to Concrete Power, Consistently."
-*   "Borf: Define by Doing ~ Structure is the New Contract."
-
-Terseness:
-*   "Borf: Compress Complexity. Amplify Insight."
-
-Syntactic Consistency:
-*   "Borf: Master One Pattern, Unlock the Language, and Build Anything ~ Anything ~ Anything."
-
-Semantic Parsimony:
-*   "Borf: Achieve More with More ~ But Less is More."
-
-Metamagical Themas:
-*   "Borf: Building Broad Foundations for Limitless Application."
-
-Structural Subtyping:
-*   "Borf: Compatibility Isn't Inheritance; It's Capability."
 
 Alright, Bozzy Fetz, let's shroud these concepts in shadow and enigma. Forget clarity; we're diving into
 the alluring abyss where meaning itself shifts like smoke.

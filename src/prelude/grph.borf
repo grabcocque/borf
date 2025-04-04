@@ -1,0 +1,78 @@
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- ~~~ Graph Structure ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+@Grph: { -- Abstract Graph definition with labels
+  N                             -- Set of Nodes
+  E                             -- Set of Edges
+  src: E->N                     -- Edge source node function
+  tgt: E->N                     -- Edge target node function
+  -- X is a placeholder for the label type (could be Any, Sym, specific label type TBD)
+  $lambdaN: N->X                -- Node labeling function
+  $lambdaE: E->X                -- Edge labeling function
+
+  -- Structural Compatibility with Category Theory (@Cat)
+  O = N                         -- Objects are nodes
+  M = E                         -- Morphisms are edges
+  dom = src
+  cod = tgt
+  -- Note: id and composition are not directly mapped here, but can be defined via paths.
+
+  -- Graph Construction Helpers (Interfaces/Signatures)
+  loop: N->E                      -- Creates a loop edge for a node
+  comp: E*E->E | tgt(e) $veq src(f) -- Creates a composite edge representing path e then f
+
+  -- Identity and Composition (defined via helpers)
+  id = \n. loop(n)               -- Identity morphism corresponds to a loop edge
+  -- Composition '.' corresponds to path composition via 'comp' helper.
+
+  -- Graph Laws
+  law.loop_src_tgt = $forall n $in N: src(loop(n)) $veq n $and tgt(loop(n)) $veq n
+  law.comp_src_tgt = $forall e,f $in E | tgt(e) $veq src(f):
+    src(comp(e,f)) $veq src(e) $and tgt(comp(e,f)) $veq tgt(f)
+
+  -- Node Equivalence based on Label Equality
+  node_eq: N*N->Bool = \a,b. $lambdaN(a) $seq $lambdaN(b) -- Nodes are equivalent if their labels are structurally equal
+
+  -- Decoration Coherence Laws (Relating node/edge labels)
+  -- Assumes 'rel' from @R provides the appropriate relation between labels.
+  law.dec_comp = $forall e,f $in E | tgt(e) $veq src(f):
+    $lambdaE(comp(e,f)) R.rel ($lambdaE(e) * $lambdaE(f)) -- Label of composite edge relates to labels of components
+  law.dec_loop = $forall n $in N: $lambdaE(loop(n)) R.rel $lambdaN(n) -- Label of loop edge relates to label of the node
+
+  -- Example: node_eq(node1, node2, node_equality_function)
+
+  -- ~~~ Core Module Pattern (Entities Aggregation) ~~~
+  -- Core Types
+  typ = {
+    Grph
+  }
+
+  -- Core Operators
+  op = {
+    $lambdaN, $lambdaE
+  }
+
+  -- Core Functions
+  fn = {
+    src, tgt, loop, comp, id, node_eq,
+    law.loop_src_tgt, law.comp_src_tgt, law.dec_comp, law.dec_loop
+  }
+
+  -- Aggregate all entities
+  E = typ $cup op $cup fn
+
+  -- Classify entities
+  $tau = \e. {
+    match e: E {
+      _ $in typ -> Mod.TypeSym
+      _ $in op -> Mod.OpSym
+      _ $in fn -> Mod.FnSym
+      _ -> Mod.TypeSym -- Default case
+    }
+  }
+
+  -- Export all entities by default
+  vis = \e. true
+}
+
+-- export Grph; 

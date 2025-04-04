@@ -1,0 +1,72 @@
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- ~~~ Relations Module ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+@R: {  -- Relations between values and types
+  -- Module dependency and export configuration
+  deps = {
+    -- R depends on T and is exported by Core
+    (@Core, @R, true),
+    (@R, T, false)
+  }
+
+  -- Core Relations 
+  $veq: Any*Any->Bool            -- Value equality (identity, vs. structural equality)
+  $seq: Any*Any->Bool            -- Structural equality (deep comparison)
+  $omega: Any*Any->Bool          -- Type compatibility relation (used for port connections)
+  rel: Any*Any->Bool             -- General relation (for edge/node connections)
+  
+  -- Laws for Relations
+  law.seq_reflexive = $forall x: x $seq x
+  law.seq_symmetric = $forall x,y: x $seq y => y $seq x
+  law.seq_transitive = $forall x,y,z: x $seq y $and y $seq z => x $seq z
+  
+  law.veq_reflexive = $forall x: x $veq x
+  law.veq_symmetric = $forall x,y: x $veq y => y $veq x
+  law.veq_transitive = $forall x,y,z: x $veq y $and y $veq z => x $veq z
+  
+  -- Relation between structure and value equality
+  law.veq_implies_seq = $forall x,y: x $veq y => x $seq y
+  
+  -- Type compatibility is reflexive and symmetric
+  law.omega_reflexive = $forall x: x $omega x
+  law.omega_symmetric = $forall x,y: x $omega y => y $omega x
+
+  -- Example: $omega(int_compare) where int_compare is a function (Z*Z -> Bool)
+
+  -- ~~~ Core Module Pattern (Entities Aggregation) ~~~
+  -- Core Types
+  typ = {
+    R
+  }
+
+  -- Core Operators
+  op = {
+    $veq, $seq, $omega
+  }
+
+  -- Core Functions
+  fn = {
+    rel,
+    law.seq_reflexive, law.seq_symmetric, law.seq_transitive,
+    law.veq_reflexive, law.veq_symmetric, law.veq_transitive,
+    law.veq_implies_seq, law.omega_reflexive, law.omega_symmetric
+  }
+
+  -- Aggregate all entities
+  E = typ $cup op $cup fn
+
+  -- Classify entities
+  $tau = \e. {
+    match e: E {
+      _ $in typ -> Mod.TypeSym
+      _ $in op -> Mod.OpSym
+      _ $in fn -> Mod.FnSym
+      _ -> Mod.TypeSym -- Default case
+    }
+  }
+
+  -- Export all entities by default
+  vis = \e. true
+}
+
+-- export R; 

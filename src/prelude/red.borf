@@ -1,0 +1,98 @@
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- ~~~ Reduction Semantics ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+@Red: {  -- Defines reduction operations on Nets
+  -- Context: Assumes Net structure with active pairs ($alpha), rules (R), etc.
+  
+  -- Core Reduction Operations
+  step: Net->Net                 -- Performs a single reduction step if possible
+  red: Net->Net                  -- Reduces to normal form
+  normal: Net->Bool              -- Checks if a net is in normal form (no active pairs)
+  
+  -- Reduction Strategy
+  strategy: (Net->[AgentId*AgentId])->([AgentId*AgentId]->AgentId*AgentId)->(Net->Net)
+  -- Higher-order function defining reduction strategy:
+  -- Takes a function to find redexes and a function to choose among them
+
+  -- Extract string data from net (assuming format succeeds)
+  extract_data: Net -> S = \n. {
+    let final_net = normal(n) $iff n $or_else red(n) -- Reduce if not normal
+    let result = Primitives.$format(final_net)
+    in FLogic.is_valid(result) $iff FLogic.extract_value(result) $or_else "<Format Error>" -- Handle potential format failure
+  }
+  
+  -- Apply replacement rule (rho) to net (n)
+  apply: $rho*Net -> Net = \r,n. {
+    let matches = Primitives.$match(r[0], n) -- Find first match (primitive might return multiple)
+    in Primitives.$rho(matches) > 0 $iff
+       (n Primitives.$ominus Primitives.$at(Primitives.$at(matches, 0), 0)) Primitives.$oplus r[1] $or_else n -- Apply rule if match found
+       -- Note: This assumes $match returns a structure usable by $at and $ominus
+       -- $at($at(matches, 0), 0) likely needs refinement based on $match output structure
+  }
+  
+  -- Default implementation using Net.find_redexes
+  step = \n. {
+    let redexes = Net.find_redexes(n)
+    in Primitives.$rho(redexes) > 0 $iff 
+       apply_rule(n, redexes[0]) $or_else n
+  }
+  
+  -- Apply a single reduction rule to a redex
+  apply_rule: Net*(AgentId*AgentId)->Net = \n,redex. apply(Net.R[redex], n)
+  
+  -- Reduce to normal form
+  red = \n. normal(n) $iff n $or_else red(step(n))
+  
+  -- Check if in normal form (no active pairs)
+  normal = \n. Primitives.$rho(Net.find_redexes(n)) $veq 0
+  
+  -- IO-specific operations
+  prioritize_io: [AgentId*AgentId]->[AgentId*AgentId]  -- Prioritizes IO redexes
+  io_strategy: Net->Net                               -- IO-focused reduction strategy
+  
+  -- Track reduction history
+  history: Net->[Net] = \n. {
+    let steps = []
+    let current = n
+    while $not(normal(current)) {
+      steps = StdLib.List.append(steps, current)
+      current = step(current)
+    }
+    StdLib.List.append(steps, current)
+  }
+
+  -- ~~~ Core Module Pattern (Entities Aggregation) ~~~
+  -- Core Types
+  typ = {
+    
+  }
+
+  -- Core Operators
+  op = {
+    
+  }
+
+  -- Core Functions
+  fn = {
+    step, red, normal, strategy, extract_data, apply, apply_rule,
+    prioritize_io, io_strategy, history
+  }
+
+  -- Aggregate all entities
+  E = typ $cup op $cup fn
+
+  -- Classify entities
+  $tau = \e. {
+    match e: E {
+      _ $in typ -> Mod.TypeSym
+      _ $in op -> Mod.OpSym
+      _ $in fn -> Mod.FnSym
+      _ -> Mod.TypeSym -- Default case
+    }
+  }
+
+  -- Export all entities by default
+  vis = \e. true
+}
+
+-- export Red; 

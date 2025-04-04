@@ -1,0 +1,110 @@
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- ~~~ Interaction Net (Dynamic Wiring Diagram) ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+@Net: { -- Extends Wiring Diagrams with reduction semantics
+  -- Inherits structure from @Wire: B, P, box, w, $tauP, $tauB
+  B; P; box: P->B; w: P->P; $tauP: P->X; $tauB: B->X
+  sig: B -> {in:{P}, out:{P}}   -- Box signatures required for compatibility
+
+  -- Interaction Net Specifics
+  $pi: P->Bool                  -- Principal port flag (true if port is principal)
+
+  -- Active Pairs (Pairs of connected principal ports, potential reduction sites)
+  -- An active pair 'a' is typically represented as (p, q) where p,q are ports.
+  $alpha = {(p,q) | p $in P $and q $in P $and w(p) $veq q $and $pi(p) $and $pi(q)}
+
+  -- Replacement Subgraph Structure (Type definition for what replaces an active pair)
+  -- Represents a small wiring diagram fragment (boxes, ports, internal wiring)
+  ReplacementGraph = { boxes: {B}, ports: {P}, wiring: (P->P), principal: P } -- Example structure, added principal port info
+  $rho: ReplacementGraph         -- Type for the replacement subgraph (structure varies by rule)
+
+  -- Reduction Rules (Map active pairs structure/type to their replacements)
+  -- R maps the *structure/type* of an active pair (defined by the connected boxes)
+  -- to a function that generates the replacement graph.
+  -- R: (Type * Type) -> ( ($alpha, Net) -> $rho ) -- More complex: Rule lookup based on box types, generates replacement
+  R: {$alpha * $rho}             -- Simpler: Direct mapping of specific active pairs to replacements (assumed for now)
+
+  -- Interaction Net Laws
+  law.unique_principal_port = $forall b $in B: |{p $in P | box(p) $veq b $and $pi(p)}| $le 1 -- Each box has at most one principal port (allows aux ports)
+
+  -- Find all active pairs in the net 
+  find_redexes: Net->[AgentId*AgentId] = \n. {
+    -- Convert $alpha pairs (port pairs) to agent pairs
+    let port_pairs = $alpha
+    Primitives.$map(\(p1,p2). (box(p1), box(p2)), port_pairs)
+  }
+
+  -- Pattern matching convenience
+  matches: Pattern*Net -> Bool = \p,n. Primitives.$rho(Primitives.$match(p,n)) > 0 -- Check if pattern matches anywhere
+
+  -- Active pair uses box check
+  a_uses: $alpha*B -> Bool = \a,b. { -- Check if active pair 'a' involves box 'b'
+    let ports = Net.ports(a)
+    in $exists p $in ports: Net.box(p) $seq b
+  }
+
+  -- Reduction Properties (Rely on Primitives)
+  applies: R*$alpha->Bool = \r,a. matches(r[0], a) -- Checks if rule pattern r[0] matches active pair 'a'
+  
+  -- Note: matches needs refinement. Does it match structure or specific instances?
+  -- Assuming it matches structure/type for law.deterministic_reduction.
+  law.deterministic_reduction = $forall a $in $alpha: $exists! r $in R: matches(r[0], a) -- For any active pair structure, exactly one rule applies
+
+  -- Graph Preservation during Reduction (Conceptual - requires formal definition)
+  ports: $alpha -> {P} = \a. {a[0], a[1]} -- Ports involved in an active pair instance
+  ports: $rho -> {P}   = \r. r.ports      -- Ports exposed by the replacement graph instance
+
+  -- Internal connection counts (conceptual)
+  conn: $alpha -> Z = \a. 0 -- Active pair has 0 internal connections by definition
+  conn: $rho -> Z   = \r. |{(p,q) | p $in ports(r) $and q $in ports(r) $and r.wiring(p) $veq q}| / 2
+
+  -- Conservation Laws (Ensure reduction doesn't break external connectivity)
+  -- These should hold for the rule definition function, mapping types to replacements.
+  law.port_conservation = $forall (a,r) $in R: |ports(a)| $veq |ports(r)| -- Number of external ports is preserved
+  law.connection_conservation = $forall (a,r) $in R: conn(a) $veq conn(r) -- Number of internal connections is preserved (often 0 for both)
+
+  -- Example: Simple Eraser Net
+  -- Box E (Eraser), Port p (principal)
+  -- Box D (Duplicator), Ports p (principal), q1, q2
+  -- Active Pair: (E.p, D.p)
+  -- Replacement: Connect D.q1 to D.q2 (forms a loop, effectively deleting the pair)
+  -- Rule: R = { ((E.p, D.p), { boxes: {}, ports: {}, wiring: {} }) } -- Simplified representation
+
+  -- Example: $is_valid($conn(net))
+
+  -- ~~~ Core Module Pattern (Entities Aggregation) ~~~
+  -- Core Types
+  typ = {
+    ReplacementGraph
+  }
+
+  -- Core Operators
+  op = {
+    $pi, $alpha, $rho
+  }
+
+  -- Core Functions
+  fn = {
+    find_redexes, matches, a_uses, applies, ports, conn,
+    law.unique_principal_port, law.deterministic_reduction, 
+    law.port_conservation, law.connection_conservation
+  }
+
+  -- Aggregate all entities
+  E = typ $cup op $cup fn
+
+  -- Classify entities
+  $tau = \e. {
+    match e: E {
+      _ $in typ -> Mod.TypeSym
+      _ $in op -> Mod.OpSym
+      _ $in fn -> Mod.FnSym
+      _ -> Mod.TypeSym -- Default case
+    }
+  }
+
+  -- Export all entities by default
+  vis = \e. true
+}
+
+-- export Net; 
