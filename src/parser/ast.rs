@@ -37,22 +37,27 @@ pub enum InfixOperator {
     Or,      // $or
     Implies, // =>
     Iff,     // $iff
+    // Additional operators
+    TransitiveClosure, // ->+
 }
 
 /// Represents prefix operators.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PrefixOperator {
-    Not,      // $not
-    Optional, // ? (Potentially for types/expressions)
-    Linear,   // ! (Potentially for types/expressions)
+    Not,             // $not
+    Optional,        // ? (Potentially for types/expressions)
+    Linear,          // ! (Potentially for types/expressions)
+    CardinalityOpen, // | (opening of cardinality)
 }
 
 /// Represents postfix operators.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PostfixOperator {
-    FieldAccess(String),           // .ident
-    FunctionCall(Vec<Expression>), // (args)
-    Index(Box<Expression>),        // [expr]
+    FieldAccess(String),             // .ident
+    ChainedFieldAccess(Vec<String>), // .field1.field2... for multi-level access
+    FunctionCall(Vec<Expression>),   // (args)
+    Index(Box<Expression>),          // [expr]
+    CardinalityClose,                // | (closing of cardinality)
 }
 
 /// Represents a top-level item in the Borf program.
@@ -589,6 +594,7 @@ pub enum Expression {
     LetRec(LetRecExpr),
     Quantifier(QuantifierExpr), // Added for quantifier expressions
     TypeCalculation(TypeCalculationExpr), // Added for |{...}|
+    FunctionChainCall(FunctionChainExpr), // Added for nested function chains
 
     // Variants for Pratt Parser output
     InfixOp {
@@ -610,37 +616,58 @@ pub enum Expression {
         if_true: Box<Expression>,
         if_false: Box<Expression>,
     },
+    QualifiedName {
+        base: String,
+        access: Vec<String>,
+    },
+    ModuleAccess {
+        module_param: String,
+        path: Vec<String>,
+    },
+    TypeRange {
+        base_type: String,
+        modifier: String, // '+', '-', '*', 'n', 'p'
+    },
+    Cardinality {
+        expr: Box<Expression>,
+    },
+    LawIdentifier {
+        name: String, // For law.name identifiers
+    },
+    EmptySet, // Added for empty set literals {}
 }
 
-/// Represents the atomic building blocks of expressions.
+/// Represents function chain expression (nested function calls)
 #[derive(Debug, Clone, PartialEq)]
-pub enum Atom {
-    FunctionApp { func: String, args: Vec<Expression> },
-    ModuleAccess { path: Vec<String> }, // e.g., Mod.Sub.func
-    Identifier(String),
-    Integer(i64),
-    Boolean(bool), // Added Boolean
-    Symbol(String),
-    Tuple(Vec<Expression>), // Allow variable length tuples
-    Set(Box<SetExpr>),      // Added Set variant
-    Paren(Box<Expression>), // Parenthesized expression
-    StringLiteral(String),  // For `"ident"` in grammar
+pub struct FunctionChainExpr {
+    pub base: String,                // Base function name or qualified name
+    pub calls: Vec<Vec<Expression>>, // Sequence of argument lists for each nested call
 }
 
-/// Placeholder for Quantifier expressions
+/// Represents a quantifier.
 #[derive(Debug, Clone, PartialEq)]
-pub struct QuantifierExpr {
-    pub quantifier: String, // "$forall" or "$exists" or "$exists!"
-    pub vars: Vec<String>,
-    pub domain: Box<Expression>,
-    pub condition: Option<Box<Expression>>, // Constraint expression
-    pub body: Box<Expression>,
+pub enum Quantifier {
+    ForAll,
+    Exists,
+    ExistsUnique, // New: $exists!
 }
 
-/// Placeholder for Type Calculation expressions |{...}|
+/// Represents nested set comprehensions
 #[derive(Debug, Clone, PartialEq)]
-pub struct TypeCalculationExpr {
-    pub set: SetExpr, // Contains the inner set expression
+pub struct NestedComprehension {
+    pub expr: Box<Expression>,
+    pub clauses: Vec<ComprehensionClause>,
+}
+
+/// Represents a comprehension clause in a set comprehension
+#[derive(Debug, Clone, PartialEq)]
+pub enum ComprehensionClause {
+    Generator {
+        var: String,
+        domain: Box<Expression>,
+    },
+    Constraint(Box<Expression>),
+    Nested(Box<NestedComprehension>),
 }
 
 /// Represents a primitive block definition.
@@ -658,7 +685,6 @@ pub enum PrimitiveElement {
     // Add other primitive element types if necessary
 }
 
-// --- NEW Type Expression AST Node ---
 /// Represents a parsed type expression.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeExpr {
@@ -683,4 +709,74 @@ pub enum TypeExpr {
     /// Placeholder for errors or unparsed types during development.
     /// TODO: Remove or refine error handling.
     Unknown(String),
+    /// The special X type from the prelude
+    X,
+    /// A type sum (e.g., `A + B`).
+    TypeSum {
+        lhs: Box<TypeExpr>,
+        rhs: Box<TypeExpr>,
+    },
+    /// A specialized arrow type with transitive closure.
+    TypeArrowEx {
+        lhs: Box<TypeExpr>,
+        rhs: Box<TypeExpr>,
+        transitive: bool, // true for ->+, false for ->
+    },
+    /// A type range (e.g., `Z+`).
+    TypeRange {
+        base: String,
+        modifier: String, // '+', '-', '*', 'n', 'p'
+    },
+    /// A qualified type (e.g., `Mod.SubMod.Type`).
+    QualifiedType { base: String, access: Vec<String> },
+    /// A module qualified type (e.g., s.O)
+    ModuleQualifiedType { module: String, type_name: String },
+    /// A type with parameters and constraints (e.g., (s,t,f,x)->y | s:Cat)
+    TypeWithParameters {
+        params: Vec<TypeExpr>,
+        return_type: Box<TypeExpr>,
+        constraint: Option<Box<Expression>>,
+    },
+    /// Union of types (e.g., B $cup P)
+    TypeUnion {
+        lhs: Box<TypeExpr>,
+        rhs: Box<TypeExpr>,
+    },
+    /// Intersection of types (e.g., B $cap P)
+    TypeIntersection {
+        lhs: Box<TypeExpr>,
+        rhs: Box<TypeExpr>,
+    },
+}
+
+/// Represents the atomic building blocks of expressions.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Atom {
+    Identifier(String),
+    DollarIdentifier(String), // Added for $identifiers
+    Integer(i64),
+    Boolean(bool), // Added Boolean
+    Symbol(String),
+    Tuple(Vec<Expression>), // Allow variable length tuples
+    Set(Box<SetExpr>),      // Added Set variant
+    EmptySet,               // Empty set literal {}
+    Paren(Box<Expression>), // Parenthesized expression
+    StringLiteral(String),  // For `"ident"` in grammar
+    LawIdentifier(String),  // For law.name identifiers
+}
+
+/// Placeholder for Quantifier expressions
+#[derive(Debug, Clone, PartialEq)]
+pub struct QuantifierExpr {
+    pub quantifier: Quantifier, // Changed from String to Quantifier enum
+    pub vars: Vec<String>,
+    pub domain: Box<Expression>,
+    pub condition: Option<Box<Expression>>, // Constraint expression
+    pub body: Box<Expression>,
+}
+
+/// Placeholder for Type Calculation expressions |{...}|
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypeCalculationExpr {
+    pub set: SetExpr, // Contains the inner set expression
 }

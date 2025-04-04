@@ -94,11 +94,11 @@ fn build_expr_ast(pairs: Pairs<Rule>) -> Result<Expression, Box<BorfError>> {
 
 /// Helper for map_primary in expression Pratt parser.
 fn map_primary_expr(primary: Pair<Rule>) -> Result<Expression, Box<BorfError>> {
+    let span = pair_to_span(&primary);
+    let src = get_named_source(primary.as_str());
     match primary.as_rule() {
         Rule::atom => {
             let inner = primary.into_inner().next().unwrap();
-            let span = pair_to_span(&inner);
-            let src = get_named_source(inner.as_str());
             match inner.as_rule() {
                 Rule::ident => Ok(Expression::AtomExpr(Atom::Identifier(
                     inner.as_str().to_string(),
@@ -106,6 +106,28 @@ fn map_primary_expr(primary: Pair<Rule>) -> Result<Expression, Box<BorfError>> {
                 Rule::dollar_ident => Ok(Expression::AtomExpr(Atom::Identifier(
                     inner.as_str().to_string(),
                 ))),
+                Rule::qualified_name => {
+                    // Handle qualified_name (parse out each part)
+                    let parts: Vec<String> =
+                        inner.into_inner().map(|p| p.as_str().to_string()).collect();
+                    if parts.is_empty() {
+                        return Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
+                            "Empty qualified name",
+                            src,
+                            span,
+                            "Expected at least one identifier in qualified name.",
+                            "Empty qualified name",
+                        ))));
+                    }
+                    let base = parts[0].clone();
+                    let access = parts[1..].to_vec();
+                    Ok(Expression::QualifiedName { base, access })
+                }
+                Rule::law_identifier => {
+                    // Get the name part of law.name
+                    let name = inner.into_inner().next().unwrap().as_str().to_string();
+                    Ok(Expression::LawIdentifier { name })
+                }
                 Rule::int => inner
                     .as_str()
                     .parse::<i64>()
@@ -134,6 +156,7 @@ fn map_primary_expr(primary: Pair<Rule>) -> Result<Expression, Box<BorfError>> {
                     let symbol_name = inner.as_str().strip_prefix(":").unwrap_or("").to_string();
                     Ok(Expression::AtomExpr(Atom::Symbol(symbol_name)))
                 }
+                Rule::empty_set => Ok(Expression::EmptySet),
                 Rule::expression => build_expr_ast(inner.into_inner()),
                 _ => {
                     let rule_str = format!("{:?}", inner.as_rule());
@@ -149,6 +172,7 @@ fn map_primary_expr(primary: Pair<Rule>) -> Result<Expression, Box<BorfError>> {
         }
         Rule::lambda => parse_lambda_expr(primary),
         Rule::if_expr => parse_if_expr(primary),
+        Rule::conditional_expr_inline => parse_conditional_expr_inline(primary),
         Rule::let_rec => parse_let_rec_expr(primary),
         Rule::set_expr => Ok(Expression::AtomExpr(Atom::Set(Box::new(parse_set_expr(
             primary,
@@ -158,8 +182,6 @@ fn map_primary_expr(primary: Pair<Rule>) -> Result<Expression, Box<BorfError>> {
         Rule::type_calculation_expr => parse_type_calculation_expr(primary),
         _ => {
             let rule_str = format!("{:?}", primary.as_rule());
-            let span = pair_to_span(&primary);
-            let src = get_named_source(primary.as_str());
             Err(Box::new(BorfError::SyntaxError(SyntaxError::new(
                 &format!("Unexpected primary expression rule: {}", rule_str),
                 src,
@@ -559,6 +581,54 @@ fn parse_type_calculation_expr(pair: Pair<Rule>) -> Result<Expression, Box<BorfE
         src: Some(src),
         span: Some(span),
     }))
+}
+
+// Add this function below parse_if_expr
+fn parse_conditional_expr_inline(pair: Pair<Rule>) -> Result<Expression, Box<BorfError>> {
+    let span = pair_to_span(&pair);
+    let src = get_named_source(pair.as_str());
+
+    let mut inner = pair.into_inner();
+
+    let condition_pair = inner.next().ok_or_else(|| {
+        Box::new(BorfError::SyntaxError(SyntaxError::new(
+            "Missing condition in ternary expression",
+            src.clone(),
+            span,
+            "Expected condition before '?'.",
+            "Missing condition",
+        )))
+    })?;
+
+    let if_true_pair = inner.next().ok_or_else(|| {
+        Box::new(BorfError::SyntaxError(SyntaxError::new(
+            "Missing 'true' branch in ternary expression",
+            src.clone(),
+            span,
+            "Expected expression after '?'.",
+            "Missing 'true' branch",
+        )))
+    })?;
+
+    let if_false_pair = inner.next().ok_or_else(|| {
+        Box::new(BorfError::SyntaxError(SyntaxError::new(
+            "Missing 'false' branch in ternary expression",
+            src.clone(),
+            span,
+            "Expected expression after ':'.",
+            "Missing 'false' branch",
+        )))
+    })?;
+
+    let condition = build_expr_ast(condition_pair.into_inner())?;
+    let if_true = build_expr_ast(if_true_pair.into_inner())?;
+    let if_false = build_expr_ast(if_false_pair.into_inner())?;
+
+    Ok(Expression::TernaryOp {
+        condition: Box::new(condition),
+        if_true: Box::new(if_true),
+        if_false: Box::new(if_false),
+    })
 }
 
 // --- Main Parsing Logic ---
