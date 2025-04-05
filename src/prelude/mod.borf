@@ -63,10 +63,35 @@
   vis: E |> [e -> true]
 
   deps: {
-    (@Core, @Mod, true),
     (@Mod, @Cat, false),
     (@Mod, T.Sym, false)
   }
+
+  -- The following comment is an auto-generated list of all prelude modules
+  -- This list is for documentation purposes and is not used by the module loader
+  -- Updates to this list should be made when adding or removing modules
+  --[[
+    Prelude modules:
+    - @T - Type system foundations
+    - @Cat - Category theory abstractions
+    - @Cata - Categorical transformations
+    - @Flp - Functional programming abstractions
+    - @Grph - Graph theory and algorithms
+    - @Hom - Homoiconic code operations
+    - @IO - Input/output operations
+    - @Mod - Module system
+    - @Net - Interaction net operations
+    - @Prim - Primitive operations
+    - @Red - Reduction systems
+    - @Rel - Relational operations
+    - @RW - Rewrite systems
+    - @Seq - Sequence data structures and operations
+    - @Std - Standard data structures
+    - @Term - Terminal interactions
+    - @Type - Type system extensions
+    - @Wire - Wiring diagrams
+    - @Xf - General transformations
+  ]]--
 
   --[[
     !Module represents a loaded module that must be properly initialized,

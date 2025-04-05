@@ -22,8 +22,8 @@
   vis: E |> [e -> true]
 
   deps: {
-    (@Examples, @Core, true),
-    (@Examples, @Hom, true)
+    (@Examples, @Hom, true),
+    (@Examples, @Prim, true)
   }
 
   --[[

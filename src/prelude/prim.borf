@@ -15,9 +15,7 @@
 ]]--
 
 @Prim: {
-  deps: {
-    (@Core, @Prim, true)
-  }
+  deps: {}
 
   typ: {
     -- Base Types

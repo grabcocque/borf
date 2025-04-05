@@ -78,8 +78,7 @@
   vis: E |> [e -> true]
 
   deps: {
-    (@Core, @R, true),
-    (@R, @T, false)
+    (@R, @T, true)
   }
 
   --[[

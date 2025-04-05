@@ -1,0 +1,179 @@
+--[[
+  Sequence Module
+
+  This module provides sequence data structures and operations for the Borf language.
+  It implements efficient sequential collections with operations for creation,
+  manipulation, and traversal.
+
+  Sequences provide efficient head/tail access and are well-suited for
+  processing data in order.
+
+  Notation:
+  - 'a -o> b' indicates a function that consumes its input (linear)
+  - '!a' represents a linear type
+]]--
+
+
+@Seq: {
+  --[[
+    Core types defined in the sequence module
+  ]]--
+  typ: {
+    Seq
+  }
+
+  --[[
+    Core operators
+  ]]--
+  op: {
+
+  }
+
+  --[[
+    Core functions for sequence manipulation
+  ]]--
+  fn: {
+    empty cons head tail is_empty map filter zip
+    fold concat reverse range
+    from_list to_list
+    take drop
+    any all length
+  }
+
+  --[[
+    Aggregate all entities
+  ]]--
+  E: typ cup op cup fn
+
+  --[[
+    Classify entities by their type (Type, Operation, or Function)
+  ]]--
+  tau: T.tau
+
+  --[[
+    Export all entities by default
+  ]]--
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Seq, @Prim, true),
+    (@Seq, @T, false)
+  }
+
+  --[[
+    Creates an empty sequence
+  ]]--
+  empty: <> -> (Seq a)
+
+  --[[
+    Adds an element to the beginning of a sequence (consuming the sequence)
+  ]]--
+  cons: a * !(Seq a) -o> (Seq a) [x xs -> x xs |> Prim.cons]
+
+  --[[
+    Returns the first element of a sequence if non-empty (non-consuming)
+  ]]--
+  head: (Seq a) -> ?a [xs -> xs |> Prim.head]
+
+  --[[
+    Returns the sequence without its first element if non-empty (non-consuming)
+  ]]--
+  tail: (Seq a) -> ?(Seq a) [xs -> xs |> Prim.tail]
+
+  --[[
+    Checks if a sequence is empty (non-consuming)
+  ]]--
+  is_empty: (Seq a) -> Bool [xs -> xs |> Prim.head |> Prim.is_valid |> not]
+
+  --[[
+    Maps a function over a sequence (consuming the sequence)
+  ]]--
+  map: (a -o> b) * !(Seq a) -o> (Seq b) [f xs -> xs |> Prim.map(f)]
+
+  --[[
+    Filters elements in a sequence by a predicate (consuming the sequence)
+  ]]--
+  filter: (a -> Bool) * !(Seq a) -o> (Seq a) [pred xs -> xs |> Prim.filter(pred)]
+
+  --[[
+    Zips two sequences together (consuming both sequences)
+  ]]--
+  zip: !(Seq a) * !(Seq b) -o> (Seq (a * b)) [xs ys -> xs ys |> Prim.zip]
+
+  --[[
+    Reduces a sequence to a single value using an accumulator function (consuming the sequence)
+  ]]--
+  fold: (b * a -o> b) * b * !(Seq a) -o> b [f acc xs ->
+    xs |> Prim.fold(f, acc)
+  ]
+
+  --[[
+    Flattens a sequence of sequences into a single sequence
+  ]]--
+  concat: !(Seq (Seq a)) -o> (Seq a) [xss ->
+    xss |> Prim.concat
+  ]
+
+  --[[
+    Reverses a sequence (consuming the sequence)
+  ]]--
+  reverse: !(Seq a) -o> (Seq a) [xs ->
+    xs |> Prim.reverse
+  ]
+
+  --[[
+    Generates a sequence of integers from start (inclusive) to end (exclusive)
+  ]]--
+  range: Z * Z -> Seq(Z) [start end ->
+    Prim.range(start, end)
+  ]
+
+  --[[
+    Converts a list to a sequence (consuming the list)
+  ]]--
+  from_list: ![a] -o> (Seq a) [xs ->
+    xs |> Prim.list_to_seq
+  ]
+
+  --[[
+    Converts a sequence to a list (consuming the sequence)
+  ]]--
+  to_list: !(Seq a) -o> [a] [xs ->
+    xs |> Prim.seq_to_list
+  ]
+
+  --[[
+    Takes the first n elements of a sequence (consuming the sequence)
+  ]]--
+  take: !(Seq a) * Z -o> (Seq a) [xs n ->
+    xs |> Prim.take(n)
+  ]
+
+  --[[
+    Drops the first n elements of a sequence (consuming the sequence)
+  ]]--
+  drop: !(Seq a) * Z -o> (Seq a) [xs n ->
+    xs |> Prim.drop(n)
+  ]
+
+  --[[
+    Tests if any element satisfies a predicate (consuming the sequence)
+  ]]--
+  any: !(Seq a) * (a -> Bool) -o> Bool [xs pred ->
+    xs |> fold [result x -> result or (x |> pred)] false
+  ]
+
+  --[[
+    Tests if all elements satisfy a predicate (consuming the sequence)
+  ]]--
+  all: !(Seq a) * (a -> Bool) -o> Bool [xs pred ->
+    xs |> fold [result x -> result and (x |> pred)] true
+  ]
+
+  --[[
+    Returns the number of elements in the sequence (non-consuming)
+  ]]--
+  length: (Seq a) -> Z [xs ->
+    xs |> Prim.rho
+  ]
+}

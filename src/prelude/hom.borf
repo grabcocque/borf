@@ -37,7 +37,6 @@
   vis: E |> [e -> true]
 
   deps: {
-    (@Core, @Hom, true),
     (@Hom, @Proj, true)
   }
 

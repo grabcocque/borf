@@ -1,21 +1,21 @@
 --[[
-  Core Language Prim
+  Reduction Systems
 
-  This module defines the fundamental primitive operations that form the foundation
-  of the Borf language. These Prim represent the core computational capabilities
-  that are directly implemented by the runtime system rather than being defined in
-  terms of other operations. They provide essential functionality for manipulating
-  data, performing logic, and interacting with the system.
+  This module defines operations and abstractions for reduction systems in Borf.
+  Reduction systems provide a formal framework for transforming expressions
+  according to well-defined rules. These operations allow for pattern matching,
+  rule application, and strategic rewriting of interaction nets.
 ]]--
 
 
-@Prim: {
+@Red: {
   deps: {
-    (@Core, @Prim, true)
+    (@Red, @Prim, true),
+    (@Red, @Net, true)
   }
 
   typ: {
-    Prim
+    Red Strategy StrategyList Rule RuleSet History Step
   }
 
   op: {

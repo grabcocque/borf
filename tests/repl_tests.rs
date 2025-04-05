@@ -2,6 +2,8 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::error::Error;
+use std::io::Write;
+use std::process::Stdio;
 
 // Helper function to potentially customize the command if needed later
 fn repl_command() -> Result<Command, Box<dyn Error>> {
@@ -1246,26 +1248,10 @@ fn test_red_module_samples() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
-fn test_core_module_samples() -> Result<(), Box<dyn Error>> {
-    let mut cmd = repl_command()?;
-    assert_repl_success(&mut cmd,
-        "Core.id x\nCore.flip f x y\nCore.curry f x y\nCore.uncurry f (x, y)\nCore.compose f g x\n:quit\n".to_string());
-    Ok(())
-}
-
-#[test]
-fn test_xf_module_samples() -> Result<(), Box<dyn Error>> {
-    let mut cmd = repl_command()?;
-    assert_repl_success(&mut cmd,
-        "Xf.string_to_net s\nXf.net_to_string net\nXf.map transform inputs\nXf.full_pipeline s\n:quit\n".to_string());
-    Ok(())
-}
-
-#[test]
 fn test_flp_module_samples() -> Result<(), Box<dyn Error>> {
     let mut cmd = repl_command()?;
     assert_repl_success(&mut cmd,
-        "Flp.success v\nFlp.failure err\nFlp.is_valid fp\nFlp.extract_value fp\nFlp.map f fp\n:quit\n".to_string());
+        "Flp.id x\nFlp.flip f x y\nFlp.curry f x y\nFlp.uncurry f (x, y)\nFlp.compose f g x\n:quit\n".to_string());
     Ok(())
 }
 
@@ -1332,5 +1318,54 @@ fn test_function_application_with_higher_order() -> Result<(), Box<dyn Error>> {
                 let twice = [f x -> f (f x)] in twice [x -> x * 2] 3\n:quit\n"
             .to_string(),
     );
+    Ok(())
+}
+
+#[test]
+fn test_basic_repl_process() -> Result<(), Box<dyn Error>> {
+    let mut cmd = repl_command()?;
+    assert_repl_success(&mut cmd, "1 + 1\n:quit\n".to_string());
+    Ok(())
+}
+
+#[test]
+fn test_lambda_repl_process() -> Result<(), Box<dyn Error>> {
+    let mut cmd = repl_command()?;
+    assert_repl_success(&mut cmd, "[x -> x + 1] 5\n:quit\n".to_string());
+    Ok(())
+}
+
+#[test]
+fn test_higher_order_repl_process() -> Result<(), Box<dyn Error>> {
+    let mut cmd = repl_command()?;
+    assert_repl_success(
+        &mut cmd,
+        "Prim.id x\nFlp.flip f x y\nFlp.curry f x y\nFlp.uncurry f (x, y)\nPrim.compose f g x\n:quit\n"
+            .to_string(),
+    );
+    Ok(())
+}
+
+#[test]
+fn test_xf_module_samples() -> Result<(), Box<dyn Error>> {
+    let mut cmd = repl_command()?;
+    assert_repl_success(&mut cmd,
+        "Xf.string_to_net s\nXf.net_to_string net\nXf.map transform inputs\nXf.full_pipeline s\n:quit\n".to_string());
+    Ok(())
+}
+
+#[test]
+fn test_flp_base_module_samples() -> Result<(), Box<dyn Error>> {
+    let mut cmd = repl_command()?;
+    assert_repl_success(&mut cmd,
+        "Flp.success v\nFlp.failure err\nFlp.is_valid fp\nFlp.extract_value fp\nFlp.map f fp\n:quit\n".to_string());
+    Ok(())
+}
+
+#[test]
+fn test_flp_functional_samples() -> Result<(), Box<dyn Error>> {
+    let mut cmd = repl_command()?;
+    assert_repl_success(&mut cmd,
+        "Flp.id x\nFlp.flip f x y\nFlp.curry f x y\nFlp.uncurry f (x, y)\nFlp.compose f g x\n:quit\n".to_string());
     Ok(())
 }
