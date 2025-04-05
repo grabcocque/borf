@@ -1,85 +1,227 @@
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-~~~~~~ IO System (Interaction Nets for Input/Output) ~~~~~~~~~~~~~~~~~~~~~~~~~~~
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-@IO: { ~~ Defines IO operations within the Net framework
-  ~~~~~~ Core Module Pattern (Entities Aggregation) ~~~
-  ~~ Core Types
+--[[
+  IO System (Interaction Nets for Input/Output)
+
+  This module defines the input/output capabilities of the Borf language through
+  interaction nets. It provides a framework for handling I/O operations in a
+  pure functional context, using agents that manage file, console, and network
+  interactions in a composable way.
+]]--
+
+
+@IO: {
   typ: {
-    IO Op Src
+    IO Op Src Result Priority
   }
 
-  ~~ Core Operators
   op: {
 
   }
 
-  ~~ Core Functions
   fn: {
     io_agent processed io read write
     read_file write_file read_cons write_cons
     data err ok unused_agents
     law.linear_io_agents law.io_completeness
+    async prioritize batch retry with_timeout
+    safe_read safe_write explain_error describe_io_state
   }
 
-  ~~ Aggregate all entities
   E: typ cup op cup fn
 
-  ~~ Classify entities
-  tau: E |> [e ->
-    e |> in typ ? Mod.TypeSym:
-    e |> in op ? Mod.OpSym:
-    e |> in fn ? Mod.FnSym:
-    Mod.TypeSym ~~ Default case
-  ] match
+  tau: T.tau
 
-  ~~ Export all entities by default
   vis: E |> [e -> true]
 
-  ~~ Inherits structure from @Net: B, P, box, w, pi
+  --[[
+    Basic components for interaction net nodes and connections:
+    - B: boxes (agents)
+    - P: ports
+    - box: creates an agent with ports
+    - w: creates a wire between ports
+    - pi: checks if a port is principal
+  ]]--
   B; P; P -> B box; P -> P w; P -> Bool pi
 
-  ~~ IO Operation and Source Tags (Using Symbols)
-  Op: {:rd,:wr,:ok,:err} ~~ Read, Write, Success, Error operations/responses
-  Src: {:file,:cons,:net} ~~ File, Console, Network sources/targets
+  --[[
+    Operation types for IO actions
+  ]]--
+  Op: {:rd,:wr,:ok,:err}
 
-  ~~ IO Agent Identification
-  io_agent: B -> Bool ~~ Predicate identifying boxes that perform IO
+  --[[
+    Source types for IO operations
+  ]]--
+  Src: {:file,:cons,:net,:http,:ws}
 
-  ~~ IO agent completion check (using state primitive)
-  processed: B -> Bool [b -> b |> Primitives.state] ~~ Check if IO agent 'b' has completed
+  --[[
+    Result type for IO operations
+  ]]--
+  Result: {:success,:not_found,:permission_denied,:timeout,:network_error,:parse_error,:unknown_error}
 
-  ~~ Unified IO Net Constructor (Interface/Signature)
-  ~~ Creates a Net fragment representing an IO request.
-  ~~ The primitive io performs the actual operation. This constructs the request Net.
-  io: Op * Src * S -> Net ~~ Constructs an IO request net (e.g., read 'S' from 'Src')
+  --[[
+    Priority levels for IO operations
+  ]]--
+  Priority: {:high,:medium,:low}
 
-  ~~ Derived IO Operation Constructors
-  read: Src * S -> Net [src s ->:rd src s |> io] ~~ Constructs a read request net
-  write: Src * S -> Net [src s ->:wr src s |> io] ~~ Constructs a write request net
+  --[[
+    Checks if a box (agent) is an IO agent
+  ]]--
+  io_agent: B -> Bool
 
-  ~~ Specific IO Constructors
+  --[[
+    Checks if an IO agent has been processed (completed its operation)
+  ]]--
+  processed: B -> Bool [b -> b |> Prim.state]
+
+  --[[
+    Creates an IO interaction net for a given operation, source, and data
+  ]]--
+  io: Op * Src * S -> Net
+
+  --[[
+    Creates a read operation on a specific source
+  ]]--
+  read: Src * S -> Net [src s ->:rd src s |> io]
+
+  --[[
+    Creates a write operation on a specific source
+  ]]--
+  write: Src * S -> Net [src s ->:wr src s |> io]
+
+  --[[
+    File-specific IO operations
+  ]]--
   read_file: S -> Net [s ->:file s |> read]
-  ~~ For write_file, the string argument should contain necessary info (e.g., "filename:data")
-  ~~ Alternatively, define write_file: S*S -> Net and adjust 'write' and 'io' or use a structured type.
   write_file: S -> Net [s ->:file s |> write]
+
+  --[[
+    Console-specific IO operations
+  ]]--
   read_cons: S -> Net [s ->:cons s |> read]
   write_cons: S -> Net [s ->:cons s |> write]
 
-  ~~ Linearity of IO Agents (Ensures IO actions are not duplicated/lost)
-  law.linear_io_agents: { B |> filter [b -> b |> io_agent] } |> forall [b -> b |> in !B] ~~ IO agents are linear resources
+  --[[
+    Sets an IO operation to run asynchronously
+  ]]--
+  async: Net -> Net [n ->
+    -- Mark the net as asynchronous in its metadata
+    n |> Prim.annotate {:async} |> Term.terminates |> assert
+  ]
 
-  ~~ IO Response Net Constructors (Interfaces/Signatures)
-  ~~ Create Nets representing results of IO operations. Typically used by runtime environment.
-  data: S -> Net ~~ Constructs a net carrying data 'S' (e.g., from a read)
-  err: S -> Net ~~ Constructs a net representing an error 'S' (e.g., file not found)
-  ok: Net ~~ Constructs a net representing success (e.g., after write)
+  --[[
+    Sets priority for an IO operation
+  ]]--
+  prioritize: Priority * Net -> Net [p n ->
+    n |> Prim.annotate {p}
+  ]
 
-  ~~ IO Safety Properties (Relate to Reduction and Termination)
-  normal: Net -> Bool ~~ Predicate for normal form (no active pairs, from @Red)
-  ~~ Function identifying IO agents not yet processed.
-  ~~ Needs implementation based on net traversal and state checking (using Primitives.state or similar).
-  unused_agents: Net -> {B} ~~ Interface signature only.
-  law.io_completeness: Net |> forall [n -> n |> Red.normal -> n |> unused_agents |> seq {}] ~~ In normal form, all IO agents must have been processed
+  --[[
+    Batch multiple IO operations into a single composite operation
+  ]]--
+  batch: [Net] -> Net [operations ->
+    -- Create a composite net containing all operations
+    operations |> Prim.fold Net.empty [acc op -> acc |> Net.combine op]
+  ]
+
+  --[[
+    Retry an IO operation with specified attempts and delay
+  ]]--
+  retry: Z * Z * Net -> Net [attempts delay n ->
+    -- Create a recursive net that retries the operation
+    n iff attempts <= 0 or_else
+    {
+      n |> Net.on_err [err ->
+        Net.delay delay |> Net.then [retry (attempts - 1) delay n]
+      ]
+    }
+  ]
+
+  --[[
+    Add a timeout to an IO operation
+  ]]--
+  with_timeout: Z * Net -> Net [ms n ->
+    -- Create a race between the operation and a timeout
+    Net.race [
+      n,
+      Net.delay ms |> Net.then [err "Operation timed out" |> Net.of]
+    ]
+  ]
+
+  --[[
+    Safe file read with error handling
+  ]]--
+  safe_read: S -> Net [s ->
+    s |> read_file |> Net.catch [err ->
+      err |> explain_error |> err |> Net.of
+    ]
+  ]
+
+  --[[
+    Safe file write with error handling
+  ]]--
+  safe_write: S * S -> Net [path content ->
+    path content |> write_file |> Net.catch [err ->
+      err |> explain_error |> err |> Net.of
+    ]
+  ]
+
+  --[[
+    Converts an error code to a human-readable explanation
+  ]]--
+  explain_error: S -> S [code ->
+    code |> Prim.match [
+      ":not_found" -> "The requested resource was not found",
+      ":permission_denied" -> "Permission denied when accessing the resource",
+      ":timeout" -> "The operation timed out",
+      ":network_error" -> "A network error occurred",
+      ":parse_error" -> "Failed to parse the data",
+      _ -> "An unknown error occurred: " ++ code
+    ]
+  ]
+
+  --[[
+    Provides a detailed description of IO operations in a net
+  ]]--
+  describe_io_state: Net -> S [n ->
+    n |> unused_agents -> pending
+    n |> Prim.filter B [b -> b |> io_agent and b |> processed] -> completed
+
+    "IO State: " ++
+    pending |> Prim.length |> Prim.to_str ++ " pending operations, " ++
+    completed |> Prim.length |> Prim.to_str ++ " completed operations"
+  ]
+
+  --[[
+    Law: IO agents must be linear (used exactly once) to enforce proper resource handling
+  ]]--
+  law.linear_io_agents: { B |> filter [b -> b |> io_agent] } |> forall [b -> b |> in !B]
+
+  --[[
+    Creates a data payload net
+  ]]--
+  data: S -> Net
+
+  --[[
+    Creates an error response net
+  ]]--
+  err: S -> Net
+
+  --[[
+    Creates a success response net
+  ]]--
+  ok: Net
+
+  --[[
+    Checks if a net is in normal form (fully reduced)
+  ]]--
+  normal: Net -> Bool
+
+  --[[
+    Returns all IO agents in a net that haven't been processed
+  ]]--
+  unused_agents: Net -> {B}
+
+  --[[
+    Law: A fully reduced net should have no unused IO agents
+  ]]--
+  law.io_completeness: Net |> forall [n -> n |> Red.normal -> n |> unused_agents |> seq {}]
 }
-
-~~ export IO;

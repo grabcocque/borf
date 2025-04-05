@@ -1,0 +1,538 @@
+--[[
+  Homoiconicity Module
+
+  This module provides core abstractions for homoiconicity in Borf,
+  enabling code to be manipulated as data. It implements quoting, unquoting,
+  quasiquoting, and code transformation primitives that allow for
+  metaprogramming and syntactic abstraction.
+]]--
+
+
+@Hom: {
+  typ: {
+    Expr Symbol Literal Lambda Application Quote Unquote UnquoteSplice Quasiquote
+    Let If Module Declaration Pattern MacroRule Transformer
+  }
+
+  op: {
+    quote unquote unquote_splice quasiquote syntax antiquote =~ ` ' ~ ~@
+  }
+
+  fn: {
+    parse to_string eval transform substitute
+    is_expr is_quoted as_expr as_syntax
+    symbol literal lambda apply let_expr if_expr module decl pattern
+    macro_rule expand hygienic_expand
+    traverse is_homomorphic compose_transformers read_syntax write_syntax
+    gen_sym format_expr
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Core, @Hom, true),
+    (@Hom, @Xf, true)
+  }
+
+  --[[
+    Version information for the Hom module
+  ]]--
+  version: "1.0.0"
+
+  --[[
+    Module metadata containing author, license, and description
+  ]]--
+  meta: {
+    author: "Borf Team",
+    license: "MIT",
+    description: "Homoiconicity support for the Borf language",
+    repository: "https://github.com/borf-lang/prelude"
+  }
+
+  --[[
+    Configuration settings for the Hom module
+  ]]--
+  config: {
+    hygiene: true,
+    optimize: true,
+    debug: false
+  }
+
+  --[[
+    The core Expression type hierarchy representing code as data
+  ]]--
+  Expr: Symbol | Literal | Lambda | Application | Quote | Unquote | UnquoteSplice | Quasiquote | Let | If | Module | Declaration
+
+  --[[
+    Symbol represents an identifier in Borf code
+  ]]--
+  Symbol: {
+    name: S,
+    scope: ?S, -- Scope for hygiene in macros (optional)
+  }
+
+  --[[
+    Literal represents concrete values in code
+  ]]--
+  Literal: {
+    value: Prim.Int | Prim.Float | Prim.String | Prim.Bool | Prim.Null | Prim.Unit,
+    type: T -- Type annotation
+  }
+
+  --[[
+    Lambda represents function expressions
+  ]]--
+  Lambda: {
+    params: [Pattern],
+    body: Expr,
+    env: ?{Symbol:Expr} -- Captured environment for closures
+  }
+
+  --[[
+    Application represents function application
+  ]]--
+  Application: {
+    fn: Expr,
+    args: [Expr]
+  }
+
+  --[[
+    Quote wraps code to prevent evaluation
+  ]]--
+  Quote: {
+    expr: Expr
+  }
+
+  --[[
+    Unquote allows evaluation within quoted expressions
+  ]]--
+  Unquote: {
+    expr: Expr
+  }
+  
+  --[[
+    UnquoteSplice allows splicing a collection into its surrounding context
+  ]]--
+  UnquoteSplice: {
+    expr: Expr
+  }
+
+  --[[
+    Quasiquote is like quote but allows unquoting within
+  ]]--
+  Quasiquote: {
+    expr: Expr
+  }
+
+  --[[
+    Let represents local bindings
+  ]]--
+  Let: {
+    bindings: [{Symbol:Expr}],
+    body: Expr
+  }
+
+  --[[
+    If represents conditional expressions
+  ]]--
+  If: {
+    condition: Expr,
+    then_branch: Expr,
+    else_branch: Expr
+  }
+
+  --[[
+    Module represents a Borf module
+  ]]--
+  Module: {
+    name: Symbol,
+    types: [Declaration],
+    ops: [Declaration],
+    fns: [Declaration],
+    deps: [{ModSym:ModSym}]
+  }
+
+  --[[
+    Declaration represents a declaration in a module
+  ]]--
+  Declaration: {
+    name: Symbol,
+    type: T,
+    value: Expr
+  }
+
+  --[[
+    Pattern represents a pattern for matching
+  ]]--
+  Pattern: {
+    kind: S, -- could be "variable", "literal", "constructor", etc.
+    value: Expr | T
+  }
+
+  --[[
+    MacroRule defines a pattern-based macro transformation
+  ]]--
+  MacroRule: {
+    pattern: Pattern,
+    template: Expr,
+    guard: ?Expr
+  }
+
+  --[[
+    Transformer is a function that transforms expressions
+  ]]--
+  Transformer: Expr -> Expr
+
+  --[[
+    ` is the quasiquote operator (backtick)
+    Usage: `(expr) quasiquotes expr, allowing for unquoting with ~
+  ]]--
+  `: Expr -> Expr [expr -> 
+    {expr: expr} : Quasiquote
+  ]
+
+  --[[
+    ' is the quote operator (single quote)
+    Usage: '(expr) prevents expr from being evaluated
+  ]]--
+  ': Expr -> Expr [expr -> 
+    {expr: expr} : Quote
+  ]
+
+  --[[
+    ~ is the unquote operator (tilde)
+    Usage: Inside a quasiquote, ~expr evaluates expr
+  ]]--
+  ~: Expr -> Expr [expr -> 
+    {expr: expr} : Unquote
+  ]
+  
+  --[[
+    ~@ is the unquote-splice operator (tilde-at)
+    Usage: Inside a quasiquote, ~@collection splices the collection's elements
+  ]]--
+  ~@: Expr -> Expr [expr -> 
+    {expr: expr} : UnquoteSplice
+  ]
+
+  --[[
+    quote creates a quoted expression to prevent evaluation
+  ]]--
+  quote: Expr -> Expr [expr -> 
+    {expr: expr} : Quote
+  ]
+
+  --[[
+    unquote escapes from a quotation context to allow evaluation
+  ]]--
+  unquote: Expr -> Expr [expr -> 
+    {expr: expr} : Unquote
+  ]
+  
+  --[[
+    unquote_splice splices a collection's elements into its surrounding context
+  ]]--
+  unquote_splice: Expr -> Expr [expr -> 
+    {expr: expr} : UnquoteSplice
+  ]
+
+  --[[
+    quasiquote creates a template where some parts can be evaluated
+  ]]--
+  quasiquote: Expr -> Expr [expr -> 
+    {expr: expr} : Quasiquote
+  ]
+
+  --[[
+    syntax converts a string to syntax representation
+  ]]--
+  syntax: S -> Expr [code ->
+    code |> parse
+  ]
+
+  --[[
+    antiquote escapes from syntax to allow value interpolation
+  ]]--
+  antiquote: Expr -> Expr [expr ->
+    {expr: expr} : Unquote
+  ]
+
+  --[[
+    =~ is the "approximately equal" operator for pattern matching with syntax
+  ]]--
+  =~: Expr * Pattern -> Bool [expr pattern ->
+    expr pattern |> match
+  ]
+
+  --[[
+    parse converts a string to a syntax representation
+  ]]--
+  parse: S -> Expr [code ->
+    code |> Prim.eval -> result
+    result |> quote
+  ]
+
+  --[[
+    to_string converts syntax back to a string
+  ]]--
+  to_string: Expr -> S [expr ->
+    expr |> format_expr
+  ]
+
+  --[[
+    eval evaluates syntax to produce a value
+  ]]--
+  eval: Expr -> Any [expr ->
+    expr |> unquote |> Prim.eval
+  ]
+
+  --[[
+    transform applies a syntax transformation
+  ]]--
+  transform: Expr * Transformer -> Expr [expr transformer ->
+    transformer expr
+  ]
+
+  --[[
+    substitute replaces variables in an expression
+  ]]--
+  substitute: Expr * {Symbol:Expr} -> Expr [expr subs ->
+    expr |> traverse [e ->
+      e : Symbol |> in subs -> subs[e]
+      or_else e
+    ]
+  ]
+
+  --[[
+    is_expr checks if a value is a syntax expression
+  ]]--
+  is_expr: Any -> Bool [val ->
+    val |> Prim.typeof T =~ Expr
+  ]
+
+  --[[
+    is_quoted checks if an expression is quoted
+  ]]--
+  is_quoted: Expr -> Bool [expr ->
+    expr |> Prim.typeof T =~ Quote
+  ]
+
+  --[[
+    as_expr attempts to convert a value to syntax
+  ]]--
+  as_expr: Any -> Expr [val ->
+    val |> is_expr -> val or_else
+    val |> Prim.to_string |> parse
+  ]
+
+  --[[
+    as_syntax converts code to a value preserving its syntax
+  ]]--
+  as_syntax: Any -> Expr [val ->
+    val |> quote
+  ]
+
+  --[[
+    symbol creates a symbol expression
+  ]]--
+  symbol: S -> Symbol [name ->
+    {name: name, scope: null} : Symbol
+  ]
+
+  --[[
+    literal creates a literal expression
+  ]]--
+  literal: Any * T -> Literal [value type ->
+    {value: value, type: type} : Literal
+  ]
+
+  --[[
+    lambda creates a lambda expression
+  ]]--
+  lambda: [Pattern] * Expr * ?{Symbol:Expr} -> Lambda [params body env ->
+    {params: params, body: body, env: env} : Lambda
+  ]
+
+  --[[
+    apply creates a function application expression
+  ]]--
+  apply: Expr * [Expr] -> Application [fn args ->
+    {fn: fn, args: args} : Application
+  ]
+
+  --[[
+    let_expr creates a let expression
+  ]]--
+  let_expr: [{Symbol:Expr}] * Expr -> Let [bindings body ->
+    {bindings: bindings, body: body} : Let
+  ]
+
+  --[[
+    if_expr creates an if expression
+  ]]--
+  if_expr: Expr * Expr * Expr -> If [condition then_branch else_branch ->
+    {condition: condition, then_branch: then_branch, else_branch: else_branch} : If
+  ]
+
+  --[[
+    module creates a module expression
+  ]]--
+  module: Symbol * [Declaration] * [Declaration] * [Declaration] * [{ModSym:ModSym}] -> Module [name types ops fns deps ->
+    {name: name, types: types, ops: ops, fns: fns, deps: deps} : Module
+  ]
+
+  --[[
+    decl creates a declaration expression
+  ]]--
+  decl: Symbol * T * Expr -> Declaration [name type value ->
+    {name: name, type: type, value: value} : Declaration
+  ]
+
+  --[[
+    pattern creates a pattern for matching
+  ]]--
+  pattern: S * (Expr | T) -> Pattern [kind value ->
+    {kind: kind, value: value} : Pattern
+  ]
+
+  --[[
+    macro_rule creates a macro rule
+  ]]--
+  macro_rule: Pattern * Expr * ?Expr -> MacroRule [pattern template guard ->
+    {pattern: pattern, template: template, guard: guard} : MacroRule
+  ]
+
+  --[[
+    expand processes a macro expansion
+  ]]--
+  expand: MacroRule * Expr -> Expr [rule expr ->
+    expr rule.pattern =~ -> rule.template |> substitute {expr} or_else expr
+  ]
+
+  --[[
+    hygienic_expand expands macros with hygiene (preventing variable capture)
+  ]]--
+  hygienic_expand: MacroRule * Expr -> Expr [rule expr ->
+    -- Generate unique names for all bound variables in the template
+    rule.template |> traverse [e ->
+      e : Symbol -> {name: e.name, scope: gen_sym()} : Symbol or_else e
+    ] -> hygienic_template
+    
+    -- Match and substitute with hygiene
+    expr rule.pattern =~ -> hygienic_template |> substitute {expr} or_else expr
+  ]
+
+  --[[
+    traverse walks through an expression and applies a function to each node
+  ]]--
+  traverse: Expr * (Expr -> Expr) -> Expr [expr f ->
+    let result = f expr in
+    
+    result : Quote -> {expr: result.expr |> traverse f} : Quote
+    result : Unquote -> {expr: result.expr |> traverse f} : Unquote
+    result : UnquoteSplice -> {expr: result.expr |> traverse f} : UnquoteSplice
+    result : Quasiquote -> {expr: result.expr |> traverse f} : Quasiquote
+    result : Lambda -> {
+      params: result.params,
+      body: result.body |> traverse f,
+      env: result.env
+    } : Lambda
+    result : Application -> {
+      fn: result.fn |> traverse f,
+      args: result.args |> Prim.map [arg -> arg |> traverse f]
+    } : Application
+    result : Let -> {
+      bindings: result.bindings |> Prim.map [binding ->
+        binding |> Prim.map [k v -> k -> v |> traverse f]
+      ],
+      body: result.body |> traverse f
+    } : Let
+    result : If -> {
+      condition: result.condition |> traverse f,
+      then_branch: result.then_branch |> traverse f,
+      else_branch: result.else_branch |> traverse f
+    } : If
+    
+    or_else result
+  ]
+
+  --[[
+    is_homomorphic checks if a transformation preserves syntactic structure
+  ]]--
+  is_homomorphic: Transformer -> Bool [t ->
+    -- A transformation is homomorphic if it preserves the structure
+    -- of the expression, i.e., if t(f(a,b)) = f(t(a),t(b))
+    -- We check this by applying it to some test expressions
+    let test_expr = `(lambda [x] (x + 1)) in
+    let transformed = t test_expr in
+    transformed : Lambda and transformed.params = test_expr.params
+  ]
+
+  --[[
+    compose_transformers composes two syntax transformers
+  ]]--
+  compose_transformers: Transformer * Transformer -> Transformer [t1 t2 ->
+    [expr -> expr |> t1 |> t2]
+  ]
+
+  --[[
+    read_syntax reads syntax from a file or string
+  ]]--
+  read_syntax: S -> Expr [source ->
+    source |> IO.read_file -> code
+    code |> parse
+  ]
+
+  --[[
+    write_syntax writes syntax to a file or string
+  ]]--
+  write_syntax: Expr * S -> Bool [expr filename ->
+    expr |> to_string -> code
+    code |> IO.write_file filename
+  ]
+
+  --[[
+    gen_sym generates a unique symbol name for hygiene
+  ]]--
+  gen_sym: () -> S [_ ->
+    Prim.gensym()
+  ]
+
+  --[[
+    format_expr converts an expression to a string representation
+  ]]--
+  format_expr: Expr -> S [expr ->
+    expr : Symbol -> expr.name
+    expr : Literal -> expr.value |> Prim.to_string
+    expr : Quote -> "'" |> Prim.append_string (expr.expr |> format_expr)
+    expr : Unquote -> "~" |> Prim.append_string (expr.expr |> format_expr)
+    expr : UnquoteSplice -> "~@" |> Prim.append_string (expr.expr |> format_expr)
+    expr : Quasiquote -> "`" |> Prim.append_string (expr.expr |> format_expr)
+    expr : Lambda -> "[" |> Prim.append_string (
+      expr.params |> Prim.map format_expr |> Prim.join " " |>
+      Prim.append_string "] " |>
+      Prim.append_string (expr.body |> format_expr)
+    )
+    expr : Application -> "(" |> Prim.append_string (
+      expr.fn |> format_expr |> Prim.append_string " " |>
+      Prim.append_string (expr.args |> Prim.map format_expr |> Prim.join " ") |>
+      Prim.append_string ")"
+    )
+    expr : Let -> "(let [" |> Prim.append_string (
+      expr.bindings |> Prim.map [binding ->
+        binding |> Prim.map [k v -> 
+          k.name |> Prim.append_string " " |> 
+          Prim.append_string (v |> format_expr)
+        ] |> Prim.join " "
+      ] |> Prim.join " " |>
+      Prim.append_string "] " |>
+      Prim.append_string (expr.body |> format_expr) |>
+      Prim.append_string ")"
+    )
+    or_else "<unknown-expression>"
+  ]
+} 

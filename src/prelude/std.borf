@@ -1,0 +1,326 @@
+--[[
+  Standard Library (Basic Data Structures)
+
+  This module provides essential data structures and collection operations for
+  the Borf language. It implements Maps, Sequences, Lists, Sets, and Queues
+  with common operations like insertion, lookup, traversal, and manipulation.
+  These abstractions form the foundation for composable data manipulation.
+]]--
+
+
+@Std: {
+
+  --[[
+    Core types defined in the standard library
+  ]]--
+  typ: {
+    Std Map Seq List Set Queue
+  }
+
+  --[[
+    Core operators
+  ]]--
+  op: {
+
+  }
+
+  --[[
+    Core functions for collection manipulation
+  ]]--
+  fn: {
+    ne append
+    Map.empty Map.insert Map.lookup Map.contains_key Map.is_empty Map.size
+    Seq.empty Seq.cons Seq.head Seq.tail Seq.is_empty
+    List.empty List.cons List.append List.concat List.head List.tail
+    List.map List.filter List.fold List.is_empty List.size
+    Set.empty Set.insert Set.contains Set.remove Set.union Set.intersection
+    Set.difference Set.is_empty Set.size Set.to_list
+    Queue.empty Queue.enqueue Queue.dequeue Queue.peek Queue.is_empty Queue.size
+  }
+
+  --[[
+    Aggregate all entities
+  ]]--
+  E: typ cup op cup fn
+
+  --[[
+    Classify entities by their type (Type, Operation, or Function)
+  ]]--
+  tau: T.tau
+
+  --[[
+    Export all entities by default
+  ]]--
+  vis: E |> [e -> true]
+
+  --[[
+    Checks if a collection is not empty (has at least one element)
+  ]]--
+  ne: Any -> Bool [coll -> coll |> Prim.rho > 0]
+
+  --[[
+    Appends a single element to a list
+  ]]--
+  append: [a] * a -> [a] [xs x -> xs [x] |> Prim.concat]
+
+  --[[
+    Map Data Structure
+
+    Implements associative key-value mappings with operations for
+    creation, insertion, lookup, and inspection.
+  ]]--
+  Map = {
+    --[[
+      Creates an empty map
+    ]]--
+    empty: {} -> (k v:->)
+
+    --[[
+      Inserts or updates a key-value pair in the map
+    ]]--
+    insert: (k v:->) * k * v -> (k v:->) [m k v -> m k v |> Prim.insert]
+
+    --[[
+      Looks up a value by key, returning an optional result
+    ]]--
+    lookup: (k v:->) * k -> ?v [m k -> m k |> Prim.lookup]
+
+    --[[
+      Checks if a key exists in the map
+    ]]--
+    contains_key: (k v:->) * k -> Bool [m k -> m k |> Prim.lookup |> Prim.is_valid]
+
+    --[[
+      Checks if a map has no elements
+    ]]--
+    is_empty: (k v:->) -> Bool [m -> m |> Prim.ne |> not]
+
+    --[[
+      Returns the number of key-value pairs in the map
+    ]]--
+    size: (k v:->) -> Z [m -> m |> Prim.rho]
+  }
+
+  --[[
+    Sequence Data Structure
+
+    Implements a sequential collection with efficient operations
+    for head/tail access and manipulation.
+  ]]--
+  Seq = {
+    --[[
+      Creates an empty sequence
+    ]]--
+    empty: <> -> (Seq a)
+
+    --[[
+      Adds an element to the beginning of a sequence
+    ]]--
+    cons: a * (Seq a) -> (Seq a) [x xs -> x xs |> Prim.cons]
+
+    --[[
+      Returns the first element of a sequence if non-empty
+    ]]--
+    head: (Seq a) -> ?a [xs -> xs |> Prim.head]
+
+    --[[
+      Returns the sequence without its first element if non-empty
+    ]]--
+    tail: (Seq a) -> ?(Seq a) [xs -> xs |> Prim.tail]
+
+    --[[
+      Checks if a sequence is empty
+    ]]--
+    is_empty: (Seq a) -> Bool [xs -> xs |> Prim.head |> Prim.is_valid |> not]
+  }
+
+  --[[
+    List Data Structure
+
+    Implements a general-purpose list collection with operations for
+    construction, transformation, and traversal. Lists are eagerly
+    evaluated unlike lazy sequences.
+  ]]--
+  List = {
+    --[[
+      Creates an empty list
+    ]]--
+    empty: [] -> [a]
+
+    --[[
+      Adds an element to the beginning of a list
+    ]]--
+    cons: a * [a] -> [a] [x xs -> [x] xs |> Prim.concat]
+
+    --[[
+      Appends a single element to the end of a list
+    ]]--
+    append: [a] * a -> [a] [xs x -> xs x |> Std.append]
+
+    --[[
+      Concatenates two lists together
+    ]]--
+    concat: [a] * [a] -> [a] [xs ys -> xs ys |> Prim.concat]
+
+    --[[
+      Returns the first element of a list if non-empty
+    ]]--
+    head: [a] -> ?a [xs ->
+      xs[0] iff xs |> Prim.ne or_else nothing
+    ]
+
+    --[[
+      Returns the list without its first element if non-empty
+    ]]--
+    tail: [a] -> ?[a] [xs ->
+      xs |> Prim.slice(1, xs |> Prim.rho) iff xs |> Prim.ne or_else nothing
+    ]
+
+    --[[
+      Applies a function to each element of a list, producing a new list
+    ]]--
+    map: (a -> b) * [a] -> [b] [f xs -> xs |> Prim.map(f)]
+
+    --[[
+      Keeps only elements that satisfy a predicate
+    ]]--
+    filter: (a -> Bool) * [a] -> [a] [pred xs ->
+      xs |> Prim.where(pred) -> indices
+      indices |> Prim.map [i -> xs[i]]
+    ]
+
+    --[[
+      Reduces a list to a single value using an accumulator function
+    ]]--
+    fold: (b * a -> b) * b * [a] -> b [f acc xs -> xs |> Prim.fold(f, acc)]
+
+    --[[
+      Checks if a list is empty
+    ]]--
+    is_empty: [a] -> Bool [xs -> xs |> Prim.ne |> not]
+
+    --[[
+      Returns the number of elements in the list
+    ]]--
+    size: [a] -> N [xs -> xs |> Prim.rho]
+  }
+
+  --[[
+    Set Data Structure
+
+    Implements an unordered collection of unique elements. Uses a Map internally
+    where keys are elements and values are placeholder (e.g., true).
+  ]]--
+  Set = {
+    -- Underlying map type: (element -> Bool)
+    _map_type: (a Bool:->)
+
+    --[[
+      Creates an empty set
+    ]]--
+    empty: {} -> _map_type[a]
+
+    --[[
+      Inserts an element into the set. If already present, no change.
+    ]]--
+    insert: _map_type[a] * a -> _map_type[a] [s x -> s x true |> Map.insert]
+
+    --[[
+      Checks if an element exists in the set
+    ]]--
+    contains: _map_type[a] * a -> Bool [s x -> s x |> Map.contains_key]
+
+    --[[
+      Removes an element from the set. If not present, no change.
+      (Implementation Note: Map doesn't have remove yet, this is conceptual)
+      TODO: Requires Prim.remove or equivalent for Map
+    ]]--
+    remove: _map_type[a] * a -> _map_type[a] [s x -> s --[[ Placeholder: x |> Prim.remove_key ]]-- ]
+
+    --[[
+      Computes the union of two sets
+    ]]--
+    union: _map_type[a] * _map_type[a] -> _map_type[a] [s1 s2 ->
+      s2 |> Prim.keys |> List.fold [acc k -> acc k true |> Map.insert] s1
+    ]
+
+    --[[
+      Computes the intersection of two sets
+    ]]--
+    intersection: _map_type[a] * _map_type[a] -> _map_type[a] [s1 s2 ->
+      s1 |> Prim.keys |> List.filter [k -> s2 k |> Map.contains_key]
+         |> List.fold [acc k -> acc k true |> Map.insert] (Set.empty[a])
+    ]
+
+    --[[
+      Computes the difference of two sets (elements in s1 but not in s2)
+    ]]--
+    difference: _map_type[a] * _map_type[a] -> _map_type[a] [s1 s2 ->
+      s1 |> Prim.keys |> List.filter [k -> s2 k |> Map.contains_key |> not]
+         |> List.fold [acc k -> acc k true |> Map.insert] (Set.empty[a])
+    ]
+
+    --[[
+      Checks if the set is empty
+    ]]--
+    is_empty: _map_type[a] -> Bool [s -> s |> Map.is_empty]
+
+    --[[
+      Returns the number of elements in the set
+    ]]--
+    size: _map_type[a] -> Z [s -> s |> Map.size]
+
+    --[[
+      Converts the set to a list of its elements
+    ]]--
+    to_list: _map_type[a] -> [a] [s -> s |> Prim.keys] -- Assuming Prim.keys returns a list
+  }
+
+  --[[
+    Queue Data Structure (FIFO - First-In, First-Out)
+
+    Implements a queue using a List internally. Enqueue adds to the end,
+    Dequeue removes from the front.
+  ]]--
+  Queue = {
+    -- Underlying list type: [a]
+    _list_type: [a]
+
+    --[[
+      Creates an empty queue
+    ]]--
+    empty: [] -> _list_type[a]
+
+    --[[
+      Adds an element to the rear of the queue
+    ]]--
+    enqueue: _list_type[a] * a -> _list_type[a] [q x -> q x |> List.append]
+
+    --[[
+      Removes and returns the element from the front of the queue
+      Returns ?a (optional element)
+    ]]--
+    dequeue: _list_type[a] -> (?a * _list_type[a]) [q ->
+      q |> List.head -> head_opt
+      q |> List.tail -> tail_opt
+      (head_opt, tail_opt |> Flp.default(Queue.empty[a])) iff head_opt |> Prim.is_valid or_else
+      (nothing, q) -- Return nothing and original queue if empty
+    ]
+
+    --[[
+      Returns the element at the front of the queue without removing it
+      Returns ?a (optional element)
+    ]]--
+    peek: _list_type[a] -> ?a [q -> q |> List.head]
+
+    --[[
+      Checks if the queue is empty
+    ]]--
+    is_empty: _list_type[a] -> Bool [q -> q |> List.is_empty]
+
+    --[[
+      Returns the number of elements in the queue
+    ]]--
+    size: _list_type[a] -> Z [q -> q |> List.size]
+  }
+}

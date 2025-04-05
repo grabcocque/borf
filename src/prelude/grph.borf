@@ -1,89 +1,123 @@
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-~~~~~~ Graph Structure ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-@Grph: { ~~ Abstract Graph definition with labels
-  ~~~~~~ Core Module Pattern (Entities Aggregation) ~~~
-  ~~ Core Types
+--[[
+  Graph Structure
+
+  This module defines the core graph theoretical foundations, providing
+  abstractions for nodes, edges, and their relationships. It supports both
+  basic graph operations and category-theoretic interpretations of graphs,
+  with labeled nodes and edges.
+]]--
+
+
+@Grph: {
   typ: {
     Grph
   }
 
-  ~~ Core Operators
   op: {
     lambdaN lambdaE
   }
 
-  ~~ Core Functions
   fn: {
     src tgt loop comp id node_eq
     law.loop_src_tgt law.comp_src_tgt law.dec_comp law.dec_loop
   }
 
-  ~~ Aggregate all entities
   E: typ cup op cup fn
 
-  ~~ Classify entities
-  tau: E |> [e ->
-    e |> in typ ? Mod.TypeSym:
-    e |> in op ? Mod.OpSym:
-    e |> in fn ? Mod.FnSym:
-    Mod.TypeSym ~~ Default case
-  ] match
+  tau: T.tau
 
-  ~~ Export all entities by default
   vis: E |> [e -> true]
 
-  N                             ~~ Set of Nodes
-  E                             ~~ Set of Edges
-  src: E -> N ~~ Edge source node function
-  tgt: E -> N ~~ Edge target node function
-  ~~ X is a placeholder for the label type (could be Any, Sym, specific label type TBD)
-  lambdaN: N -> X ~~ Node labeling function
-  lambdaE: E -> X ~~ Edge labeling function
+  --[[
+    N represents the set of nodes in a graph
+  ]]--
+  N
 
-  ~~ Structural Compatibility with Category Theory (@Cat)
-  O: N ~~ Objects are nodes
-  M: E ~~ Morphisms are edges
+  --[[
+    E represents the set of edges in a graph
+  ]]--
+  E
+
+  --[[
+    Returns the source node of an edge
+  ]]--
+  src: E -> N
+
+  --[[
+    Returns the target node of an edge
+  ]]--
+  tgt: E -> N
+
+  --[[
+    Node labeling function - maps nodes to their labels
+  ]]--
+  lambdaN: N -> X
+
+  --[[
+    Edge labeling function - maps edges to their labels
+  ]]--
+  lambdaE: E -> X
+
+  --[[
+    Category-theoretic interpretations of graphs:
+    - O: objects are nodes
+    - M: morphisms are edges
+  ]]--
+  O: N
+  M: E
   dom: src
   cod: tgt
-  ~~ Note: id and composition are not directly mapped here, but can be defined via paths.
 
-  ~~ Graph Construction Helpers (Interfaces/Signatures)
-  loop: N -> E ~~ Creates a loop edge for a node
+  --[[
+    Creates a self-loop on a node
+  ]]--
+  loop: N -> E
+
+  --[[
+    Composes two edges when the target of the first equals the source of the second
+  ]]--
   comp: E * E -> E [e1 e2 ->
-    e1 |> tgt veq (e2 |> src) |> constrain -> _ ~~ Ensure composability
+    e1 |> tgt veq (e2 |> src) |> constrain -> _
     e1 e2 |> comp
-  ] ~~ Creates a composite edge representing path e then f
+  ]
 
-  ~~ Identity and Composition (defined via helpers)
-  id: N -> E [n -> n |> loop] ~~ Identity morphism corresponds to a loop edge
-  ~~ Composition '.' corresponds to path composition via 'comp' helper.
+  --[[
+    Identity edge for a node (equivalent to its self-loop)
+  ]]--
+  id: N -> E [n -> n |> loop]
 
-  ~~ Graph Laws
+  --[[
+    Law: the source and target of a loop edge are the same node
+  ]]--
   law.loop_src_tgt: N |> forall [n ->
     n |> loop |> src veq n and
     n |> loop |> tgt veq n
   ]
 
+  --[[
+    Law: the source and target of composed edges preserve the outer source and target
+  ]]--
   law.comp_src_tgt: E * E |> constrain [e1 e2 -> e1 |> tgt veq (e2 |> src)] |> forall [e1 e2 ->
     e1 e2 |> comp |> src veq (e1 |> src) and
     e1 e2 |> comp |> tgt veq (e2 |> tgt)
   ]
 
-  ~~ Node Equivalence based on Label Equality
-  node_eq: N * N -> Bool [n1 n2 -> n1 |> lambdaN seq (n2 |> lambdaN)] ~~ Nodes are equivalent if their labels are structurally equal
+  --[[
+    Node equality based on their labels
+  ]]--
+  node_eq: N * N -> Bool [n1 n2 -> n1 |> lambdaN seq (n2 |> lambdaN)]
 
-  ~~ Decoration Coherence Laws (Relating node/edge labels)
-  ~~ Assumes 'rel' from @R provides the appropriate relation between labels.
+  --[[
+    Law: edge composition preserves the relationship between edge labels
+  ]]--
   law.dec_comp: E * E |> constrain [e1 e2 -> e1 |> tgt veq (e2 |> src)] |> forall [e1 e2 ->
     e1 e2 |> comp |> lambdaE |> R.rel ((e1 |> lambdaE) * (e2 |> lambdaE))
-  ] ~~ Label of composite edge relates to labels of components
+  ]
 
+  --[[
+    Law: the label of a loop edge relates to the label of its node
+  ]]--
   law.dec_loop: N |> forall [n ->
     n |> loop |> lambdaE |> R.rel (n |> lambdaN)
-  ] ~~ Label of loop edge relates to label of the node
-
-  ~~ Example: node1 node2 |> node_eq
+  ]
 }
-
-~~ export Grph;

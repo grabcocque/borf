@@ -1,72 +1,112 @@
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-~~~~~~ Wiring Diagram (Specialized Graph) ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-@Wire: { ~~ Represents static connectivity (boxes, ports, wires)
-  ~~~~~~ Core Module Pattern (Entities Aggregation) ~~~
-  ~~ Core Types
+--[[
+  Wiring Diagram (Specialized Graph)
+
+  This module defines the structure of wiring diagrams, which are specialized
+  graphs used to represent the connection patterns in interaction nets. It
+  enforces proper connectivity constraints, port typing, and establishes the
+  relationship between boxes (agents) and their ports.
+]]--
+
+
+@Wire: {
   typ: {
     Wire
   }
 
-  ~~ Core Operators
   op: {
     tauP tauB
   }
 
-  ~~ Core Functions
   fn: {
     box w sig
     law.wiring_involution law.port_unique_owner
     law.wiring_type_compat law.ports_in_signature
   }
 
-  ~~ Aggregate all entities
   E: typ cup op cup fn
 
-  ~~ Classify entities
-  tau: E |> [e ->
-    e |> in typ ? Mod.TypeSym:
-    e |> in op ? Mod.OpSym:
-    e |> in fn ? Mod.FnSym:
-    Mod.TypeSym ~~ Default case
-  ] match
+  tau: T.tau
 
-  ~~ Export all entities by default
   vis: E |> [e -> true]
 
-  B                             ~~ Set of Boxes (components)
-  P                             ~~ Set of Ports (connection points on boxes)
-  box: P -> B                    ~~ Assigns each port to its owning box
-  w: P -> P                      ~~ Wiring function (connects ports, must be a bijection)
-  ~~ X is a placeholder for the type/label (could be Any, Sym, specific TBD)
-  tauP: P -> X                   ~~ Port typing/labeling function
-  tauB: B -> X                   ~~ Box typing/labeling function
+  --[[
+    B represents the set of boxes (agents) in a wiring diagram
+  ]]--
+  B
 
-  ~~ Structural Compatibility with Graph Theory (@Grph)
-  N: B cup P ~~ Nodes are both boxes and ports
-  E: P |> [p -> (p, p |> w)] |> pairs ~~ Edges represent wires between ports
-  src: E |> [e -> e.0] ~~ Source of a wire edge is the first port
-  tgt: E |> [e -> e.1] ~~ Target of a wire edge is the second port
+  --[[
+    P represents the set of ports that can be connected
+  ]]--
+  P
+
+  --[[
+    Returns the box that owns a port
+  ]]--
+  box: P -> B
+
+  --[[
+    Wiring function - connects ports together
+  ]]--
+  w: P -> P
+
+  --[[
+    Port type function - assigns types to ports
+  ]]--
+  tauP: P -> X
+
+  --[[
+    Box type function - assigns types to boxes/agents
+  ]]--
+  tauB: B -> X
+
+  --[[
+    Graph representation of a wiring diagram:
+    - Nodes are both boxes and ports
+    - Edges are the wiring connections between ports
+  ]]--
+  N: B cup P
+  E: P |> [p -> (p, p |> w)] |> pairs
+  src: E |> [e -> e.0]
+  tgt: E |> [e -> e.1]
+
+  --[[
+    Node labeling based on whether the node is a box or port
+  ]]--
   lambdaN: N |> [n ->
-    n |> in B ? n |> tauB: n |> tauP
-  ] ~~ Node label depends on whether it's a box or port
-  
+    n |> tauB iff n |> in B or_else n |> tauP
+  ]
+
+  --[[
+    Edge labeling based on the types of connected ports
+  ]]--
   lambdaE: E |> [e ->
     (e |> src |> tauP, e |> tgt |> tauP)
-  ] ~~ Edge label is the pair of connected port types/labels
+  ]
 
-  ~~ Wiring Diagram Laws
-  law.wiring_involution: P |> forall [p -> p |> w |> w veq p] ~~ Wiring is its own inverse (bidirectional)
-  law.port_unique_owner: P |> forall [p -> B |> exists_unique [b -> p |> box veq b]] ~~ Each port belongs to exactly one box
+  --[[
+    Law: Wiring is an involution - connecting a port twice returns to the original port
+  ]]--
+  law.wiring_involution: P |> forall [p -> p |> w |> w veq p]
+
+  --[[
+    Law: Every port has exactly one owner box
+  ]]--
+  law.port_unique_owner: P |> forall [p -> B |> exists_unique [b -> p |> box veq b]]
+
+  --[[
+    Law: Connected ports must have compatible types
+  ]]--
   law.wiring_type_compat: P * P |> forall [p q -> p |> w veq q ->
-                           p |> tauP |> R.omega (q |> tauP)] ~~ Connected ports must have compatible types (using omega from @R)
+                           p |> tauP |> R.omega (q |> tauP)]
 
-  ~~ Box Signatures (Input/Output Ports)
-  sig: B -> {in:{P}, out:{P}} ~~ Function mapping a box to its input and output port sets
+  --[[
+    Returns the signature of a box as its input and output ports
+  ]]--
+  sig: B -> {in:{P}, out:{P}}
+
+  --[[
+    Law: All ports of a box must be included in its signature
+  ]]--
   law.ports_in_signature: B * P |> forall [b p -> p |> box veq b ->
-                  p |> in (b |> sig.in) or p |> in (b |> sig.out)] ~~ All ports of a box must be in its signature
-
-  ~~ Example: my_box |> sig
+                  p |> in (b |> sig.in) or p |> in (b |> sig.out)]
 }
-
-~~ export Wire;

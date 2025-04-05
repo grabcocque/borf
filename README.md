@@ -333,7 +333,7 @@ than the last. Approach with caution and awe. Begone!
     *   [ ] Develop domain-specific libraries for web/networking, graphics, databases
     *   [ ] Create bindings to popular Rust libraries
     *   [ ] Build standard data structure implementations optimized for interaction nets
-    *   [ ] Implement I/O and system interaction primitives
+    *   [ ] Implement I/O and system interaction Prim
     *   [ ] Create example real-IO applications showcasing language capabilities
 
 27. **Academic and Research Value**

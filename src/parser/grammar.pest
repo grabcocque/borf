@@ -1,0 +1,165 @@
+// Borf language grammar
+
+// Main entry points
+file = { SOI ~ module_decl ~ EOI }
+module_decl = { "@" ~ identifier ~ ":" ~ "{" ~ module_body ~ "}" }
+module_body = { (declaration | COMMENT | MULTILINE_COMMENT)* }
+
+// Declarations
+declaration = { type_decl | op_decl | fn_decl }
+type_decl = { "typ" ~ ":" ~ "{" ~ (identifier ~ WHITESPACE*)* ~ "}" }
+op_decl = { "op" ~ ":" ~ "{" ~ (identifier ~ WHITESPACE*)* ~ "}" }
+fn_decl = { "fn" ~ ":" ~ "{" ~ (identifier ~ WHITESPACE*)* ~ "}" }
+
+// Expressions - flat structure for Pratt parsing
+expr = {
+    literal |
+    identifier |
+    lambda |
+    application |
+    let_expr |
+    if_expr |
+    parenthesized_expr |
+    quoting_expr
+}
+
+// For Pratt parser compatibility, we define specific operator rules
+op_colon = { ":" } // Type annotation/assertion
+op_or = { "or" }
+op_and = { "and" }
+op_eq = { "==" }
+op_neq = { "!=" }
+op_lt = { "<" }
+op_gt = { ">" }
+op_lte = { "<=" }
+op_gte = { ">=" }
+op_add = { "+" }
+op_sub = { "-" }
+op_mul = { "*" }
+op_div = { "/" }
+op_pipe = { "|>" }
+op_neg = { "-" } // Unary minus
+op_not = { "!" } // Logical not
+op_unquote = { "~" } // Unary unquote
+
+// Grouped quoting expressions for clarity
+quoting_expr = {
+    quote_expr |
+    unquote_expr |
+    unquote_splice_expr |
+    quasiquote_expr
+}
+
+// Homoiconicity - Quoting operations
+quote_expr = { "'" ~ expr } // Quote any expression
+unquote_expr = { op_unquote ~ expr }
+unquote_splice_expr = { "~@" ~ expr } // Keep specific operator token
+quasiquote_expr = { "`" ~ expr } // Quasiquote any expression
+
+// Expression components
+primary = {
+    literal |
+    identifier |
+    lambda |
+    application |
+    let_expr |
+    if_expr |
+    parenthesized_expr |
+    quoting_expr
+}
+
+parenthesized_expr = { "(" ~ expr ~ ")" }
+
+lambda = { "[" ~ params ~ "]" ~ expr }
+params = { (pattern ~ WHITESPACE*)* }
+
+application = { "(" ~ expr ~ (WHITESPACE+ ~ expr)* ~ ")" }
+
+let_expr = { "let" ~ binding ~ ("in" ~ expr)? }
+binding = { pattern ~ "=" ~ expr }
+
+if_expr = { "if" ~ expr ~ "then" ~ expr ~ "else" ~ expr }
+
+// Literals - organized into categories
+literal = {
+    primitive_literal |
+    collection_literal
+}
+
+primitive_literal = {
+    float |       // Order matters: float must come before integer
+    integer |
+    string |
+    boolean
+}
+
+collection_literal = {
+    list_literal |
+    map_literal |
+    set_literal
+}
+
+// Basic types
+integer = @{ "-"? ~ ASCII_DIGIT+ }
+float = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
+string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+boolean = @{ "true" | "false" }
+
+// Collection literals with better disambiguation
+list_literal = { "[" ~ (expr ~ ("," ~ expr)*)? ~ "]" }
+map_literal = { "{" ~ (map_entry ~ ("," ~ map_entry)*)? ~ "}" }
+set_literal = { "{" ~ (expr ~ ("," ~ expr)*)? ~ "}" }
+map_entry = { expr ~ op_colon ~ expr }
+
+// Identifiers
+identifier = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_" | ".")* ~ ("'" | "#" | "?")* }
+
+// Pattern matching
+pattern = {
+    identifier |
+    literal |
+    list_pattern |
+    map_pattern |
+    set_pattern |
+    (identifier ~ op_colon ~ type_expr) |
+    "_"
+}
+
+list_pattern = { "[" ~ (pattern ~ ("," ~ pattern)*)? ~ "]" }
+map_pattern = { "{" ~ (map_pattern_entry ~ ("," ~ map_pattern_entry)*)? ~ "}" }
+set_pattern = { "{" ~ (pattern ~ ("," ~ pattern)*)? ~ "}" }
+map_pattern_entry = { pattern ~ op_colon ~ pattern }
+
+// Type expressions - restructured to avoid left-recursion
+type_expr = { type_primary ~ (type_infix_op ~ type_primary)* }
+
+type_primary = {
+    type_identifier |
+    list_type |
+    set_type |
+    option_type |
+    "(" ~ type_expr ~ ")"
+}
+
+type_infix_op = { type_function_op | type_product_op | type_sum_op | type_map_op }
+
+type_function_op = { "->" }
+type_product_op = { "*" }
+type_sum_op = { "+" }
+type_map_op = { ":->" }
+
+type_identifier = { identifier }
+list_type = { "[" ~ type_expr ~ "]" }
+set_type = { "{" ~ type_expr ~ "}" }
+option_type = { "?" ~ type_expr }
+
+// Type operator definitions
+op_arrow = { "->" }      // Function type
+op_linear_arrow = { "~>" } // Linear function type
+op_prod = { "*" }        // Product type
+op_sum = { "+" }         // Sum type
+
+// Whitespace and comments
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+COMMENT = _{ "--" ~ (!"\n" ~ ANY)* ~ "\n"? }
+MULTILINE_COMMENT = _{ "--[[" ~ (!"]]--" ~ ANY)* ~ "]]--" }

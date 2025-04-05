@@ -8,7 +8,7 @@ fuzz_target!(|data: &[u8]| {
     // Try to convert the byte slice to a string.
     // If it's not valid UTF-8, that's okay, the parser should ideally handle it gracefully
     // or return an error. We just proceed to test the parser with whatever string we get.
-    if let Ok(input_str) = std::str::from_utf8(data) {
+    if let Ok(input_str) = Std::str::from_utf8(data) {
         // Call the function under test. We don't need to check the Result;
         // libFuzzer detects crashes/panics.
         let _ = parse_program(input_str);

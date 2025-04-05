@@ -1,0 +1,164 @@
+--[[
+  Transformation Pipeline
+
+  This module provides the infrastructure for transforming between different
+  representations in the Borf ecosystem. It defines conversion functions between
+  strings, graphs, wires, nets, and other core abstractions, enabling seamless
+  compilation, evaluation, and execution of Borf programs.
+]]--
+
+
+@Xf: {
+  typ: {
+    Xf
+  }
+
+  op: {
+
+  }
+
+  fn: {
+    Xf string_to_net net_to_string graph_to_wire
+    wire_to_net net_to_rewrite rewrite_to_red map
+    process_files safe_pipeline string_to_wire
+    string_to_runnable_net full_pipeline
+
+    -- Homoiconicity integration
+    string_to_syntax syntax_to_string syntax_to_net
+    net_to_syntax expr_to_net net_to_expr
+    eval_syntax transform_syntax syntax_pipeline
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Xf, @Hom, true) -- Add dependency on Hom module
+  }
+
+  --[[
+    Generic transformation function
+  ]]--
+  Xf: a -> b
+
+  string_to_net: S -> Net
+  net_to_string: Net -> S
+  graph_to_wire: Grph -> Wire
+  wire_to_net: Wire -> Net
+  net_to_rewrite: Net -> Rewrite
+  rewrite_to_red: Rewrite -> Red
+  string_to_wire: S -> Wire
+
+  --[[
+    Transforms string to syntax representation (homoiconic form)
+  ]]--
+  string_to_syntax: S -> Hom.Expr [s ->
+    s |> Hom.parse
+  ]
+
+  --[[
+    Transforms syntax representation back to string
+  ]]--
+  syntax_to_string: Hom.Expr -> S [expr ->
+    expr |> Hom.to_string
+  ]
+
+  --[[
+    Transforms syntax to an interaction net
+  ]]--
+  syntax_to_net: Hom.Expr -> Net [expr ->
+    expr |> Hom.eval -> result
+    result : Net -> result or_else
+    expr |> Hom.to_string |> string_to_net
+  ]
+
+  --[[
+    Transforms a net to syntax representation
+  ]]--
+  net_to_syntax: Net -> Hom.Expr [net ->
+    net |> net_to_string |> string_to_syntax
+  ]
+
+  --[[
+    Transforms an expression to a net
+  ]]--
+  expr_to_net: Hom.Expr -> Net [expr ->
+    expr |> Hom.unquote |> syntax_to_net
+  ]
+
+  --[[
+    Transforms a net to an expression
+  ]]--
+  net_to_expr: Net -> Hom.Expr [net ->
+    net |> net_to_syntax |> Hom.quote
+  ]
+
+  --[[
+    Evaluates syntax and returns the result
+  ]]--
+  eval_syntax: Hom.Expr -> Any [expr ->
+    expr |> Hom.eval
+  ]
+
+  --[[
+    Applies a transformer to syntax
+  ]]--
+  transform_syntax: Hom.Expr * Hom.Transformer -> Hom.Expr [expr transformer ->
+    expr |> Hom.transform transformer
+  ]
+
+  --[[
+    Maps a transformation function over a collection of inputs
+  ]]--
+  map: (a -> b) * [a] -> [b] [transform inputs ->
+    inputs |> Prim.map transform
+  ]
+
+  --[[
+    Processes multiple files through a transformation function
+  ]]--
+  process_files: [S] * (S -> S) -> [S] [files transform ->
+    files |> map transform
+  ]
+
+  --[[
+    Safely evaluates a string as Borf code, handling parse errors
+  ]]--
+  safe_pipeline: S -> Net [s ->
+    s |> Prim.eval -> attempt
+    attempt |> Flp.extract_value iff attempt |> Flp.is_valid or_else
+      "Failed to parse: " |> Prim.append_string s |> IO.err
+  ]
+
+  --[[
+    Parses a string to a net that's ready for execution
+  ]]--
+  string_to_runnable_net: S -> Net
+
+  --[[
+    Complete pipeline for executing Borf code:
+    1. Parse string to an interaction net
+    2. Reduce the net to normal form
+    3. Convert the result back to a string
+  ]]--
+  full_pipeline: S -> S [s ->
+    s |> string_to_net -> net
+    net |> Red.red -> reduced
+    reduced |> net_to_string
+  ]
+
+  --[[
+    Syntax manipulation pipeline:
+    1. Parse string to syntax representation
+    2. Apply transformations
+    3. Evaluate to a result
+  ]]--
+  syntax_pipeline: S * Hom.Transformer -> Any [s transformer ->
+    s |> string_to_syntax -> syntax
+    syntax |> transform_syntax transformer -> transformed
+    transformed |> eval_syntax
+  ]
+}

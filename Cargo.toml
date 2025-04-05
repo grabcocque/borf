@@ -16,35 +16,48 @@ path = "src/lib.rs"
 # [[bin]]
 # name = "prelude_parser"
 # path = "src/bin/prelude_parser.rs"
-#
+
 # [[bin]]
 # name = "parse_prelude"
 # path = "src/bin/parse_prelude.rs"
 
-[[bin]]
-name = "borf_formatter"
-path = "src/formatter.rs"
+# [[bin]]
+# name = "borf_formatter"
+# path = "src/formatter.rs"
 
 [dependencies]
-pest = "2.7.10"
+clap = { version = "4.5.4", features = ["derive"] }
+miette = { version = "4.2", default-features = false }
+pest = { version = "2.7.10", features = ["pretty-print"] }
 pest_derive = "2.7.10"
+rustyline = "14.0.0"
+thiserror = { version = "1.0" }
 lazy_static = "1.4.0"
-
-# Error handling
-thiserror = "1.0"
-miette = { version = "7.2.0", features = ["fancy"] }
-
-# CLI and formatting
-clap = { version = "4.5.5", features = ["derive"] }
+once_cell = "1.19.0"
 colored = "2.1.0"
 regex = "1.10.4"  # Added for the formatter
+anyhow = "1.0"
+tracing = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+smallvec = { version = "1.13.1", features = ["serde"] }
+rustc-hash = "1.1.0"
+derive_more = "0.99.17"
 
 # Dependencies for fuzzing
 libfuzzer-sys = { version = "0.4", optional = true }
 arbitrary = { version = "1", features = ["derive"], optional = true }
+lru = "0.13.0"
 
 [features]
 fuzzing = ["dep:libfuzzer-sys", "dep:arbitrary"]
+rich_errors = []  # Enable enhanced error reporting
+custom_eq = []  # Skip source location when comparing AST nodes
+
+# Enable rich_errors by default
+default = ["rich_errors", "custom_eq"]
 
 [dev-dependencies]
 insta = "1.39.0"
+rstest = "0.19.0"
+pretty_assertions = "1.4"

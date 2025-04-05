@@ -1,0 +1,108 @@
+--[[
+  Fallible Computation / Result Types
+
+  This module defines the foundation for handling computations that may fail.
+  It implements a Result monad pattern similar to Rust's Result or Haskell's Either,
+  providing combinators for chaining, handling errors, and composition of fallible operations.
+  This enables robust error handling throughout the language ecosystem.
+]]--
+
+
+@Flp: {
+  typ: {
+    !Result !Error
+  }
+
+  op: {
+    -o>
+  }
+
+  fn: {
+    !Success !Failure handle narrow seq alt choice constrain
+    map default is_valid extract_value parse_int
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  --[[
+    !Error represents a structured error with a code and a message.
+    The code can be any type, allowing for flexibility (e.g., integer, symbol, string).
+  ]]--
+  !Error: { code: Any, message: S }
+
+  --[[
+    !Result is a parameterized type that represents either a successful computation
+    with a value of type 'a' or a failure with an error message.
+  ]]--
+  !Result: Type -> Type
+
+  --[[
+    Wraps a value in a successful result
+  ]]--
+  !Success: a -> !Result(a)
+
+  --[[
+    Creates a failure result with a structured error
+  ]]--
+  !Failure: !Error -> !Result(a)
+
+  --[[
+    Checks if a value represents a valid result
+  ]]--
+  is_valid: ?a -> Bool [x -> x |> nothing |> seq |> not]
+
+  --[[
+    Extracts the value from a valid result
+  ]]--
+  extract_value: ?a -> a [x -> x.value]
+
+  --[[
+    Parses a string into an integer, returning a result
+  ]]--
+  parse_int: S -> !Result(Z) [s -> "TODO: parse_int not implemented" |> !Failure]
+
+  --[[
+    Pattern matches on a result, executing one function for success case
+    and another for failure case
+  ]]--
+  handle: !Result(a) * (a -o> b) * (!Error -o> b) -> b
+
+  --[[
+    Converts a result to a value or false in case of failure
+  ]]--
+  narrow: !Result(a) -> a|false -o>
+
+  --[[
+    Monadic bind - chains fallible computations together
+  ]]--
+  seq: !Result(a) * (a -o> !Result(b)) -> !Result(b) -o>
+
+  --[[
+    Attempts the first operation, falls back to the second if the first fails
+  ]]--
+  alt: !Result(a) * !Result(a) -> !Result(a) -o>
+
+  --[[
+    Conditional choice between two values
+  ]]--
+  choice: a * a -> a -o>
+
+  --[[
+    Only succeeds if the value passes the constraint predicate
+  ]]--
+  constrain: (a -o> !B) * a -> a -o>
+
+  --[[
+    Maps a function over the success value of a result
+  ]]--
+  map: (a -o> b) * !Result(a) -> !Result(b) -o>
+
+  --[[
+    Provides a default value to use in case of failure
+  ]]--
+  default: !Result(a) * a -> a -o>
+}

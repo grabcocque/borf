@@ -1,119 +1,126 @@
-~~[[
-  prelude.borf - Foundational definitions for the Borf language ecosystem.
+--[[
+  Core Module (Exports all fundamental components needed by the language ecosystem)
 
-  Defines core types, relations, categorical structures, modules, graphs,
-  interaction nets, IO, rewriting, reduction, termination analysis,
-  transformation pipelines, and a basic standard library. Emphasizes structural
-  subtyping, clear equivalence domains, placeholder primitives for runtime
-  interaction, Map and Sequence types.
-]]
+  This is the central module of the Borf prelude that exports all fundamental
+  components needed by the language ecosystem. It orchestrates the relationships
+  between different modules and provides the primary entry point for the entire
+  standard library.
+]]--
 
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-~~~~~~ Core Module (Exports) ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-@Core: { ~~ Aggregates and exports the core prelude definitions
-  ~~ Core Modules/Types defined in this prelude
+
+@Core: {
   typ: {
-    T.T R.R Cat.Cat Mod.Mod Grph.Grph Wire.Wire Net.Net IO.IO Rewrite.Rewrite Red.Red Term.Term Xform.Xform Primitives.Primitives FLogic.FLogic StdLib.StdLib ~~ Module References
-    T.Sym T.Any T.Void Rewrite.Pattern ~~ Base/Core types from T & Rewrite
-    T.Seq ~~ Sequence type constructor identifier from T
-    FLogic.!Result ~~ Fallible result type from FLogic
-    ~~ Note: Map is represented by the ':->' operator, List by [], Optional by ? (Defined in T)
+    T.T R.R Cat.Cat Mod.Mod Grph.Grph Wire.Wire Net.Net IO.IO RW.Rewrite Red.Red Term.Term Xf.Xf Prim.Prim Flp.Flp Std.Std Hom.Hom
+    T.Sym T.Any T.Void RW.Pattern
+    T.Seq
+    Flp.!Result
+    ModuleSpec LazyModule Version Meta Config
+    Hom.Expr Hom.Symbol Hom.Quote Hom.Unquote Hom.UnquoteSplice Hom.Quasiquote -- Add homoiconicity types with UnquoteSplice
   }
 
-  ~~ Core Operators/Relations
   op: {
-    T.<:: T.~ T.teq R.omega R.veq R.seq Cat.ceq Cat.. T.-> T.->+ T.* T.+ T.? T.! T.:-> ~~ Type/Cat ops
-    Primitives.cup Primitives.cap Primitives.subseteq Primitives.in ~~ Set ops
-    Primitives.forall Primitives.exists Primitives.and Primitives.or Primitives.not Primitives.implies Primitives.iff ~~ Logical ops
-    Primitives.pipe Primitives.fcomp ~~ Pipeline/Composition ops
-    FLogic.-o> ~~ Linear arrow from FLogic
+    T.<:: T.~ T.teq R.omega R.veq R.seq Cat.ceq Cat.. T.-> T.->+ T.* T.+ T.? T.! T.:->
+    Prim.cup Prim.cap Prim.subseteq Prim.in
+    Prim.forall Prim.exists Prim.and Prim.or Prim.not Prim.implies Prim.iff
+    Prim.pipe Prim.fcomp
+    Flp.-o>
+    Mod.@@ Mod.@@> Mod.<@@ Mod.~@
+    Hom.` Hom.' Hom.~ Hom.~@ Hom.=~ -- Update to include =~ instead of ≈
   }
 
-  ~~ Core Symbols (for classification)
   syms: {Mod.TypeSym Mod.OpSym Mod.FnSym Mod.ModSym}
 
-  ~~ Core Functions/Interfaces (including primitives and StdLib)
   fn: {
-    ~~ Primitives
-    Primitives.rho Primitives.map Primitives.fold Primitives.concat Primitives.transpose
-    Primitives.at Primitives.slice Primitives.where Primitives.compose Primitives.ceq
-    Primitives.typeof Primitives.oplus Primitives.ominus Primitives.match Primitives.eval
-    Primitives.format Primitives.state Primitives.io Primitives.insert Primitives.lookup
-    Primitives.cons Primitives.head Primitives.tail Primitives.matches
-    Primitives.a_uses Primitives.processed Primitives.extract_data Primitives.safe_pipeline
-    Primitives.is_valid Primitives.extract_value Primitives.apply Primitives.ne
-    Primitives.append_string
-    ~~ Additional primitives (newly added)
-    Primitives.cup Primitives.cap Primitives.subseteq Primitives.in
-    Primitives.forall Primitives.exists Primitives.and Primitives.or Primitives.not
-    Primitives.implies Primitives.iff Primitives.pipe Primitives.fcomp
+    -- Prim
+    Prim.rho Prim.map Prim.fold Prim.concat Prim.transpose
+    Prim.at Prim.slice Prim.where Prim.compose Prim.ceq
+    Prim.typeof Prim.oplus Prim.ominus Prim.match Prim.eval
+    Prim.format Prim.state Prim.io Prim.insert Prim.lookup
+    Prim.cons Prim.head Prim.tail Prim.matches
+    Prim.a_uses Prim.processed Prim.extract_data Prim.safe_pipeline
+    Prim.is_valid Prim.extract_value Prim.apply Prim.ne
+    Prim.append_string
+    Prim.cup Prim.cap Prim.subseteq Prim.in
+    Prim.forall Prim.exists Prim.and Prim.or Prim.not
+    Prim.implies Prim.iff Prim.pipe Prim.fcomp
 
-    ~~ FLogic Functions/Constructors
-    FLogic.!Success FLogic.!Failure FLogic.handle FLogic.narrow FLogic.seq FLogic.alt
-    FLogic.choice FLogic.constrain FLogic.map FLogic.default FLogic.parse_int
+    -- Flp
+    Flp.!Success Flp.!Failure Flp.handle Flp.narrow Flp.seq Flp.alt
+    Flp.choice Flp.constrain Flp.map Flp.default Flp.parse_int
 
-    ~~ Type/Relation Functions
-    T.teq R.veq R.seq R.omega Cat.ceq
+    -- Types
+    T.teq R.veq R.seq R.omega
 
-    ~~ Cat Functions
-    Cat.dom Cat.cod Cat.id Cat.composable Cat.hom
+    -- Cat
+    Cat.dom Cat.cod Cat.id Cat.composable Cat.hom Cat.ceq
 
-    ~~ Mod Functions
+    -- Mod
     Mod.tau Mod.delta Mod.vis Mod.components Mod.is_type Mod.is_op Mod.is_fn Mod.is_mod
     Mod.exported Mod.imports Mod.oplus Mod.validate_module
+    Mod.is_imported Mod.is_exported Mod.exports_module
+    Mod.get_version Mod.check_compatibility
+    Mod.import Mod.import_all Mod.lazy_import Mod.reload_module Mod.module_info
+    Mod.register_module Mod.unregister_module Mod.module_exists
+    Mod.set_config Mod.get_config Mod.configure Mod.with_config
+    Mod.export_all Mod.restrict_exports Mod.module_dependencies
+    Mod.require Mod.ensure_loaded Mod.on_load Mod.on_unload Mod.optimize
 
-    ~~ Grph Functions
+    -- Grph
     Grph.src Grph.tgt Grph.lambdaN Grph.lambdaE Grph.loop Grph.comp Grph.node_eq
-
-    ~~ Wire Functions
     Wire.box Wire.w Wire.tauP Wire.tauB Wire.sig
-
-    ~~ Net Functions
     Net.pi Net.applies Net.ports Net.conn
-
-    ~~ IO Functions
     IO.io_agent IO.io IO.read IO.write IO.data IO.err IO.ok IO.unused_agents
     IO.read_file IO.write_file IO.read_cons IO.write_cons
 
-    ~~ Rewrite Functions
-    Rewrite.match Rewrite.rewrite Rewrite.neighborhood Rewrite.pattern_graph
-    Rewrite.consistent Rewrite.connected Rewrite.io_rule
+    -- Rewrite
+    RW.match RW.rewrite RW.neighborhood RW.pattern_graph
+    RW.consistent RW.connected RW.io_rule
 
-    ~~ Red Functions
+    -- Red
     Red.step Red.strategy Red.history Red.red Red.normal Red.prioritize_io Red.io_strategy
 
-    ~~ Term Functions
+    -- Term
     Term.terminates Term.detect_cycles Term.apply_k Term.reaches_normal_form Term.has_cycle
     Term.io_processed Term.io_agents_processed Term.io_terminates
 
-    ~~ Xform Functions
-    Xform.xform Xform.string_to_net Xform.net_to_string Xform.graph_to_wire Xform.wire_to_net
-    Xform.net_to_rewrite Xform.rewrite_to_red Xform.map Xform.process_files
-    Xform.string_to_wire Xform.string_to_runnable_net Xform.full_pipeline
+    -- Xf
+    Xf.Xf Xf.string_to_net Xf.net_to_string Xf.graph_to_wire Xf.wire_to_net
+    Xf.net_to_rewrite Xf.rewrite_to_red Xf.map Xf.process_files
+    Xf.string_to_wire Xf.string_to_runnable_net Xf.full_pipeline
+    Xf.string_to_syntax Xf.syntax_to_string Xf.syntax_to_net
+    Xf.net_to_syntax Xf.expr_to_net Xf.net_to_expr
+    Xf.eval_syntax Xf.transform_syntax Xf.syntax_pipeline
 
-    ~~ StdLib Functions (Map)
-    StdLib.Map.empty StdLib.Map.insert StdLib.Map.lookup StdLib.Map.contains_key
-    StdLib.Map.is_empty StdLib.Map.size
+    -- Std
+    Std.Map.empty Std.Map.insert Std.Map.lookup Std.Map.contains_key
+    Std.Map.is_empty Std.Map.size
+    Std.Seq.empty Std.Seq.cons Std.Seq.head Std.Seq.tail Std.Seq.is_empty
+    Std.List.empty Std.List.cons Std.List.append Std.List.concat Std.List.head
+    Std.List.tail Std.List.map Std.List.filter Std.List.fold
+    Std.List.is_empty Std.List.size
 
-    ~~ StdLib Functions (Seq) - Conceptual
-    StdLib.Seq.empty StdLib.Seq.cons StdLib.Seq.head StdLib.Seq.tail StdLib.Seq.is_empty
-
-    ~~ StdLib Functions (List)
-    StdLib.List.empty StdLib.List.cons StdLib.List.append StdLib.List.concat StdLib.List.head
-    StdLib.List.tail StdLib.List.map StdLib.List.filter StdLib.List.fold
-    StdLib.List.is_empty StdLib.List.size
+    -- Hom (Homoiconicity)
+    Hom.parse Hom.to_string Hom.eval Hom.transform Hom.substitute
+    Hom.quote Hom.unquote Hom.unquote_splice Hom.quasiquote -- Add unquote_splice
+    Hom.symbol Hom.literal Hom.lambda Hom.apply
+    Hom.is_expr Hom.is_quoted Hom.as_expr Hom.as_syntax
+    Hom.traverse Hom.expand Hom.hygienic_expand
+    Hom.read_syntax Hom.write_syntax
   }
 
-  ~~ Aggregate all entities
+  --[[
+    E is the combined set of all exported entities from the Core module,
+    unifying types, operations, functions and symbols.
+  ]]--
   E: typ cup op cup fn cup syms
 
-  ~~ Module dependencies (replaces import statements)
-  ~~ Format: (importing_module, imported_module, is_exported)
+  --[[
+    Module dependency relationships - each tuple specifies:
+    (importing module, exported module, direct dependency flag)
+  ]]--
   deps: {
-    ~~ Core imports all these modules
-    (@Core, Primitives, true),
-    (@Core, FLogic, true),
+    (@Core, Prim, true),
+    (@Core, Flp, true),
     (@Core, T, true),
     (@Core, R, true),
     (@Core, Cat, true),
@@ -124,60 +131,146 @@
     (@Core, Rewrite, true),
     (@Core, Term, true),
     (@Core, Red, true),
-    (@Core, StdLib, true),
-    (@Core, Xform, true),
+    (@Core, Std, true),
+    (@Core, Xf, true),
     (@Core, Mod, true),
+    (@Core, Hom, true), -- Add dependency on Hom module
   }
 
-  ~~ Required Module System declarations for self-representation
-  E                             ~~ Entities (all defined below)
-  E Sym -> tau                  ~~ Entity type function
-  E E Bool -> delta             ~~ Dependency relation
-  E Bool -> vis                 ~~ Visibility predicate
+  --[[
+    The set of all defined modules, derived from the deps relation.
+  ]]--
+  Modules: deps |> Prim.map [t -> t.0] cup deps |> Prim.map [t -> t.1] -- Combine importing and exporting modules
 
-  ~~ Implement Dependency Relation using the deps set
-  delta: E E Bool -> [ deps [ dup2 rot dup2 swap true seq or dup2 rot swap false seq or ] exists_p ]
+  --[[
+    Version information for the Core module
+  ]]--
+  version: "1.0.0"
 
-  ~~ Check if a module is imported by another
-  is_imported: E E Bool -> [ deps [ dup2 rot swap dup2 rot true seq or dup2 rot swap false seq or ] exists_p ]
+  --[[
+    Module metadata containing author, license, and description
+  ]]--
+  meta: {
+    author: "Borf Team",
+    license: "MIT",
+    description: "Core module of the Borf language prelude",
+    repository: "https://github.com/borf-lang/prelude"
+  }
 
-  ~~ Check if a module is exported by another
-  is_exported: E E Bool -> [ deps [ dup2 rot swap true seq ] exists_p ]
+  --[[
+    Configuration settings for the Core module
+  ]]--
+  config: {
+    lazy_loading: true,
+    optimize: true,
+    debug: false,
+    strict_mode: true,
+    compatibility_mode: false,
+    homoiconic: true -- Enable homoiconicity
+  }
 
-  ~~ Classify Core Entities
-  tau: E [
-    dup typ in [ drop Mod.TypeSym ]
-    swap dup op in [ drop Mod.OpSym ]
-    swap dup fn in [ drop Mod.FnSym ]
-    swap dup syms in [ drop Mod.TypeSym ] ~~ Classify Symbols as Types for now
-    swap dup {T R Cat Mod Grph Wire Net IO Rewrite Red Term Xform Primitives FLogic StdLib Core} in [ drop Mod.ModSym ]
-    swap drop Mod.TypeSym ~~ Default case
-  ] match
+  --[[
+    Specification for a module, including its path, version requirements, and dependencies
+  ]]--
+  ModuleSpec: {
+    path: S,
+    version: S,
+    dependencies: [S],
+    config: {S:Any}
+  }
 
-  ~~ Export all defined entities by default
-  vis: E [ drop true ]
+  --[[
+    Version specification for semantic versioning
+  ]]--
+  Version: {
+    major: Z,
+    minor: Z,
+    patch: Z,
+    prerelease: ?S,
+    build: ?S
+  }
 
-  ~~ Module Components (conform to @Mod structure)
-  components: E [
-    dup @Core teq [ drop E ]
-    swap drop {} ~~ Empty set for non-Core modules (should never be called)
-  ] match
+  --[[
+    Metadata structure for modules
+  ]]--
+  Meta: {
+    author: S,
+    license: S,
+    description: S,
+    repository: ?S,
+    website: ?S,
+    keywords: [S]
+  }
 
-  ~~ Structural Compatibility with Category Theory (@Cat and @Mod)
-  O: E [ dup tau Mod.ModSym teq ] filter ~~ Objects are modules
-  M: O O [ dup2 delta ] filter_pairs     ~~ Morphisms are dependencies
+  --[[
+    Configuration options for modules
+  ]]--
+  Config: {S:Any}
 
-  ~~ Module Dependencies (conform to @Mod structure)
-  imports: E [
-    deps [ dup rot rot dup2 rot true seq rot dup2 rot swap false seq or ] filter_pairs
+  --[[
+    LazyModule represents a module that is loaded on demand
+  ]]--
+  LazyModule: {
+    spec: ModuleSpec,
+    loader: () -> Any
+  }
+
+  E
+  E Sym -> tau
+  E E Bool -> delta
+  E Bool -> vis
+
+  --[[
+    delta determines whether an entity depends on another entity,
+    using existential quantification over the deps relation.
+  ]]--
+  delta: E E Bool -> [ e1 e2 ->
+    deps |> [ triplet ->
+      let (import_m, export_m, direct) = triplet in
+      (e1 |> teq import_m and e2 |> teq export_m and direct) or
+      (e1 |> teq import_m and e2 |> teq export_m and not direct)
+    ] exists_p
   ]
 
-  ~~ Export status checking (conform to @Mod structure)
-  exported: E E [
-    dup2 @Core teq [ E in swap vis and ]
-    swap deps [ dup2 rot @Core swap rot true seq ] exists_p ~~ Check if module is exported by Core
+  --[[
+    tau determines the symbol type of an entity (Type, Operation, Function, or Module)
+    by pattern matching against the entity collections and the derived Modules set.
+  ]]--
+  tau: E [
+    e ->
+    Mod.TypeSym iff e |> in typ or_else
+    Mod.OpSym iff e |> in op or_else
+    Mod.FnSym iff e |> in fn or_else
+    Mod.TypeSym iff e |> in syms or_else
+    Mod.ModSym iff e |> in {T R Cat Mod Grph Wire Net IO Rewrite Red Term Xf Prim Flp Std Hom Core} or_else
+    Mod.TypeSym
   ] match
 
-  ~~ Check if a module exports another module
-  exports_module: E E Bool -> [ deps [ dup2 rot dup2 rot true seq ] exists_p ]
+  vis: E [ e -> true ]
+
+  --[[
+    components returns all components of a module. For Core, it's the entire E set.
+    For other modules, returns an empty set as they're handled by their own definitions.
+  ]]--
+  components: E [
+    e -> E iff e |> teq @Core or_else {}
+  ] match
+
+  O: E [ e -> e tau Mod.ModSym teq ] filter
+  M: O O [ a b -> a b delta ] filter_pairs
+
+  imports: E [
+    m -> deps |> [ triplet ->
+      let (import_m, export_m, direct) = triplet in
+      import_m |> teq m and (direct or not direct)
+    ] filter |> [ triplet -> triplet.1 ] map
+  ]
+
+  --[[
+    We extend the Prim.eval function to handle homoiconic expressions directly
+  ]]--
+  eval: Any -> Any [expr ->
+    expr : Hom.Expr -> expr |> Hom.eval or_else
+    expr |> Prim.eval
+  ]
 }

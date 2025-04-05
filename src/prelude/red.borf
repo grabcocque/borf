@@ -1,102 +1,127 @@
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-~~~~~~ Reduction Semantics ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-@Red: {  ~~ Defines reduction operations on Nets
-  ~~~~~~ Core Module Pattern (Entities Aggregation) ~~~
-  ~~ Core Types
+--[[
+  Reduction Semantics
+
+  This module defines the execution semantics of Borf through reduction of
+  interaction nets. It provides strategies for applying rewrite rules,
+  detecting normal forms, and managing the reduction process. The module
+  establishes both deterministic and non-deterministic reduction paths.
+]]--
+
+
+@Red: {
   typ: {
 
   }
 
-  ~~ Core Operators
   op: {
 
   }
 
-  ~~ Core Functions
   fn: {
     step red normal strategy extract_data apply apply_rule
     prioritize_io io_strategy history
   }
 
-  ~~ Aggregate all entities
   E: typ cup op cup fn
 
-  ~~ Classify entities
-  tau: E |> [e ->
-    e |> in typ ? Mod.TypeSym:
-    e |> in op ? Mod.OpSym:
-    e |> in fn ? Mod.FnSym:
-    Mod.TypeSym ~~ Default case
-  ] match
+  tau: T.tau
 
-  ~~ Export all entities by default
   vis: E |> [e -> true]
 
-  ~~ Context: Assumes Net structure with active pairs (alpha), rules (R), etc.
+  --[[
+    Performs a single reduction step on a net
+  ]]--
+  step: Net -> Net
 
-  ~~ Core Reduction Operations
-  step: Net -> Net ~~ Performs a single reduction step if possible
-  red: Net -> Net ~~ Reduces to normal form
-  normal: Net -> Bool ~~ Checks if a net is in normal form (no active pairs)
+  --[[
+    Fully reduces a net to normal form by repeatedly applying steps
+  ]]--
+  red: Net -> Net
 
-  ~~ Reduction Strategy
+  --[[
+    Checks if a net is in normal form (no more reduction possible)
+  ]]--
+  normal: Net -> Bool
+
+  --[[
+    Creates a reduction strategy by combining:
+    1. A function that finds redexes in a net
+    2. A function that prioritizes which redex to reduce first
+  ]]--
   strategy: (Net -> [AgentId * AgentId]) * ([AgentId * AgentId] -> AgentId * AgentId) -> (Net -> Net)
-  ~~ Higher-order function defining reduction strategy:
-  ~~ Takes a function to find redexes and a function to choose among them
 
-  ~~ Extract string data from net (assuming format succeeds)
+  --[[
+    Extracts string data from a fully reduced net
+  ]]--
   extract_data: Net -> S [n ->
-    n |> normal ? n: n |> red -> final_net
-    final_net |> Primitives.format -> result
-    result |> FLogic.is_valid ? result |> FLogic.extract_value: "<Format Error>"
+    n iff n |> normal or_else n |> red -> final_net
+    final_net |> Prim.format -> result
+    result |> Flp.extract_value iff result |> Flp.is_valid or_else "<Format Error>"
   ]
 
-  ~~ Apply replacement rule (rho) to net (n)
-  apply: rho * Net -> Net [rule n ->
-    rule[0] |> Primitives.match n -> matches
-    matches |> Primitives.rho > 0 ?
-      (n |> Primitives.ominus matches[0][0] |> Primitives.oplus rule[1]):
+  --[[
+    Applies a rewrite rule to a net, substituting matching pattern with its replacement
+  ]]--
+  apply: (alpha * rho) * Net -> Net [rule n ->
+    rule[0] |> Prim.match n -> matches
+    (n |> Prim.ominus matches[0][0] |> Prim.oplus rule[1]) iff matches |> Prim.rho > 0 or_else
       n
   ]
 
-  ~~ Default implementation using Net.find_redexes
+  --[[
+    Implementation of a single reduction step:
+    1. Find all possible redexes (active pairs)
+    2. If any exist, apply the rule to the first one
+    3. Otherwise return the net unchanged
+  ]]--
   step: Net [n ->
     n |> Net.find_redexes -> redexes
-    redexes |> Primitives.rho > 0 ?
-      (n redexes[0] |> apply_rule):
+    (n redexes[0] |> apply_rule) iff redexes |> Prim.rho > 0 or_else
       n
   ]
 
-  ~~ Apply a single reduction rule to a redex
+  --[[
+    Applies a specific rewrite rule to a redex in a net
+  ]]--
   apply_rule: Net * (AgentId * AgentId) -> Net [n redex ->
     Net.R[redex] n |> apply
   ]
 
-  ~~ Reduce to normal form
+  --[[
+    Recursively reduces a net until it reaches normal form
+  ]]--
   red: Net [n ->
-    n |> normal ? n: n |> step |> red
+    n iff n |> normal or_else n |> step |> red
   ]
 
-  ~~ Check if in normal form (no active pairs)
+  --[[
+    Checks if a net is in normal form by looking for redexes
+  ]]--
   normal: Net [n ->
-    n |> Net.find_redexes |> Primitives.rho veq 0
+    n |> Net.find_redexes |> Prim.rho veq 0
   ]
 
-  ~~ IO-specific operations
-  prioritize_io: [AgentId * AgentId] -> [AgentId * AgentId] ~~ Prioritizes IO redexes
-  io_strategy: Net -> Net ~~ IO-focused reduction strategy
+  --[[
+    Prioritizes IO redexes over other redexes to ensure IO operations
+    are processed as soon as possible
+  ]]--
+  prioritize_io: [AgentId * AgentId] -> [AgentId * AgentId]
 
-  ~~ Track reduction history
+  --[[
+    Reduction strategy that prioritizes IO operations
+  ]]--
+  io_strategy: Net -> Net
+
+  --[[
+    Captures the entire reduction history of a net as a sequence of states
+  ]]--
   history: Net -> [Net] [n ->
     [] -> steps
     n -> current
     [current |> normal |> not] [
-      steps current |> StdLib.List.append -> steps
+      steps current |> Std.List.append -> steps
       current |> step -> current
     ] |> while
-    steps current |> StdLib.List.append
+    steps current |> Std.List.append
   ]
 }
-
-~~ export Red;

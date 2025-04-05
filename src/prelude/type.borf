@@ -1,0 +1,389 @@
+--[[
+  Type System Foundations
+
+  This module defines the core type system of Borf, including base types,
+  type constructors, subtyping relations, type equivalence, and laws that
+  govern the type system. It establishes the algebraic foundation for the
+  entire language's static analysis capabilities.
+]]--
+
+
+@T: {
+  typ: {
+    T U B N Z Q R C H S Sym Any Void Seq
+    Constraint Variance Generic Pattern TypeClass Instance
+  }
+
+  op: {
+    <:: ~ teq -> ->+ * + ? !:->
+    :> =:= <:> @> |+|
+  }
+
+  fn: {
+    law.subtype_refl law.subtype_trans law.subtype_antisymm
+    law.teq_refl law.teq_symm law.teq_trans law.teq_implies_subtype
+    law.base_subtyping law.top_bottom law.constructors_binary law.constructors_unary
+    law.prod_sub law.sum_sub law.fn_sub law.map_sub law.list_sub law.set_sub law.opt_sub law.seq_sub
+    law.prod_eq law.sum_eq law.fn_eq law.map_eq law.list_eq law.set_eq law.opt_eq law.lin_eq law.seq_eq
+    law.linear_usage law.linear_never_sub_non_linear
+    example.subtype example.equiv
+    infer derive constrain validate
+    match is_of type_name to_type with_constraint
+    forall exists mono poly ensure
+    generic_fn instantiate specialize pattern_match
+    implements satisfies class instance extend_class with
+  }
+
+  E: typ cup op cup fn
+
+  tau: E |> [e ->
+    Mod.TypeSym iff e |> in typ or_else
+    Mod.OpSym iff e |> in op or_else
+    Mod.FnSym iff e |> in fn or_else
+    Mod.TypeSym
+  ] match
+
+  vis: E |> [e -> true]
+
+  T in T
+
+  --[[
+    <:: defines the subtyping relation between types.
+    A <:: B means "A is a subtype of B" or "A can be used where B is expected"
+  ]]--
+  T * T -> Bool <::
+
+  --[[
+    ~ determines whether a type is "affine" - can be used at most once
+  ]]--
+  Any -> Bool ~
+
+  --[[
+    teq defines type equivalence - when two types are considered semantically identical
+  ]]--
+  T * T -> Bool teq
+
+  --[[
+    :> defines type ascription - cast to a specific type
+  ]]--
+  Any * T -> Any :>
+
+  --[[
+    =:= defines pattern matching with type constraints
+  ]]--
+  Any * Pattern -> Bool =:=
+
+  --[[
+    <:> defines type intersection
+  ]]--
+  T * T -> T <:>
+
+  --[[
+    @> defines type application for generics
+  ]]--
+  Generic * T -> T @>
+
+  --[[
+    |+| defines type union operation
+  ]]--
+  T * T -> T |+|
+
+  --[[
+    Core subtyping laws defining reflexivity, transitivity, and antisymmetry
+  ]]--
+  law.subtype_refl: T |> forall [t -> t <:: t]
+  law.subtype_trans: T * T * T |> forall [a b c -> a <:: b and b <:: c -> a <:: c]
+
+  law.subtype_antisymm: T * T |> forall [a b -> a <:: b and b <:: a -> a teq b]
+  law.teq_refl: T |> forall [t -> t teq t]
+  law.teq_symm: T * T |> forall [a b -> a teq b -> b teq a]
+  law.teq_trans: T * T * T |> forall [a b c -> a teq b and b teq c -> a teq c]
+
+  law.teq_implies_subtype: T * T |> forall [a b -> a teq b -> a <:: b and b <:: a]
+
+  U in T; B in T; N in T; Z in T; Q in T; R in T; C in T; H in T; S in T; Sym in T
+
+  --[[
+    Any is the "top" type, a supertype of all types (universal type)
+  ]]--
+  Any in T
+
+  --[[
+    Void is the "bottom" type, a subtype of all types (empty type)
+  ]]--
+  Void in T
+
+  --[[
+    Constraint represents a type constraint that can be applied to type variables
+  ]]--
+  Constraint in T
+
+  --[[
+    Variance determines the subtyping behavior of generic type parameters
+    (covariant, contravariant, invariant)
+  ]]--
+  Variance in T
+
+  --[[
+    Generic represents a generic type with constrained type parameters
+  ]]--
+  Generic in T
+
+  --[[
+    Pattern represents a type pattern used for pattern matching and destructuring
+  ]]--
+  Pattern in T
+
+  --[[
+    TypeClass defines a set of operations that types can implement
+  ]]--
+  TypeClass in T
+
+  --[[
+    Instance represents an implementation of a type class for a specific type
+  ]]--
+  Instance in T
+
+  --[[
+    Establishes the subtyping hierarchy for number types:
+    Natural numbers ⊂ Integers ⊂ Rationals ⊂ Reals ⊂ Complex ⊂ Hyperreals
+  ]]--
+  law.base_subtyping: N <:: Z and Z <:: Q and Q <:: R and R <:: C and C <:: H
+  law.top_bottom: (T |> forall [t -> Void <:: t]) and (T |> forall [t -> t <:: Any])
+
+  --[[
+    Type constructors for binary operations - products, sums, functions, and maps
+  ]]--
+  law.constructors_binary: T * T |> forall [a b ->
+    a * b in T and
+    a + b in T and
+    a -> b in T and
+    a:-> b in T
+  ]
+
+  --[[
+    Type constructors for unary operations - lists, sets, options, linear types, and sequences
+  ]]--
+  law.constructors_unary: T |> forall [a ->
+    [a] in T and
+    {a} in T and
+    ?a in T and
+    !a in T and
+    Seq a in T
+  ]
+
+  --[[
+    Subtyping laws for complex types - how subtyping relates to type constructors
+  ]]--
+  law.prod_sub: T * T * T * T |> forall [a b c d -> a <:: c and b <:: d -> a * b <:: c * d]
+  law.sum_sub: T * T * T * T |> forall [a b c d -> a <:: c and b <:: d -> a + b <:: c + d]
+
+  --[[
+    Function subtyping is contravariant in its domain and covariant in its codomain
+  ]]--
+  law.fn_sub: T * T * T * T |> forall [a b c d -> c <:: a and b <:: d -> a -> b <:: c -> d]
+
+  law.map_sub: T * T * T |> forall [k v1 v2 -> v1 <:: v2 -> k:-> v1 <:: k:-> v2]
+  law.list_sub: T * T |> forall [a b -> a <:: b -> [a] <:: [b]]
+  law.set_sub: T * T |> forall [a b -> a <:: b -> {a} <:: {b}]
+  law.opt_sub: T * T |> forall [a b -> a <:: b -> ?a <:: ?b]
+  law.seq_sub: T * T |> forall [a b -> a <:: b -> Seq a <:: Seq b]
+
+  --[[
+    Type equivalence laws for composite types
+  ]]--
+  law.prod_eq: T * T * T * T |> forall [a b c d -> a teq c and b teq d -> a * b teq c * d]
+  law.sum_eq: T * T * T * T |> forall [a b c d -> a teq c and b teq d -> a + b teq c + d]
+  law.fn_eq: T * T * T * T |> forall [a b c d -> a teq c and b teq d -> a -> b teq c -> d]
+  law.map_eq: T * T * T * T |> forall [k1 v1 k2 v2 -> k1 teq k2 and v1 teq v2 -> k1:-> v1 teq k2:-> v2]
+  law.list_eq: T * T |> forall [a b -> a teq b -> [a] teq [b]]
+  law.set_eq: T * T |> forall [a b -> a teq b -> {a} teq {b}]
+  law.opt_eq: T * T |> forall [a b -> a teq b -> ?a teq ?b]
+  law.lin_eq: T * T |> forall [a b -> a teq b -> !a teq !b]
+  law.seq_eq: T * T |> forall [a b -> a teq b -> Seq a teq Seq b]
+
+  --[[
+    Linear types must be used exactly once - enforced by the runtime
+  ]]--
+  law.linear_usage: T * !a |> forall [t x -> x |> Prim.use_once]
+
+  example.subtype: [N] <:: [Z] iff N <:: Z or_else false
+
+  example.equiv: (N <:: Z and Z <:: N) iff false or_else (N teq Z) iff false or_else true
+
+  --[[
+    Linear types can never be subtypes of non-linear types (prevents usage violations)
+  ]]--
+  law.linear_never_sub_non_linear: T * T |> forall [a b -> !a <:: b |> not]
+
+  --[[
+    Type inference for expressions
+  ]]--
+  infer: Any -> T [expr ->
+    expr |> Prim.type
+  ]
+
+  --[[
+    Derive a type from an existing type by applying transformations
+  ]]--
+  derive: T * (T -> T) -> T [base_type transform ->
+    transform base_type
+  ]
+
+  --[[
+    Apply constraints to a type
+  ]]--
+  constrain: T * Constraint -> T [t c ->
+    t |> with_constraint c
+  ]
+
+  --[[
+    Validate that a value conforms to a type
+  ]]--
+  validate: Any * T -> Bool [val t ->
+    val |> is_of t
+  ]
+
+  --[[
+    Type pattern matching on values
+  ]]--
+  match: Any * [(Pattern * (Any -> Any))] -> Any [val patterns ->
+    patterns |> Prim.find [pat_fn -> val |> pattern_match pat_fn[0]]
+      |> Prim.map [pat_fn -> pat_fn[1] val]
+      |> Prim.default [val]
+  ]
+
+  --[[
+    Check if a value is of a given type
+  ]]--
+  is_of: Any * T -> Bool [val t ->
+    val |> infer <:: t
+  ]
+
+  --[[
+    Get a string representation of a type
+  ]]--
+  type_name: T -> S [t ->
+    t |> Prim.type_repr
+  ]
+
+  --[[
+    Convert a string representation to a type
+  ]]--
+  to_type: S -> T [s ->
+    s |> Prim.parse_type
+  ]
+
+  --[[
+    Add a constraint to a type
+  ]]--
+  with_constraint: T * Constraint -> T [t c ->
+    t |> Prim.constrain c
+  ]
+
+  --[[
+    Universal quantification over types
+  ]]--
+  forall: (T -> Bool) -> Bool [pred ->
+    T |> Prim.forall pred
+  ]
+
+  --[[
+    Existential quantification over types
+  ]]--
+  exists: (T -> Bool) -> Bool [pred ->
+    T |> Prim.exists pred
+  ]
+
+  --[[
+    Check if a type is monomorphic (has no type variables)
+  ]]--
+  mono: T -> Bool [t ->
+    t |> Prim.is_mono
+  ]
+
+  --[[
+    Check if a type is polymorphic (has type variables)
+  ]]--
+  poly: T -> Bool [t ->
+    t |> mono |> not
+  ]
+
+  --[[
+    Ensure a type satisfies a set of constraints
+  ]]--
+  ensure: T * [Constraint] -> T [t cs ->
+    t iff cs |> Prim.forall [c -> t |> Prim.satisfies c] or_else
+    t |> Prim.raise "Type does not satisfy constraints"
+  ]
+
+  --[[
+    Create a generic function with type parameters
+  ]]--
+  generic_fn: [T] * (([T] -> Any) -> Any) -> Any [type_params f ->
+    f |> Prim.make_generic type_params
+  ]
+
+  --[[
+    Instantiate a generic with concrete types
+  ]]--
+  instantiate: Generic * [T] -> Any [g type_args ->
+    g |> Prim.instantiate type_args
+  ]
+
+  --[[
+    Specialize a generic for specific types
+  ]]--
+  specialize: Generic * [T] -> Any [g type_args ->
+    g |> Prim.specialize type_args
+  ]
+
+  --[[
+    Match a value against a type pattern
+  ]]--
+  pattern_match: Any * Pattern -> Bool [val pat ->
+    val =:= pat
+  ]
+
+  --[[
+    Check if a type implements a type class
+  ]]--
+  implements: T * TypeClass -> Bool [t cls ->
+    t |> Prim.implements cls
+  ]
+
+  --[[
+    Check if a type satisfies a constraint
+  ]]--
+  satisfies: T * Constraint -> Bool [t c ->
+    t |> Prim.satisfies c
+  ]
+
+  --[[
+    Define a type class with required operations
+  ]]--
+  class: S * [S * T] -> TypeClass [name ops ->
+    name ops |> Prim.define_class
+  ]
+
+  --[[
+    Create an instance of a type class for a specific type
+  ]]--
+  instance: TypeClass * T * [(S * Any)] -> Instance [cls t impl ->
+    cls t impl |> Prim.define_instance
+  ]
+
+  --[[
+    Extend an existing type class with additional operations
+  ]]--
+  extend_class: TypeClass * [S * T] -> TypeClass [base_cls new_ops ->
+    base_cls new_ops |> Prim.extend_class
+  ]
+
+  --[[
+    Use an instance implementation for type class operations
+  ]]--
+  with: Any * Instance * (Any -> Any) -> Any [val inst f ->
+    val |> Prim.with_instance inst f
+  ]
+}

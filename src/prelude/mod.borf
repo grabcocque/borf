@@ -1,96 +1,420 @@
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-~~~~~~ Module System Foundation ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-@Mod: { ~~ Defines the abstract structure of modules as a category
-  ~~~~~~ Core Module Pattern (Entities Aggregation) ~~~
-  ~~ Core Types
+--[[
+  Module System Foundation
+
+  This module defines the core abstractions for Borf's module system,
+  supporting modular composition of code with clear dependencies.
+  It introduces symbol types, module relationships, component management,
+  and module validation, creating a foundation for extensible programming.
+]]--
+
+
+@Mod: {
   typ: {
     ModSym TypeSym OpSym FnSym
+    ModuleSpec Version Meta Config LazyModule
   }
 
-  ~~ Core Operators
   op: {
     tau delta oplus
+    @@ @@> <@@ ~@
   }
 
-  ~~ Core Functions
   fn: {
     vis dom cod components
     is_type is_op is_fn is_mod exported imports validate_module
     law.acyclic law.transitivity law.component_completeness
+    is_imported is_exported exports_module
+    get_version check_compatibility
+    import import_all lazy_import reload_module module_info
+    register_module unregister_module module_exists
+    set_config get_config configure with_config
+    export_all restrict_exports module_dependencies
+    require ensure_loaded on_load on_unload optimize
   }
 
-  ~~ Aggregate all entities
   E: typ cup op cup fn
 
-  ~~ Classify entities
-  tau: E |> [e ->
-    e |> in typ ? Mod.TypeSym:
-    e |> in op ? Mod.OpSym:
-    e |> in fn ? Mod.FnSym:
-    Mod.TypeSym ~~ Default case
-  ] match
+  --[[
+    Specification for a module, including its path, version requirements, and dependencies
+  ]]--
+  ModuleSpec: {
+    path: S,
+    version: S,
+    dependencies: [S],
+    config: {S:Any}
+  }
 
-  ~~ Export all entities by default
+  --[[
+    Version specification for semantic versioning
+  ]]--
+  Version: {
+    major: Z,
+    minor: Z,
+    patch: Z,
+    prerelease: ?S,
+    build: ?S
+  }
+
+  --[[
+    Metadata structure for modules
+  ]]--
+  Meta: {
+    author: S,
+    license: S,
+    description: S,
+    repository: ?S,
+    website: ?S,
+    keywords: [S]
+  }
+
+  --[[
+    Configuration options for modules
+  ]]--
+  Config: {S:Any}
+
+  --[[
+    LazyModule represents a module that is loaded on demand
+  ]]--
+  LazyModule: {
+    spec: ModuleSpec,
+    loader: () -> Any
+  }
+
+  tau: T.tau
+
   vis: E |> [e -> true]
 
-  ~~ Module dependency and export configuration
   deps: {
-    ~~ Mod depends on Cat and is exported by Core
     (@Core, @Mod, true),
     (@Mod, @Cat, false),
-    ~~ Depends on Sym type from T module
     (@Mod, T.Sym, false)
   }
 
-  ~~ Core Module Entity Types
-  ModSym                         ~~ The type of module symbols
-  TypeSym                        ~~ The type of type symbols
-  OpSym                          ~~ The type of operator symbols
-  FnSym                          ~~ The type of function symbols
+  --[[
+    Symbol types representing different kinds of module entities:
+    - ModSym: Module symbols
+    - TypeSym: Type symbols
+    - OpSym: Operation symbols
+    - FnSym: Function symbols
+  ]]--
+  ModSym
+  TypeSym
+  OpSym
+  FnSym
 
-  ~~ Required Module System declarations (these match @Core's declarations)
-  E                              ~~ The universe of all entities
-  E Sym -> tau                   ~~ Entity type function (categorizes entities)
-  E E Bool -> delta              ~~ Dependency relation (tracks entity dependencies)
-  E Bool -> vis                   ~~ Visibility predicate (determines export status)
+  E
+  E Sym -> tau
+  E E Bool -> delta
+  E Bool -> vis
 
-  ~~ Structural Compatibility with Category Theory (@Cat)
-  O: E |> [ dup tau ModSym teq ] filter ~~ Objects are modules
-  M: O O |> [ dup2 delta ] filter_pairs  ~~ Morphisms are dependencies
-  dom: M |> [ swap drop ]                ~~ Domain of dependency is the dependent module
-  cod: M |> [ drop ]                     ~~ Codomain is the dependency
+  --[[
+    O is the set of all module symbols in the entity set E
+  ]]--
+  O: E |> [ e -> e tau ModSym teq ] filter
 
-  ~~ Categorical Laws for Modules
-  law.acyclic: O |> [ dup delta not ] forall ~~ No self-dependencies
-  law.transitivity: O O O |> [ dup2 delta swap2 delta and -> delta ] forall ~~ Dependencies are transitive
+  --[[
+    M is the set of all module dependency pairs
+  ]]--
+  M: O O |> [ a b -> a b delta ] filter_pairs
 
-  ~~ Module Components
-  components: ModSym {E}      ~~ Function mapping module to its contained entities
-  law.component_completeness: O E |> [ dup2 components in -> delta ] forall ~~ All components depend on their module
+  --[[
+    Domain and codomain projections for the module dependency relation
+  ]]--
+  dom: M |> [ pair -> pair |> fst ]
+  cod: M |> [ pair -> pair |> snd ]
 
-  ~~ Entity Type Classification
-  is_type: E Bool -> [ tau TypeSym teq ] ~~ Check if entity is a type
-  is_op: E Bool -> [ tau OpSym teq ]     ~~ Check if entity is an operator
-  is_fn: E Bool -> [ tau FnSym teq ]     ~~ Check if entity is a function
-  is_mod: E Bool -> [ tau ModSym teq ]   ~~ Check if entity is a module
+  --[[
+    Acyclicity law: no module can depend on itself (no self-cycles)
+  ]]--
+  law.acyclic: O |> [ m -> m delta not ] forall
 
-  ~~ Visibility and Export
-  exported: ModSym E Bool -> [ dup2 components in swap vis and ] ~~ Entity is exported by its module
+  --[[
+    Transitivity law: if A depends on B and B depends on C, then A depends on C
+  ]]--
+  law.transitivity: O O O |> [ a b c -> a b delta b c delta and -> a c delta ] forall
 
-  ~~ Module Dependencies
-  imports: ModSym {ModSym} -> [ O |> [ dup2 delta ] filter ] ~~ Get modules imported by m
+  --[[
+    Returns all components (types, operations, functions) of a module
+  ]]--
+  components: ModSym {E}
 
-  ~~ Module Composition (conceptual)
-  oplus: ModSym ModSym ModSym ~~ Compose modules (implementation details TBD)
+  --[[
+    Component completeness law: all components of a module must be dependent on that module
+  ]]--
+  law.component_completeness: O E |> [ m e -> m e components in -> m e delta ] forall
 
-  ~~ Example: Module structure validation
+  --[[
+    Entity type predicates to check which kind of symbol an entity is
+  ]]--
+  is_type: E Bool -> [ tau TypeSym teq ]
+  is_op: E Bool -> [ tau OpSym teq ]
+  is_fn: E Bool -> [ tau FnSym teq ]
+  is_mod: E Bool -> [ tau ModSym teq ]
+
+  --[[
+    Determines if an entity is exported by a module by checking if it's
+    both a component of the module and visible
+  ]]--
+  exported: ModSym E Bool -> [ m e -> m e components in e vis and ]
+
+  --[[
+    Returns all modules imported by a given module
+  ]]--
+  imports: ModSym {ModSym} -> [ m -> O |> [ o -> m o delta ] filter ]
+
+  --[[
+    Module composition operation
+  ]]--
+  oplus: ModSym ModSym ModSym
+
+  --[[
+    Validates a module's structure and dependencies, ensuring:
+    - All dependencies are valid modules
+    - All components have valid types
+    - Module dependencies are properly structured
+  ]]--
   validate_module: ModSym Bool -> [
-    dup imports swap
-    dup components swap
-    [ is_type ] filter_p all_types =
-    ~~ A valid module has appropriately classified components and valid dependencies
-    all_entities [ tau TypeSym OpSym FnSym ModSym in ] forall
-    deps [ is_mod ] forall and
+    m ->
+    let imports = m imports in
+    let components = m components in
+    let all_types = components |> [ is_type ] filter_p in
+    let all_entities = components |> [ e -> e tau TypeSym OpSym FnSym ModSym in ] forall in
+    let valid_deps = deps |> [ is_mod ] forall in
+    all_entities and valid_deps
+  ]
+
+  --[[
+    Checks if module e1 imports module e2
+  ]]--
+  is_imported: E E Bool -> [ e1 e2 ->
+    deps |> [ triplet ->
+      let (import_m, export_m, direct) = triplet in
+      (e1 |> teq import_m and e2 |> teq export_m and direct) or
+      (e1 |> teq export_m and e2 |> teq import_m and not direct)
+    ] exists_p
+  ]
+
+  --[[
+    Checks if module e1 exports module e2
+  ]]--
+  is_exported: E E Bool -> [ e1 e2 ->
+    deps |> [ triplet ->
+      let (import_m, export_m, direct) = triplet in
+      e1 |> teq import_m and e2 |> teq export_m and direct
+    ] exists_p
+  ]
+
+  --[[
+    Checks if module m1 exports module m2
+  ]]--
+  exports_module: E E Bool -> [ m1 m2 ->
+    deps |> [ triplet ->
+      let (import_m, export_m, direct) = triplet in
+      import_m |> teq m1 and export_m |> teq m2 and direct
+    ] exists_p
+  ]
+
+  --[[
+    @@ is the module access operator
+    Usage: module@@component accesses a component from a module
+  ]]--
+  @@: E * S -> Any [module name ->
+    module |> components |> Prim.filter [c -> c |> Prim.name |> Prim.eq name] |> Prim.head
+  ]
+
+  --[[
+    @@> is the qualified import operator
+    Usage: module1 @@> module2 imports all of module2 into module1's namespace
+  ]]--
+  @@>: E * E -> E [m1 m2 ->
+    m1 |> Prim.extend (m2 |> components) |> Prim.register_deps m2
+  ]
+
+  --[[
+    <@@ is the selective import operator
+    Usage: module <@@ [components] imports specific components
+  ]]--
+  <@@: E * [S] -> E [m names ->
+    names |> Prim.fold m [acc name ->
+      acc |> Prim.import name
+    ]
+  ]
+
+  --[[
+    ~@ is the lazy import operator
+    Usage: module ~@ other_module creates a lazy binding to other_module
+  ]]--
+  ~@: E * E -> E [m1 m2 ->
+    m1 |> Prim.lazy_bind m2
+  ]
+
+  --[[
+    Get the version of a module
+  ]]--
+  get_version: E -> Version [m ->
+    m |> Prim.version
+  ]
+
+  --[[
+    Check if a module is compatible with a version requirement
+  ]]--
+  check_compatibility: E * S -> Bool [m version_req ->
+    m version_req |> Prim.check_compatibility
+  ]
+
+  --[[
+    Import a module by name or path
+  ]]--
+  import: S -> E [name ->
+    name |> Prim.import
+  ]
+
+  --[[
+    Import all modules from a directory
+  ]]--
+  import_all: S -> [E] [dir ->
+    dir |> Prim.list_modules |> Prim.map [name -> name |> import]
+  ]
+
+  --[[
+    Import a module lazily (on first use)
+  ]]--
+  lazy_import: S -> LazyModule [name ->
+    {
+      spec: {
+        path: name,
+        version: "*",
+        dependencies: [],
+        config: {}
+      },
+      loader: [ -> name |> import]
+    }
+  ]
+
+  --[[
+    Reload a module and its dependencies
+  ]]--
+  reload_module: E -> E [m ->
+    m |> Prim.reload
+  ]
+
+  --[[
+    Get information about a module
+  ]]--
+  module_info: E -> {name: S, version: S, meta: Meta} [m ->
+    {
+      name: m |> Prim.name,
+      version: m |> Prim.version,
+      meta: m |> Prim.meta
+    }
+  ]
+
+  --[[
+    Register a new module in the module registry
+  ]]--
+  register_module: S * E -> Bool [name m ->
+    name m |> Prim.register_module
+  ]
+
+  --[[
+    Unregister a module from the module registry
+  ]]--
+  unregister_module: S -> Bool [name ->
+    name |> Prim.unregister_module
+  ]
+
+  --[[
+    Check if a module exists in the registry
+  ]]--
+  module_exists: S -> Bool [name ->
+    name |> Prim.module_exists
+  ]
+
+  --[[
+    Set configuration options for the current module
+  ]]--
+  set_config: {S:Any} -> Bool [cfg ->
+    cfg |> Prim.set_config
+  ]
+
+  --[[
+    Get the current configuration
+  ]]--
+  get_config: () -> Config [_ ->
+    Prim.get_config
+  ]
+
+  --[[
+    Configure a module with specific options
+  ]]--
+  configure: E * {S:Any} -> E [m cfg ->
+    m |> Prim.configure cfg
+  ]
+
+  --[[
+    Execute a function with temporary configuration
+  ]]--
+  with_config: {S:Any} * (() -> Any) -> Any [cfg f ->
+    Prim.get_config -> old_cfg
+    cfg |> Prim.set_config
+    f() -> result
+    old_cfg |> Prim.set_config
+    result
+  ]
+
+  --[[
+    Export all components of a module
+  ]]--
+  export_all: E -> E [m ->
+    m |> Prim.export_all
+  ]
+
+  --[[
+    Restrict exports to specific components
+  ]]--
+  restrict_exports: E * [S] -> E [m names ->
+    m |> Prim.restrict_exports names
+  ]
+
+  --[[
+    Get all dependencies of a module
+  ]]--
+  module_dependencies: E -> [E] [m ->
+    m |> Prim.dependencies
+  ]
+
+  --[[
+    Require a module as a dependency
+  ]]--
+  require: S * ?S -> E [name version ->
+    name version |> Prim.require
+  ]
+
+  --[[
+    Ensure a module is loaded
+  ]]--
+  ensure_loaded: S -> Bool [name ->
+    name |> Prim.ensure_loaded
+  ]
+
+  --[[
+    Register a callback to be executed when a module is loaded
+  ]]--
+  on_load: E * (() -> Any) -> Bool [m f ->
+    m f |> Prim.on_load
+  ]
+
+  --[[
+    Register a callback to be executed when a module is unloaded
+  ]]--
+  on_unload: E * (() -> Any) -> Bool [m f ->
+    m f |> Prim.on_unload
+  ]
+
+  --[[
+    Optimize a module for better performance
+  ]]--
+  optimize: E * Z -> E [m level ->
+    m level |> Prim.optimize
   ]
 }

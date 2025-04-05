@@ -1,75 +1,96 @@
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-~~~~~~ Core Categorical Structures ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-@Cat: {  ~~ Abstract Category definition
-  ~~~~~~ Core Module Pattern (Entities Aggregation) ~~~
-  ~~ Core Types
+--[[
+  Category Theory Foundations
+
+  This module implements the mathematical foundation of category theory,
+  defining categories, morphisms, composition, identity, and category laws.
+  It provides the algebraic structure needed for handling composable
+  transformations and relationships between objects.
+]]--
+
+@Cat: {
   typ: {
     Cat
   }
 
-  ~~ Core Operators
   op: {
     . ceq
   }
 
-  ~~ Core Functions
   fn: {
     dom cod id composable hom
     law.id_dom_cod law.id_right_neutral law.id_left_neutral
     law.associativity law.ceq_iff_iso example.composition
   }
 
-  ~~ Aggregate all entities
   E: typ cup op cup fn
 
-  ~~ Classify entities
-  tau: E |> [e ->
-    e |> in typ ? Mod.TypeSym:
-    e |> in op ? Mod.OpSym:
-    e |> in fn ? Mod.FnSym:
-    Mod.TypeSym  ~~ Default case
-  ] match
+  tau: T.tau
 
-  ~~ Export all entities by default
   vis: E |> [e -> true]
-  
-  ~~ Set of Objects
+
+  --[[
+    O represents the objects (nodes) in a category
+  ]]--
   O
-  
-  ~~ Set of Morphisms (Arrows)
+
+  --[[
+    M represents the morphisms (arrows) between objects
+  ]]--
   M
-  
-  ~~ Morphism domain (source object)
+
+  --[[
+    Returns the domain (source) of a morphism
+  ]]--
   dom: M -> O
-  
-  ~~ Morphism codomain (target object)
+
+  --[[
+    Returns the codomain (target) of a morphism
+  ]]--
   cod: M -> O
-  
-  ~~ Identity morphism for each object
+
+  --[[
+    Creates an identity morphism for an object
+  ]]--
   id: O -> M
-  
-  ~~ Composition (infix); condition uses value equality (veq) for object identity
+
+  --[[
+    Composition of morphisms (f . g means "f after g")
+    Only defined when the codomain of g equals the domain of f
+  ]]--
   .: M * M -> M [g f -> g |> cod veq f |> dom] |> constrain
 
-  ~~ Categorical Equivalence (Isomorphism)
-  ~~ Categorical equivalence (objects are isomorphic)
+  --[[
+    Category equivalence between objects
+  ]]--
   ceq: O * O -> Bool
 
-  ~~ Category Axioms
+  --[[
+    Identity law: the domain and codomain of an identity morphism are the same object
+  ]]--
   law.id_dom_cod: O |> forall [o -> o |> id |> dom veq o and o |> id |> cod veq o]
-  
-  ~~ Right identity composition; uses structural equality (seq) for morphisms
+
+  --[[
+    Right identity law: composing a morphism with the identity of its codomain
+    yields the original morphism
+  ]]--
   law.id_right_neutral: M |> forall [f -> f |> cod |> id |> f . veq f]
-  
-  ~~ Left identity composition; uses structural equality (seq) for morphisms
+
+  --[[
+    Left identity law: composing a morphism with the identity of its domain
+    yields the original morphism
+  ]]--
   law.id_left_neutral: M |> forall [f -> f |> f |> dom |> id . veq f]
-  
-  ~~ Composition is associative; uses structural equality
+
+  --[[
+    Associativity law: composition is associative - the order of composing
+    multiple morphisms doesn't matter
+  ]]--
   law.associativity: M * M * M |> [f g h -> (h |> g |> f .) veq (h . g |> f .)] |> constrain |> forall
 
-  ~~ Isomorphism Definition
-  ~~ Two objects are categorically equivalent iff they are isomorphic
+  --[[
+    Category equivalence law: two objects are equivalent if and only if
+    they are isomorphic (have morphisms between them that compose to identity)
+  ]]--
   law.ceq_iff_iso: O * O |> forall [a b ->
     a ceq b iff
     (M |> exists [f g ->
@@ -79,15 +100,16 @@
     ])
   ]
 
-  ~~ Utility Functions
+  --[[
+    Checks if two morphisms can be composed (domain/codomain compatibility)
+  ]]--
   composable: M * M -> Bool [f g -> g |> cod veq f |> dom]
   composable: M * M * M -> Bool [f g h -> f composable g and g composable h]
+
+  --[[
+    Returns all morphisms from object a to object b
+  ]]--
   hom: O * O -> {M} [a b -> M |> filter [f -> f |> dom veq a and f |> cod veq b]]
 
-  ~~ Example (assuming f, g, h are composable morphisms)
-  example.composition: [comp1 comp2 -> h . (g . f) -> comp1; (h . g) . f -> comp2; comp1 veq comp2]
-
-  ~~ Example: Cat.hom(@Types, T.Sym, T.Int)
+  -- example.composition: [comp1 comp2 -> h . (g . f) -> comp1; (h . g) . f -> comp2; comp1 veq comp2]
 }
-
-~~ export Cat;

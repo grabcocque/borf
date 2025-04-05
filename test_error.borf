@@ -1,0 +1,16 @@
+module Test: {
+    let x = 10;  // Error: Borf doesn't use 'let'
+    y: Int = 20; // This syntax is correct
+
+    // Error: Missing semicolon
+    z: Int = 30
+
+    // Error: Invalid type syntax (should be Int -> Int)
+    fn broken: Int -> 42;
+
+    // Error: Invalid lambda syntax
+    fn bad_lambda: Int -> Int = [a b -> a + b];
+
+    // This is correct syntax
+    fn add: Int -> Int -> Int = [a -> [b -> a + b]];
+}

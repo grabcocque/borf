@@ -1,0 +1,98 @@
+--[[
+  Relations Module
+
+  This module defines various relation types and their algebraic properties.
+  It establishes different equivalence and compatibility relations used throughout
+  the Borf system for comparing entities, ensuring type compatibility, and
+  defining mathematical properties like reflexivity, symmetry, and transitivity.
+]]--
+
+
+@R: {
+  typ: {
+    R
+  }
+
+  op: {
+    veq seq omega
+  }
+
+  fn: {
+    rel
+    law.seq_reflexive law.seq_symmetric law.seq_transitive
+    law.veq_reflexive law.veq_symmetric law.veq_transitive
+    law.veq_implies_seq law.omega_reflexive law.omega_symmetric
+    law.rel_veq law.rel_seq law.rel_omega law.rel_transitive
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Core, @R, true),
+    (@R, @T, false)
+  }
+
+  --[[
+    Value equality relation - strict equality between values
+  ]]--
+  veq: Any * Any -> Bool
+
+  --[[
+    Sequence equality relation - equality for ordered collections
+  ]]--
+  seq: Any * Any -> Bool
+
+  --[[
+    Compatibility relation - determines if two values can interact
+    Note: Intentionally not transitive as compatibility doesn't necessarily transfer
+  ]]--
+  omega: Any * Any -> Bool
+
+  --[[
+    Generic relation - used to define custom relationship between values
+  ]]--
+  rel: Any * Any -> Bool
+
+  --[[
+    Laws establishing sequence equality as an equivalence relation
+  ]]--
+  law.seq_reflexive: Any |> forall [x -> x seq x]
+  law.seq_symmetric: Any * Any |> forall [x y -> x seq y -> y seq x]
+  law.seq_transitive: Any * Any * Any |> forall [x y z -> x seq y and y seq z -> x seq z]
+
+  --[[
+    Laws establishing value equality as an equivalence relation
+  ]]--
+  law.veq_reflexive: Any |> forall [x -> x veq x]
+  law.veq_symmetric: Any * Any |> forall [x y -> x veq y -> y veq x]
+  law.veq_transitive: Any * Any * Any |> forall [x y z -> x veq y and y veq z -> x veq z]
+
+  --[[
+    Value equality implies sequence equality
+    (two identical values must have the same sequence representation)
+  ]]--
+  law.veq_implies_seq: Any * Any |> forall [x y -> x veq y -> x seq y]
+
+  --[[
+    Compatibility relation is reflexive and symmetric
+    (but not necessarily transitive - compatibility doesn't always transfer)
+  ]]--
+  law.omega_reflexive: Any |> forall [x -> x omega x]
+  law.omega_symmetric: Any * Any |> forall [x y -> x omega y -> y omega x]
+
+  --[[
+    Laws relating specialized relations to the generic relation
+  ]]--
+  law.rel_veq: Any * Any |> forall [x y -> x veq y -> x rel y]
+  law.rel_seq: Any * Any |> forall [x y -> x seq y -> x rel y]
+  law.rel_omega: Any * Any |> forall [x y -> x omega y -> x rel y]
+
+  --[[
+    Generic relation is transitive by default
+  ]]--
+  law.rel_transitive: Any * Any * Any |> forall [x y z -> x rel y and y rel z -> x rel z]
+}
