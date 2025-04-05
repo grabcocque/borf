@@ -1,8 +1,8 @@
 use crate::parser::Rule;
-use miette::{Diagnostic, LabeledSpan, NamedSource, SourceSpan};
+use miette::{Diagnostic, SourceSpan};
 use pest::error::{Error as PestError, ErrorVariant, LineColLocation};
-use std::fmt;
 use std::io;
+use std::sync::Arc;
 use thiserror::Error;
 
 /// Errors that can occur during parsing and evaluation of Borf code
@@ -14,7 +14,7 @@ pub enum BorfError {
 
     #[error(transparent)]
     #[diagnostic(transparent)]
-    Parse(#[from] ParseError),
+    Parse(Box<ParseError>),
 
     #[error("Evaluation error: {0}")]
     #[diagnostic(code(borf::evaluation_error))]
@@ -29,7 +29,7 @@ pub enum ParseError {
     SyntaxError {
         message: String,
         #[source_code]
-        src: miette::NamedSource,
+        src: Arc<miette::NamedSource<String>>,
         #[label("here")]
         span: SourceSpan,
         location: String, // e.g., "line:col"
@@ -42,7 +42,7 @@ pub enum ParseError {
     #[diagnostic(code(borf::parser::empty_input))]
     EmptyInput {
         #[source_code]
-        src: miette::NamedSource,
+        src: Arc<miette::NamedSource<String>>,
         #[help]
         help_message: String,
         suggestion: Option<String>,
@@ -53,7 +53,7 @@ pub enum ParseError {
     ValueError {
         message: String,
         #[source_code]
-        src: miette::NamedSource,
+        src: Arc<miette::NamedSource<String>>,
         #[label("invalid value")]
         span: SourceSpan,
         location: String,
@@ -68,7 +68,7 @@ pub enum ParseError {
         expected: String,
         found: String,
         #[source_code]
-        src: miette::NamedSource,
+        src: Arc<miette::NamedSource<String>>,
         #[label("unexpected token")]
         span: SourceSpan,
         location: String,
@@ -82,7 +82,7 @@ pub enum ParseError {
     MissingToken {
         expected: String,
         #[source_code]
-        src: miette::NamedSource,
+        src: Arc<miette::NamedSource<String>>,
         #[label("token expected here")]
         span: SourceSpan,
         location: String,
@@ -183,7 +183,7 @@ impl Clone for ParseError {
                 suggestion,
             } => ParseError::SyntaxError {
                 message: message.clone(),
-                src: miette::NamedSource::new(src.name().to_string(), src.read().to_string()),
+                src: Arc::clone(src),
                 span: *span,
                 location: location.clone(),
                 help_message: help_message.clone(),
@@ -194,7 +194,7 @@ impl Clone for ParseError {
                 help_message,
                 suggestion,
             } => ParseError::EmptyInput {
-                src: miette::NamedSource::new(src.name().to_string(), src.read().to_string()),
+                src: Arc::clone(src),
                 help_message: help_message.clone(),
                 suggestion: suggestion.clone(),
             },
@@ -207,7 +207,7 @@ impl Clone for ParseError {
                 suggestion,
             } => ParseError::ValueError {
                 message: message.clone(),
-                src: miette::NamedSource::new(src.name().to_string(), src.read().to_string()),
+                src: Arc::clone(src),
                 span: *span,
                 location: location.clone(),
                 help_message: help_message.clone(),
@@ -224,7 +224,7 @@ impl Clone for ParseError {
             } => ParseError::UnexpectedToken {
                 expected: expected.clone(),
                 found: found.clone(),
-                src: miette::NamedSource::new(src.name().to_string(), src.read().to_string()),
+                src: Arc::clone(src),
                 span: *span,
                 location: location.clone(),
                 help_message: help_message.clone(),
@@ -239,7 +239,7 @@ impl Clone for ParseError {
                 suggestion,
             } => ParseError::MissingToken {
                 expected: expected.clone(),
-                src: miette::NamedSource::new(src.name().to_string(), src.read().to_string()),
+                src: Arc::clone(src),
                 span: *span,
                 location: location.clone(),
                 help_message: help_message.clone(),
@@ -308,7 +308,11 @@ impl Clone for ParseError {
             ParseError::MultipleErrors { errors } => ParseError::MultipleErrors {
                 errors: errors.clone(),
             },
-            ParseError::Io(e) => ParseError::Io(*e),
+            ParseError::Io(e) => {
+                // io::Error is not Clone. Return a placeholder Unexpected error,
+                // including the original error's string representation.
+                ParseError::Unexpected(format!("Cloned I/O error: {}", e))
+            }
             ParseError::Unexpected(s) => ParseError::Unexpected(s.clone()),
         }
     }
@@ -378,187 +382,177 @@ fn generate_help_message(rule: Option<Rule>, found: &str, expected: &str) -> Str
 }
 
 impl ParseError {
-    // Helper to create ParseError from PestError
+    // Helper function to convert pest errors into custom ParseError
     pub fn from_pest(error: PestError<Rule>, input: &str, source_name: Option<String>) -> Self {
+        // Use NamedSource to hold the input for better error reporting
+        let src_name = source_name.unwrap_or_else(|| "<unknown>".to_string());
+        let src = Arc::new(miette::NamedSource::new(src_name, input.to_string())); // Create the Arc here
+
         let (line, col) = match error.line_col {
-            LineColLocation::Pos((line, col)) => (line, col),
-            LineColLocation::Span((line, col), _) => (line, col),
+            LineColLocation::Pos((l, c)) => (l, c),
+            LineColLocation::Span((l, c), _) => (l, c),
         };
         let location = format!("{}:{}", line, col);
-
         let span: SourceSpan = match error.location {
-            pest::error::InputLocation::Pos(pos) => (pos, 0).into(), // Zero-length span for position
-            pest::error::InputLocation::Span((start, end)) => (start, end - start).into(),
+            pest::error::InputLocation::Pos(p) => (p, 0).into(),
+            pest::error::InputLocation::Span((s, e)) => (s, e - s).into(),
         };
-
-        // Use provided source name or fallback
-        let source_name = source_name.unwrap_or_else(|| "<unknown>".to_string());
-        let src = miette::NamedSource::new(source_name, input.to_string());
 
         match error.variant {
             ErrorVariant::ParsingError {
-                positives,
-                negatives,
+                positives, // Expected rules
+                negatives, // Unexpected rules
             } => {
-                // Format expected rules nicely
-                let expected = positives
-                    .iter()
-                    .map(|r| format!("'{}'", friendly_rule_name(*r))) // Use friendly names
-                    .collect::<Vec<_>>()
-                    .join(" or ");
-
-                // Determine what was actually found (often approximated)
-                // Pest's `negatives` are often just the inverse of positives, not the actual token found.
-                // Let's try to get the text at the span.
-                let found_text = input
-                    .get(span.offset()..span.offset() + span.len())
-                    .unwrap_or("<end of input>") // Handle case where span is at EOF
-                    .trim();
-
-                // Determine found description (either text or negative rules if no text)
-                let found_desc = if !found_text.is_empty() && span.len() > 0 {
-                    format!("'{}'", found_text)
-                } else if !negatives.is_empty() {
-                    negatives
+                // Determine if it's a MissingToken or UnexpectedToken case
+                if !negatives.is_empty() {
+                    // Found an unexpected rule
+                    let found_rule = negatives[0];
+                    let found_desc = friendly_rule_name(found_rule);
+                    let expected = positives
                         .iter()
-                        .map(|r| format!("'{}'", friendly_rule_name(*r)))
+                        .map(|r| friendly_rule_name(*r))
                         .collect::<Vec<_>>()
-                        .join(", ")
-                } else if found_text == "<end of input>" {
-                    "end of input".to_string()
-                } else {
-                    "an unexpected token".to_string() // Fallback
-                };
+                        .join(" or ");
+                    let help_message =
+                        generate_help_message(Some(found_rule), &found_desc, &expected);
+                    let suggestion = suggest_fix(found_rule, &found_desc);
 
-                // Generate suggestion based on the *first* expected rule and found text
-                let suggestion = positives
-                    .first()
-                    .and_then(|rule| suggest_fix(*rule, found_text));
-
-                // Generate help message
-                let help_message =
-                    generate_help_message(positives.first().copied(), found_text, &expected);
-
-                // Decide between MissingToken and UnexpectedToken
-                if positives.is_empty() && negatives.is_empty() {
-                    // Should ideally not happen with Pest errors, but handle defensively
-                    ParseError::SyntaxError {
-                        message: "Unknown syntax error".to_string(),
-                        src,
-                        span,
-                        location,
-                        help_message,
-                        suggestion,
-                    }
-                } else if positives.is_empty() {
-                    // Only negatives means something unexpected was found where nothing specific was expected (rare)
                     ParseError::UnexpectedToken {
-                        expected: "something else".to_string(), // Generic
+                        expected,
                         found: found_desc,
-                        src,
+                        src: Arc::clone(&src), // Clone the Arc
                         span,
                         location,
                         help_message,
                         suggestion,
                     }
-                } else if span.len() == 0 && found_text == "<end of input>" {
-                    // Zero-length span at EOF usually means something is missing
+                } else {
+                    // Expected something, but found end of input or incorrect structure
+                    let expected = positives
+                        .iter()
+                        .map(|r| friendly_rule_name(*r))
+                        .collect::<Vec<_>>()
+                        .join(" or ");
+                    let help_message = generate_help_message(None, "end of input", &expected);
+                    // Decide if it's MissingToken or MissingNode based on context? Hard to tell.
+                    // Default to MissingToken as it's common
                     ParseError::MissingToken {
                         expected: expected.clone(),
-                        src,
-                        span: (input.len(), 0).into(), // Point to the very end
+                        src: Arc::clone(&src),                 // Clone the Arc
+                        span: (input.len(), 0).into(),         // Point to the very end
                         location: format!("{}:{}", line, col), // Use original line/col guess
-                        help_message: format!("Expected {} before the end of the input.", expected),
-                        suggestion,
-                    }
-                } else if span.len() == 0 {
-                    // Zero-length span implies something expected is missing *before* the current point
-                    ParseError::MissingToken {
-                        expected,
-                        src,
-                        span, // Span points right *before* where token was expected
-                        location,
                         help_message,
-                        suggestion,
-                    }
-                } else {
-                    // Non-zero span or negatives means an actual token was found that wasn't expected
-                    ParseError::UnexpectedToken {
-                        expected,
-                        found: found_desc,
-                        src,
-                        span,
-                        location,
-                        help_message,
-                        suggestion,
+                        suggestion: None, // No specific suggestion usually for EOF
                     }
                 }
             }
             ErrorVariant::CustomError { message } => ParseError::SyntaxError {
-                message, // Use the custom message directly
-                src,
-                span, // Span provided by CustomError location
+                message,               // Use the custom message directly
+                src: Arc::clone(&src), // Clone the Arc
+                span,                  // Span provided by CustomError location
                 location,
-                help_message: "Check the syntax or logic around this location.".to_string(), // Generic help
-                suggestion: None, // No suggestion for custom errors yet
+                help_message: "Check the syntax near this location.".to_string(), // Generic help
+                suggestion: None,
             },
+        }
+    }
+
+    // Function to check if the error can be recovered from
+    pub fn is_recoverable(&self) -> bool {
+        // Define which errors might be recoverable in an interactive session
+        match self {
+            // Likely recoverable
+            ParseError::UnexpectedToken { .. } => true,
+            ParseError::MissingToken { .. } => true,
+            ParseError::SyntaxError { .. } => true,
+            // Usually not recoverable without fixing input
+            ParseError::EmptyInput { .. } => false,
+            ParseError::ValueError { .. } => false,
+            ParseError::MissingNode { .. } => false,
+            ParseError::UnexpectedRule { .. } => false,
+            ParseError::InvalidLiteral { .. } => false,
+            ParseError::InvalidMapKey { .. } => false,
+            ParseError::InvalidMapPatternKey { .. } => false,
+            ParseError::InvalidTypePattern { .. } => false,
+            // Aggregate/System errors
+            ParseError::MultipleErrors { .. } => false, // Or maybe recoverable if sub-errors are?
+            ParseError::Io(_) => false,
+            ParseError::Unexpected(_) => false, // Assume unexpected conditions are fatal
         }
     }
 }
 
 // Helper function to provide more user-friendly names for Pest rules
-fn friendly_rule_name(rule: Rule) -> String {
+pub fn friendly_rule_name(rule: Rule) -> String {
     match rule {
-        Rule::EOI => "end of input".to_string(),
-        Rule::WHITESPACE => "whitespace".to_string(),
-        Rule::COMMENT | Rule::MULTILINE_COMMENT => "a comment".to_string(),
-        Rule::identifier => "an identifier (name)".to_string(),
-        Rule::string => "a string literal (e.g., \"hello\")".to_string(), // Fixed escaping of quotes
-        Rule::integer => "an integer number (e.g., 42)".to_string(),
-        Rule::float => "a floating-point number (e.g., 3.14)".to_string(),
-        Rule::boolean => "a boolean (true or false)".to_string(),
-        Rule::literal => "a literal value (number, string, boolean)".to_string(),
-        Rule::module_decl => "a module declaration (e.g., @Name: { ... })".to_string(),
-        Rule::type_decl => "a type declaration (e.g., type: { T })".to_string(),
-        Rule::op_decl => "an operation declaration (e.g., op: { f })".to_string(),
-        Rule::fn_decl => "a function declaration (e.g., fn: { g })".to_string(),
         Rule::expr => "an expression".to_string(),
-        Rule::lambda => "a lambda function (e.g., [x] x + 1)".to_string(),
+        Rule::literal => "a literal (number, string, etc.)".to_string(),
+        Rule::identifier => "an identifier".to_string(),
+        Rule::lambda => "a lambda expression (e.g., [x -> x + 1])".to_string(),
         Rule::application => "a function application (e.g., (f x))".to_string(),
-        Rule::let_expr => "a let binding (e.g., let x = 1 in x)".to_string(),
-        Rule::if_expr => "an if expression (e.g., if c then t else e)".to_string(),
-        Rule::op_add | Rule::op_sub | Rule::op_mul | Rule::op_div | Rule::op_eq => {
-            "a binary operator".to_string()
-        }
-        Rule::parenthesized_expr => "a parenthesized expression (...)".to_string(),
-        Rule::list_literal => "a list literal ([1, 2])".to_string(),
-        Rule::map_literal => "a map literal ({key: value})".to_string(),
-        Rule::set_literal => "a set literal ({1, 2})".to_string(),
-        Rule::pattern => "a pattern".to_string(),
-        // Add more rules as needed for clarity
-        other => format!("'{:?}'", other), // Fallback to debug name
+        Rule::let_expr => "a let expression (e.g., let x = 10 in x * 2)".to_string(),
+        Rule::ternary => "a ternary expression (e.g., x iff c or_else y)".to_string(),
+        Rule::parenthesized_expr => "a parenthesized expression (e.g., (1 + 2))".to_string(),
+        Rule::quoting_expr => "a quoting expression (e.g., 'expr, ~expr)".to_string(),
+        Rule::quote_expr => "a quote expression (e.g., 'expr)".to_string(),
+        Rule::unquote_expr => "an unquote expression (e.g., ~expr)".to_string(),
+        Rule::unquote_splice_expr => "an unquote-splice expression (e.g., ~@expr)".to_string(),
+        Rule::quasiquote_expr => "a quasiquote expression (e.g., `expr)".to_string(),
+        Rule::primitive_literal => "a primitive literal (number, string, boolean)".to_string(),
+        Rule::collection_literal => "a collection literal (list, map, set)".to_string(),
+        Rule::integer => "an integer".to_string(),
+        Rule::float => "a floating-point number".to_string(),
+        Rule::string => "a string".to_string(),
+        Rule::boolean => "a boolean (true or false)".to_string(),
+        Rule::list_literal => "a list literal (e.g., [1, 2, 3])".to_string(),
+        Rule::map_literal => "a map literal (e.g., {x: 1, y: 2})".to_string(),
+        Rule::set_literal => "a set literal (e.g., {1, 2, 3})".to_string(),
+        Rule::map_entry => "a map entry (e.g., key: value)".to_string(),
+        Rule::pattern => "a pattern (variable, literal, or data structure)".to_string(),
+        Rule::binding => "a binding (e.g., x = 10)".to_string(),
+        Rule::wildcard => "a wildcard pattern (_)".to_string(),
+        Rule::type_annotation_pattern => "a type annotation pattern (e.g., x: Int)".to_string(),
+        Rule::list_pattern => "a list pattern (e.g., [x, y, z])".to_string(),
+        Rule::map_pattern => "a map pattern (e.g., {x, y})".to_string(),
+        Rule::set_pattern => "a set pattern (e.g., {x, y})".to_string(),
+        Rule::map_pattern_entry => "a map pattern entry (e.g., key: value)".to_string(),
+        Rule::type_expr => "a type expression (e.g., Int, String, [Int])".to_string(),
+        Rule::type_primary => "a type primary (e.g., Int, [Int])".to_string(),
+        Rule::type_infix_op => "a type infix operator (e.g., ->, +, *)".to_string(),
+        Rule::type_function_op => "a function type operator (->)".to_string(),
+        Rule::type_product_op => "a product type operator (*)".to_string(),
+        Rule::type_sum_op => "a sum type operator (+)".to_string(),
+        Rule::type_map_op => "a map type operator (:->)".to_string(),
+        Rule::type_identifier => "a type identifier (e.g., Int, String)".to_string(),
+        Rule::list_type => "a list type (e.g., [Int])".to_string(),
+        Rule::set_type => "a set type (e.g., {String})".to_string(),
+        Rule::option_type => "an option type (e.g., ?Int)".to_string(),
+        // Other rules...
+        _ => format!("a {:?}", rule),
     }
 }
 
 /// Creates a nicely formatted error report from a BorfError
 ///
 /// This is the recommended way to display errors to users.
-pub fn create_report(error: BorfError, source_name: Option<String>) -> miette::Report {
-    // If the error is a ParseError, enhance it with source name if not already present
+pub fn create_report(error: BorfError, _source_name: Option<String>) -> miette::Report {
     match error {
-        BorfError::Parse(pe) => {
-            // Attempt to add source name if missing. This requires pe to be mutable.
-            // Cloning might be necessary if we can't get a mutable ref easily.
-            // For now, we assume from_pest adds it correctly.
-            miette::Report::new(BorfError::Parse(pe))
-        }
-        _ => miette::Report::new(error),
+        BorfError::Parse(err) => create_parse_report(*err, None),
+        BorfError::Evaluation(err) => miette::Report::new(BorfError::Evaluation(err)),
+        BorfError::Io(err) => miette::Report::new(BorfError::Io(err)),
     }
 }
 
 /// Creates a nicely formatted error report directly from a ParseError
-pub fn create_parse_report(error: ParseError, source_name: Option<String>) -> miette::Report {
+pub fn create_parse_report(error: ParseError, _source_name: Option<String>) -> miette::Report {
     // Similar to create_report, ensure source name is included.
     // Cloning might be necessary.
     miette::Report::new(error)
+}
+
+// Implement From for BorfError to handle boxing ParseError
+impl From<ParseError> for BorfError {
+    fn from(error: ParseError) -> Self {
+        BorfError::Parse(Box::new(error))
+    }
 }

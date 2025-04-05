@@ -5,6 +5,10 @@
   the Borf language. It implements Maps, Sequences, Lists, Sets, and Queues
   with common operations like insertion, lookup, traversal, and manipulation.
   These abstractions form the foundation for composable data manipulation.
+
+  Notation:
+  - 'a -o> b' indicates a function that consumes its input (linear)
+  - '!a' represents a linear type
 ]]--
 
 
@@ -29,12 +33,15 @@
   ]]--
   fn: {
     ne append
-    Map.empty Map.insert Map.lookup Map.contains_key Map.is_empty Map.size
-    Seq.empty Seq.cons Seq.head Seq.tail Seq.is_empty
+    Map.empty Map.insert Map.lookup Map.contains_key Map.is_empty Map.size Map.remove
+    Map.keys Map.values Map.entries Map.update Map.merge Map.filter
+    Seq.empty Seq.cons Seq.head Seq.tail Seq.is_empty Seq.map Seq.filter Seq.zip
     List.empty List.cons List.append List.concat List.head List.tail
-    List.map List.filter List.fold List.is_empty List.size
+    List.map List.filter List.fold List.is_empty List.size List.reverse
+    List.take List.drop List.zip List.unzip List.sort List.any List.all
     Set.empty Set.insert Set.contains Set.remove Set.union Set.intersection
-    Set.difference Set.is_empty Set.size Set.to_list
+    Set.difference Set.is_empty Set.size Set.to_list Set.from_list
+    Set.subset Set.disjoint Set.symmetric_difference Set.cartesian_product
     Queue.empty Queue.enqueue Queue.dequeue Queue.peek Queue.is_empty Queue.size
   }
 
@@ -59,9 +66,9 @@
   ne: Any -> Bool [coll -> coll |> Prim.rho > 0]
 
   --[[
-    Appends a single element to a list
+    Appends a single element to a list (consuming the list)
   ]]--
-  append: [a] * a -> [a] [xs x -> xs [x] |> Prim.concat]
+  append: ![a] * a -o> [a] [xs x -> xs [x] |> Prim.concat]
 
   --[[
     Map Data Structure
@@ -73,32 +80,83 @@
     --[[
       Creates an empty map
     ]]--
-    empty: {} -> (k v:->)
+    empty: {} -> (k:-> v)
 
     --[[
-      Inserts or updates a key-value pair in the map
+      Inserts or updates a key-value pair in the map (consuming the map)
     ]]--
-    insert: (k v:->) * k * v -> (k v:->) [m k v -> m k v |> Prim.insert]
+    insert: !(k:-> v) * k * v -o> (k:-> v) [m k v -> m k v |> Prim.insert]
 
     --[[
-      Looks up a value by key, returning an optional result
+      Looks up a value by key, returning an optional result (non-consuming)
     ]]--
-    lookup: (k v:->) * k -> ?v [m k -> m k |> Prim.lookup]
+    lookup: (k:-> v) * k -> ?v [m k -> m k |> Prim.lookup]
 
     --[[
-      Checks if a key exists in the map
+      Checks if a key exists in the map (non-consuming)
     ]]--
-    contains_key: (k v:->) * k -> Bool [m k -> m k |> Prim.lookup |> Prim.is_valid]
+    contains_key: (k:-> v) * k -> Bool [m k -> m k |> Prim.lookup |> Prim.is_valid]
 
     --[[
-      Checks if a map has no elements
+      Checks if a map has no elements (non-consuming)
     ]]--
-    is_empty: (k v:->) -> Bool [m -> m |> Prim.ne |> not]
+    is_empty: (k:-> v) -> Bool [m -> m |> Prim.ne |> not]
 
     --[[
-      Returns the number of key-value pairs in the map
+      Returns the number of key-value pairs in the map (non-consuming)
     ]]--
-    size: (k v:->) -> Z [m -> m |> Prim.rho]
+    size: (k:-> v) -> Z [m -> m |> Prim.rho]
+
+    --[[
+      Removes a key-value pair from the map (consuming the map)
+    ]]--
+    remove: !(k:-> v) * k -o> (k:-> v) [m k -> m k |> Prim.remove_key]
+
+    --[[
+      Returns all keys in the map (non-consuming)
+    ]]--
+    keys: (k:-> v) -> [k] [m -> m |> Prim.keys]
+
+    --[[
+      Returns all values in the map (non-consuming)
+    ]]--
+    values: (k:-> v) -> [v] [m -> m |> Prim.values]
+
+    --[[
+      Returns all key-value pairs in the map (non-consuming)
+    ]]--
+    entries: (k:-> v) -> [(k * v)] [m ->
+      m |> Prim.keys -> ks
+      ks |> Prim.map [k -> (k, m k |> Map.lookup |> Prim.unwrap_option)]
+    ]
+
+    --[[
+      Updates a value in the map using a function (consuming the map)
+    ]]--
+    update: !(k:-> v) * k * (v -o> v) -o> (k:-> v) [m k f ->
+      m k |> Map.lookup -> v_opt
+      v_opt |> Prim.is_valid -> [
+        v_opt |> Prim.unwrap_option |> f -> new_v
+        m k |> Map.remove k new_v |> Map.insert
+      ] or_else [
+        m
+      ]
+    ]
+
+    --[[
+      Merges two maps (consuming both maps)
+    ]]--
+    merge: !(k:-> v) * !(k:-> v) -o> (k:-> v) [m1 m2 ->
+      m2 |> Map.entries |> List.fold [acc (k, v) -> acc k v |> Map.insert] m1
+    ]
+
+    --[[
+      Filters map entries by a predicate (consuming the map)
+    ]]--
+    filter: !(k:-> v) * (k * v -> Bool) -o> (k:-> v) [m pred ->
+      m |> Map.entries |> List.filter [entry -> entry |> pred]
+        |> List.fold [acc (k, v) -> acc k v |> Map.insert] (Map.empty)
+    ]
   }
 
   --[[
@@ -114,24 +172,39 @@
     empty: <> -> (Seq a)
 
     --[[
-      Adds an element to the beginning of a sequence
+      Adds an element to the beginning of a sequence (consuming the sequence)
     ]]--
-    cons: a * (Seq a) -> (Seq a) [x xs -> x xs |> Prim.cons]
+    cons: a * !(Seq a) -o> (Seq a) [x xs -> x xs |> Prim.cons]
 
     --[[
-      Returns the first element of a sequence if non-empty
+      Returns the first element of a sequence if non-empty (non-consuming)
     ]]--
     head: (Seq a) -> ?a [xs -> xs |> Prim.head]
 
     --[[
-      Returns the sequence without its first element if non-empty
+      Returns the sequence without its first element if non-empty (non-consuming)
     ]]--
     tail: (Seq a) -> ?(Seq a) [xs -> xs |> Prim.tail]
 
     --[[
-      Checks if a sequence is empty
+      Checks if a sequence is empty (non-consuming)
     ]]--
     is_empty: (Seq a) -> Bool [xs -> xs |> Prim.head |> Prim.is_valid |> not]
+
+    --[[
+      Maps a function over a sequence (consuming the sequence)
+    ]]--
+    map: (a -o> b) * !(Seq a) -o> (Seq b) [f xs -> xs |> Prim.map(f)]
+
+    --[[
+      Filters elements in a sequence by a predicate (consuming the sequence)
+    ]]--
+    filter: (a -> Bool) * !(Seq a) -o> (Seq a) [pred xs -> xs |> Prim.filter(pred)]
+
+    --[[
+      Zips two sequences together (consuming both sequences)
+    ]]--
+    zip: !(Seq a) * !(Seq b) -o> (Seq (a * b)) [xs ys -> xs ys |> Prim.zip]
   }
 
   --[[
@@ -148,61 +221,117 @@
     empty: [] -> [a]
 
     --[[
-      Adds an element to the beginning of a list
+      Adds an element to the beginning of a list (consuming the list)
     ]]--
-    cons: a * [a] -> [a] [x xs -> [x] xs |> Prim.concat]
+    cons: a * ![a] -o> [a] [x xs -> [x] xs |> Prim.concat]
 
     --[[
-      Appends a single element to the end of a list
+      Appends a single element to the end of a list (consuming the list)
     ]]--
-    append: [a] * a -> [a] [xs x -> xs x |> Std.append]
+    append: ![a] * a -o> [a] [xs x -> xs x |> Std.append]
 
     --[[
-      Concatenates two lists together
+      Concatenates two lists together (consuming both lists)
     ]]--
-    concat: [a] * [a] -> [a] [xs ys -> xs ys |> Prim.concat]
+    concat: ![a] * ![a] -o> [a] [xs ys -> xs ys |> Prim.concat]
 
     --[[
-      Returns the first element of a list if non-empty
+      Returns the first element of a list if non-empty (non-consuming)
     ]]--
     head: [a] -> ?a [xs ->
       xs[0] iff xs |> Prim.ne or_else nothing
     ]
 
     --[[
-      Returns the list without its first element if non-empty
+      Returns the list without its first element if non-empty (non-consuming)
     ]]--
     tail: [a] -> ?[a] [xs ->
       xs |> Prim.slice(1, xs |> Prim.rho) iff xs |> Prim.ne or_else nothing
     ]
 
     --[[
-      Applies a function to each element of a list, producing a new list
+      Applies a function to each element of a list, producing a new list (consuming the list)
     ]]--
-    map: (a -> b) * [a] -> [b] [f xs -> xs |> Prim.map(f)]
+    map: (a -o> b) * ![a] -o> [b] [f xs -> xs |> Prim.map(f)]
 
     --[[
-      Keeps only elements that satisfy a predicate
+      Keeps only elements that satisfy a predicate (consuming the list)
     ]]--
-    filter: (a -> Bool) * [a] -> [a] [pred xs ->
-      xs |> Prim.where(pred) -> indices
-      indices |> Prim.map [i -> xs[i]]
-    ]
+    filter: (a -> Bool) * ![a] -o> [a] [pred xs -> xs |> Prim.filter(pred)]
 
     --[[
-      Reduces a list to a single value using an accumulator function
+      Reduces a list to a single value using an accumulator function (consuming the list)
     ]]--
-    fold: (b * a -> b) * b * [a] -> b [f acc xs -> xs |> Prim.fold(f, acc)]
+    fold: (b * a -o> b) * b * ![a] -o> b [f acc xs -> xs |> Prim.fold(f, acc)]
 
     --[[
-      Checks if a list is empty
+      Checks if a list is empty (non-consuming)
     ]]--
     is_empty: [a] -> Bool [xs -> xs |> Prim.ne |> not]
 
     --[[
-      Returns the number of elements in the list
+      Returns the number of elements in the list (non-consuming)
     ]]--
-    size: [a] -> N [xs -> xs |> Prim.rho]
+    size: [a] -> Z [xs -> xs |> Prim.rho]
+
+    --[[
+      Reverses a list (consuming the list)
+    ]]--
+    reverse: ![a] -o> [a] [xs -> xs |> Prim.reverse]
+
+    --[[
+      Takes the first n elements of a list (non-consuming)
+    ]]--
+    take: [a] * Z -> [a] [xs n -> xs |> Prim.slice(0, n)]
+
+    --[[
+      Drops the first n elements of a list (non-consuming)
+    ]]--
+    drop: [a] * Z -> [a] [xs n -> xs |> Prim.slice(n, xs |> Prim.rho)]
+
+    --[[
+      Zips two lists together (consuming both lists)
+    ]]--
+    zip: ![a] * ![b] -o> [(a * b)] [xs ys -> xs ys |> Prim.zip]
+
+    --[[
+      Unzips a list of pairs into a pair of lists (consuming the list)
+    ]]--
+    unzip: ![(a * b)] -o> ([a] * [b]) [pairs -> pairs |> Prim.unzip]
+
+    --[[
+      Sorts a list according to a comparison function (consuming the list)
+    ]]--
+    sort: ![a] * (a * a -> Z) -o> [a] [xs cmp ->
+      -- Simple insertion sort implementation
+      [] -> result
+      xs |> List.fold [sorted x ->
+        -- Find insertion point
+        0 -> i
+        [i < (sorted |> List.size) and (cmp(x, sorted[i]) > 0)] [
+          i + 1 -> i
+        ] |> while
+
+        -- Insert at position i
+        sorted |> List.take(i)
+               |> List.concat([x])
+               |> List.concat(sorted |> List.drop(i))
+      ] result
+    ]
+
+    --[[
+      Tests if any element satisfies a predicate (consuming the list)
+    ]]--
+    any: ![a] * (a -> Bool) -o> Bool [xs pred ->
+      xs |> List.fold [result x -> result or (x |> pred)] false
+    ]
+
+    --[[
+      Tests if all elements satisfy a predicate (consuming the list)
+    ]]--
+    all: ![a] * (a -> Bool) -o> Bool [xs pred ->
+      xs |> List.fold [result x -> result and (x |> pred)] true
+    ]
   }
 
   --[[
@@ -213,7 +342,7 @@
   ]]--
   Set = {
     -- Underlying map type: (element -> Bool)
-    _map_type: (a Bool:->)
+    _map_type: (a:-> Bool)
 
     --[[
       Creates an empty set
@@ -221,59 +350,104 @@
     empty: {} -> _map_type[a]
 
     --[[
-      Inserts an element into the set. If already present, no change.
+      Inserts an element into the set. If already present, no change. (consuming the set)
     ]]--
-    insert: _map_type[a] * a -> _map_type[a] [s x -> s x true |> Map.insert]
+    insert: !_map_type[a] * a -o> _map_type[a] [s x -> s x true |> Map.insert]
 
     --[[
-      Checks if an element exists in the set
+      Checks if an element exists in the set (non-consuming)
     ]]--
     contains: _map_type[a] * a -> Bool [s x -> s x |> Map.contains_key]
 
     --[[
-      Removes an element from the set. If not present, no change.
-      (Implementation Note: Map doesn't have remove yet, this is conceptual)
-      TODO: Requires Prim.remove or equivalent for Map
+      Removes an element from the set. If not present, no change. (consuming the set)
     ]]--
-    remove: _map_type[a] * a -> _map_type[a] [s x -> s --[[ Placeholder: x |> Prim.remove_key ]]-- ]
+    remove: !_map_type[a] * a -o> _map_type[a] [s x -> s x |> Map.remove]
 
     --[[
-      Computes the union of two sets
+      Computes the union of two sets (consuming both sets)
     ]]--
-    union: _map_type[a] * _map_type[a] -> _map_type[a] [s1 s2 ->
-      s2 |> Prim.keys |> List.fold [acc k -> acc k true |> Map.insert] s1
+    union: !_map_type[a] * !_map_type[a] -o> _map_type[a] [s1 s2 ->
+      s2 |> Map.keys |> List.fold [acc k -> acc k true |> Map.insert] s1
     ]
 
     --[[
-      Computes the intersection of two sets
+      Computes the intersection of two sets (consuming both sets)
     ]]--
-    intersection: _map_type[a] * _map_type[a] -> _map_type[a] [s1 s2 ->
-      s1 |> Prim.keys |> List.filter [k -> s2 k |> Map.contains_key]
+    intersection: !_map_type[a] * !_map_type[a] -o> _map_type[a] [s1 s2 ->
+      s1 |> Map.keys |> List.filter [k -> s2 k |> Map.contains_key]
          |> List.fold [acc k -> acc k true |> Map.insert] (Set.empty[a])
     ]
 
     --[[
-      Computes the difference of two sets (elements in s1 but not in s2)
+      Computes the difference of two sets (elements in s1 but not in s2) (consuming both sets)
     ]]--
-    difference: _map_type[a] * _map_type[a] -> _map_type[a] [s1 s2 ->
-      s1 |> Prim.keys |> List.filter [k -> s2 k |> Map.contains_key |> not]
+    difference: !_map_type[a] * !_map_type[a] -o> _map_type[a] [s1 s2 ->
+      s1 |> Map.keys |> List.filter [k -> s2 k |> Map.contains_key |> not]
          |> List.fold [acc k -> acc k true |> Map.insert] (Set.empty[a])
     ]
 
     --[[
-      Checks if the set is empty
+      Checks if the set is empty (non-consuming)
     ]]--
     is_empty: _map_type[a] -> Bool [s -> s |> Map.is_empty]
 
     --[[
-      Returns the number of elements in the set
+      Returns the number of elements in the set (non-consuming)
     ]]--
     size: _map_type[a] -> Z [s -> s |> Map.size]
 
     --[[
-      Converts the set to a list of its elements
+      Converts the set to a list of its elements (non-consuming)
     ]]--
-    to_list: _map_type[a] -> [a] [s -> s |> Prim.keys] -- Assuming Prim.keys returns a list
+    to_list: _map_type[a] -> [a] [s -> s |> Map.keys]
+
+    --[[
+      Creates a set from a list of elements (consuming the list)
+    ]]--
+    from_list: ![a] -o> _map_type[a] [xs ->
+      xs |> List.fold [s x -> s x |> Set.insert] (Set.empty[a])
+    ]
+
+    --[[
+      Checks if s1 is a subset of s2 (non-consuming)
+    ]]--
+    subset: _map_type[a] * _map_type[a] -> Bool [s1 s2 ->
+      s1 |> Map.keys |> List.all [k -> s2 k |> Map.contains_key]
+    ]
+
+    --[[
+      Checks if two sets are disjoint (have no elements in common) (non-consuming)
+    ]]--
+    disjoint: _map_type[a] * _map_type[a] -> Bool [s1 s2 ->
+      s1 |> Map.keys |> List.any [k -> s2 k |> Map.contains_key] |> not
+    ]
+
+    --[[
+      Computes the symmetric difference of two sets (elements in either set but not both)
+      (consuming both sets)
+    ]]--
+    symmetric_difference: !_map_type[a] * !_map_type[a] -o> _map_type[a] [s1 s2 ->
+      s1 s2 |> Set.difference s2 s1 |> Set.difference |> Set.union
+    ]
+
+    --[[
+      Computes the Cartesian product of two sets (all possible pairs)
+      (non-consuming)
+    ]]--
+    cartesian_product: _map_type[a] * _map_type[b] -> _map_type[(a * b)] [s1 s2 ->
+      s1 |> Map.keys -> keys1
+      s2 |> Map.keys -> keys2
+
+      result <- Set.empty[(a * b)]
+      [x in keys1] [
+        [y in keys2] [
+          result (x, y) |> Set.insert -> result
+        ] |> foreach
+      ] |> foreach
+
+      result
+    ]
   }
 
   --[[
@@ -292,34 +466,33 @@
     empty: [] -> _list_type[a]
 
     --[[
-      Adds an element to the rear of the queue
+      Adds an element to the rear of the queue (consuming the queue)
     ]]--
-    enqueue: _list_type[a] * a -> _list_type[a] [q x -> q x |> List.append]
+    enqueue: !_list_type[a] * a -o> _list_type[a] [q x -> q x |> List.append]
 
     --[[
-      Removes and returns the element from the front of the queue
-      Returns ?a (optional element)
+      Removes and returns the element from the front of the queue (consuming the queue)
+      Returns a pair of (?a, queue) - the element and the new queue
     ]]--
-    dequeue: _list_type[a] -> (?a * _list_type[a]) [q ->
+    dequeue: !_list_type[a] -o> (?a * _list_type[a]) [q ->
       q |> List.head -> head_opt
       q |> List.tail -> tail_opt
-      (head_opt, tail_opt |> Flp.default(Queue.empty[a])) iff head_opt |> Prim.is_valid or_else
+      (head_opt, tail_opt |> Prim.unwrap_option) iff head_opt |> Prim.is_valid or_else
       (nothing, q) -- Return nothing and original queue if empty
     ]
 
     --[[
-      Returns the element at the front of the queue without removing it
-      Returns ?a (optional element)
+      Returns the element at the front of the queue without removing it (non-consuming)
     ]]--
     peek: _list_type[a] -> ?a [q -> q |> List.head]
 
     --[[
-      Checks if the queue is empty
+      Checks if the queue is empty (non-consuming)
     ]]--
     is_empty: _list_type[a] -> Bool [q -> q |> List.is_empty]
 
     --[[
-      Returns the number of elements in the queue
+      Returns the number of elements in the queue (non-consuming)
     ]]--
     size: _list_type[a] -> Z [q -> q |> List.size]
   }

@@ -1,84 +1,62 @@
---[[
-  Module System Foundation
+  --[[
+  Linear Module System Foundation
 
-  This module defines the core abstractions for Borf's module system,
-  supporting modular composition of code with clear dependencies.
-  It introduces symbol types, module relationships, component management,
-  and module validation, creating a foundation for extensible programming.
+  This module defines the core abstractions for Borf's extensiblemodule system,
+  ensuring modules are properly initialized, used exactly once, and correctly finalized.
+  It provides resource-safe module loading, explicit dependency tracking, and
+  lifecycle management with compile-time guarantees about module interactions.
 ]]--
-
 
 @Mod: {
   typ: {
-    ModSym TypeSym OpSym FnSym
-    ModuleSpec Version Meta Config LazyModule
+    !Module !ModuleRef !Dependency !ExportSet !ImportSet
+    !ModSym !TypeSym !OpSym !FnSym !ModuleHandle
+    !Context !Version !Meta !Config !InitResult !LoadResult
   }
 
   op: {
-    tau delta oplus
-    @@ @@> <@@ ~@
+    => -- Module import
+    # -- Component access
+    <> -- Module linking
+    |> -- Linear pipeline
   }
 
   fn: {
-    vis dom cod components
-    is_type is_op is_fn is_mod exported imports validate_module
-    law.acyclic law.transitivity law.component_completeness
-    is_imported is_exported exports_module
-    get_version check_compatibility
-    import import_all lazy_import reload_module module_info
-    register_module unregister_module module_exists
-    set_config get_config configure with_config
-    export_all restrict_exports module_dependencies
-    require ensure_loaded on_load on_unload optimize
+    -- Loading/unloading
+    load unload require reload init finalize
+
+    -- Importing/exporting
+    import export import_from export_to
+    import_all export_all selective_import
+
+    -- Module manipulation
+    restrict extend override merge isolate
+
+    -- Dependencies
+    add_dependency remove_dependency check_dependencies
+    resolve_dependencies verify_compatibility
+
+    -- Component access
+    get_component has_component get_all get_types get_ops get_fns
+
+    -- Versioning
+    version check_version compatible semver
+
+    -- Configuration
+    configure with_config reset_config
+
+    -- Module information
+    info meta describe validate
+
+    -- Module contexts
+    new_context in_context bind_context swap_context release_context
+
+    -- Utilities
+    clone namespace path qualify module_exists
+    get_dependencies to_ref from_ref try_load
   }
 
   E: typ cup op cup fn
-
-  --[[
-    Specification for a module, including its path, version requirements, and dependencies
-  ]]--
-  ModuleSpec: {
-    path: S,
-    version: S,
-    dependencies: [S],
-    config: {S:Any}
-  }
-
-  --[[
-    Version specification for semantic versioning
-  ]]--
-  Version: {
-    major: Z,
-    minor: Z,
-    patch: Z,
-    prerelease: ?S,
-    build: ?S
-  }
-
-  --[[
-    Metadata structure for modules
-  ]]--
-  Meta: {
-    author: S,
-    license: S,
-    description: S,
-    repository: ?S,
-    website: ?S,
-    keywords: [S]
-  }
-
-  --[[
-    Configuration options for modules
-  ]]--
-  Config: {S:Any}
-
-  --[[
-    LazyModule represents a module that is loaded on demand
-  ]]--
-  LazyModule: {
-    spec: ModuleSpec,
-    loader: () -> Any
-  }
 
   tau: T.tau
 
@@ -91,330 +69,473 @@
   }
 
   --[[
-    Symbol types representing different kinds of module entities:
-    - ModSym: Module symbols
-    - TypeSym: Type symbols
-    - OpSym: Operation symbols
-    - FnSym: Function symbols
+    !Module represents a loaded module that must be properly initialized,
+    used exactly once, and finalized correctly.
   ]]--
-  ModSym
-  TypeSym
-  OpSym
-  FnSym
-
-  E
-  E Sym -> tau
-  E E Bool -> delta
-  E Bool -> vis
-
-  --[[
-    O is the set of all module symbols in the entity set E
-  ]]--
-  O: E |> [ e -> e tau ModSym teq ] filter
+  !Module: {
+    name: S,
+    path: S,
+    version: !Version,
+    components: {!Component},
+    dependencies: {!Dependency},
+    exports: !ExportSet,
+    imports: !ImportSet,
+    meta: !Meta,
+    config: !Config,
+    state: {:uninitialized, :initialized, :finalized}
+  }
 
   --[[
-    M is the set of all module dependency pairs
+    !ModuleRef is a lightweight reference to a module that doesn't
+    consume the module when used.
   ]]--
-  M: O O |> [ a b -> a b delta ] filter_pairs
+  !ModuleRef: {
+    id: Z,
+    name: S,
+    version: !Version
+  }
 
   --[[
-    Domain and codomain projections for the module dependency relation
+    !Component represents a module member (type, operation, function)
   ]]--
-  dom: M |> [ pair -> pair |> fst ]
-  cod: M |> [ pair -> pair |> snd ]
+  !Component: {
+    name: S,
+    qualified_name: S,
+    kind: {:type, :op, :fn},
+    exported: Bool,
+    value: Any
+  }
 
   --[[
-    Acyclicity law: no module can depend on itself (no self-cycles)
+    !Dependency represents a module's dependency on another module
   ]]--
-  law.acyclic: O |> [ m -> m delta not ] forall
+  !Dependency: {
+    module: !ModuleRef,
+    version_constraint: S,
+    optional: Bool,
+    reexport: Bool
+  }
 
   --[[
-    Transitivity law: if A depends on B and B depends on C, then A depends on C
+    !ExportSet defines the components exported by a module
   ]]--
-  law.transitivity: O O O |> [ a b c -> a b delta b c delta and -> a c delta ] forall
+  !ExportSet: {
+    types: {S},
+    ops: {S},
+    fns: {S},
+    modules: {!ModuleRef}
+  }
 
   --[[
-    Returns all components (types, operations, functions) of a module
+    !ImportSet tracks what has been imported into a module
   ]]--
-  components: ModSym {E}
+  !ImportSet: {
+    explicit: {!ModuleRef},
+    implicit: {!ModuleRef},
+    qualified: {S: !ModuleRef}
+  }
 
   --[[
-    Component completeness law: all components of a module must be dependent on that module
+    Symbol types representing different kinds of module entities
   ]]--
-  law.component_completeness: O E |> [ m e -> m e components in -> m e delta ] forall
+  !ModSym: { module: !ModuleRef, name: S }
+  !TypeSym: { module: !ModuleRef, name: S }
+  !OpSym: { module: !ModuleRef, name: S }
+  !FnSym: { module: !ModuleRef, name: S }
 
   --[[
-    Entity type predicates to check which kind of symbol an entity is
+    !ModuleHandle is a capability to modify a module
   ]]--
-  is_type: E Bool -> [ tau TypeSym teq ]
-  is_op: E Bool -> [ tau OpSym teq ]
-  is_fn: E Bool -> [ tau FnSym teq ]
-  is_mod: E Bool -> [ tau ModSym teq ]
+  !ModuleHandle: {
+    id: Z,
+    module: !ModuleRef,
+    capabilities: {:read, :write, :extend, :restrict}
+  }
 
   --[[
-    Determines if an entity is exported by a module by checking if it's
-    both a component of the module and visible
+    !Context represents a module loading context that tracks
+    loaded modules and their dependencies.
   ]]--
-  exported: ModSym E Bool -> [ m e -> m e components in e vis and ]
+  !Context: {
+    modules: {!Module},
+    load_paths: [S],
+    cache: {S: !ModuleRef},
+    active_module: ?!ModuleRef
+  }
 
   --[[
-    Returns all modules imported by a given module
+    !Version represents a semantic version with constraints
   ]]--
-  imports: ModSym {ModSym} -> [ m -> O |> [ o -> m o delta ] filter ]
+  !Version: {
+    major: Z,
+    minor: Z,
+    patch: Z,
+    prerelease: ?S,
+    build: ?S
+  }
 
   --[[
-    Module composition operation
+    !Meta contains module metadata
   ]]--
-  oplus: ModSym ModSym ModSym
+  !Meta: {
+    author: S,
+    license: S,
+    description: S,
+    repository: ?S,
+    website: ?S,
+    keywords: [S]
+  }
 
   --[[
-    Validates a module's structure and dependencies, ensuring:
-    - All dependencies are valid modules
-    - All components have valid types
-    - Module dependencies are properly structured
+    !Config contains module configuration
   ]]--
-  validate_module: ModSym Bool -> [
-    m ->
-    let imports = m imports in
-    let components = m components in
-    let all_types = components |> [ is_type ] filter_p in
-    let all_entities = components |> [ e -> e tau TypeSym OpSym FnSym ModSym in ] forall in
-    let valid_deps = deps |> [ is_mod ] forall in
-    all_entities and valid_deps
+  !Config: {S: Any}
+
+  --[[
+    !InitResult is the result of module initialization
+  ]]--
+  !InitResult: {
+    success: Bool,
+    module: !Module,
+    errors: [S]
+  }
+
+  --[[
+    !LoadResult is the result of module loading
+  ]]--
+  !LoadResult: {
+    success: Bool,
+    module: ?!Module,
+    errors: [S]
+  }
+
+  --[[
+    Loads a module from a path, consuming the context and producing
+    a new context with the loaded module
+  ]]--
+  load: !Context * S -o> (!Context * !LoadResult)
+
+  --[[
+    Unloads a module, consuming it and removing it from the context
+  ]]--
+  unload: !Context * !Module -o> !Context
+
+  --[[
+    Requires a module with version constraints, loading it if needed
+  ]]--
+  require: !Context * S * S -o> (!Context * !LoadResult)
+
+  --[[
+    Reloads a module, consuming the old instance and producing a new one
+  ]]--
+  reload: !Context * !Module -o> (!Context * !LoadResult)
+
+  --[[
+    Initializes a module after loading, performing setup operations
+  ]]--
+  init: !Module -o> !InitResult
+
+  --[[
+    Finalizes a module before unloading, performing cleanup operations
+  ]]--
+  finalize: !Module -o> Bool
+
+  --[[
+    Imports components from source module to target module
+  ]]--
+  import: !Module * !Module -o> !Module
+
+  --[[
+    Exports components from a module
+  ]]--
+  export: !Module * [S] -o> !Module
+
+  --[[
+    Imports specific components from a source module
+  ]]--
+  import_from: !Module * !Module * [S] -o> !Module
+
+  --[[
+    Exports components to a target module
+  ]]--
+  export_to: !Module * !Module * [S] -o> (!Module * !Module)
+
+  --[[
+    Imports all modules from a directory
+  ]]--
+  import_all: !Context * S -o> (!Context * {!Module})
+
+  --[[
+    Exports all components of a module
+  ]]--
+  export_all: !Module -o> !Module
+
+  --[[
+    Imports selective components from multiple modules
+  ]]--
+  selective_import: !Module * {S: [S]} -o> !Module
+
+  --[[
+    Restricts a module to only the specified components
+  ]]--
+  restrict: !Module * [S] -o> !Module
+
+  --[[
+    Extends a module with new components
+  ]]--
+  extend: !Module * {!Component} -o> !Module
+
+  --[[
+    Overrides components in a module
+  ]]--
+  override: !Module * {!Component} -o> !Module
+
+  --[[
+    Merges two modules, consuming both and producing a new one
+  ]]--
+  merge: !Module * !Module -o> !Module
+
+  --[[
+    Creates an isolated copy of a module with no external dependencies
+  ]]--
+  isolate: !Module -o> (!Module * !Module)
+
+  --[[
+    Adds a dependency to a module
+  ]]--
+  add_dependency: !Module * !ModuleRef * S -o> !Module
+
+  --[[
+    Removes a dependency from a module
+  ]]--
+  remove_dependency: !Module * !ModuleRef -o> !Module
+
+  --[[
+    Checks if all dependencies are satisfied
+  ]]--
+  check_dependencies: !Module * !Context -o> (!Module * !Context * Bool * [S])
+
+  --[[
+    Resolves all dependencies of a module
+  ]]--
+  resolve_dependencies: !Context * !Module -o> (!Context * !Module * Bool)
+
+  --[[
+    Verifies version compatibility between modules
+  ]]--
+  verify_compatibility: !Module * !Module -o> (!Module * !Module * Bool)
+
+  --[[
+    Gets a component from a module by name
+  ]]--
+  get_component: !Module * S -o> (!Module * ?!Component)
+
+  --[[
+    Checks if a module has a component
+  ]]--
+  has_component: !Module * S -o> (!Module * Bool)
+
+  --[[
+    Gets all components of a certain kind
+  ]]--
+  get_all: !Module * {:type, :op, :fn} -o> (!Module * {!Component})
+
+  --[[
+    Gets all types from a module
+  ]]--
+  get_types: !Module -o> (!Module * {!Component})
+
+  --[[
+    Gets all operations from a module
+  ]]--
+  get_ops: !Module -o> (!Module * {!Component})
+
+  --[[
+    Gets all functions from a module
+  ]]--
+  get_fns: !Module -o> (!Module * {!Component})
+
+  --[[
+    Creates a version object
+  ]]--
+  version: Z * Z * Z * ?S * ?S -o> !Version
+
+  --[[
+    Checks if a module satisfies a version constraint
+  ]]--
+  check_version: !Module * S -o> (!Module * Bool)
+
+  --[[
+    Checks if two versions are compatible
+  ]]--
+  compatible: !Version * !Version -o> Bool
+
+  --[[
+    Parses a semantic version string
+  ]]--
+  semver: S -o> !Version
+
+  --[[
+    Configures a module with new settings
+  ]]--
+  configure: !Module * !Config -o> !Module
+
+  --[[
+    Executes a function with temporary configuration
+  ]]--
+  with_config: !Module * !Config * (!Module -o> (!Module * a)) -o> (!Module * a)
+
+  --[[
+    Resets a module's configuration to defaults
+  ]]--
+  reset_config: !Module -o> !Module
+
+  --[[
+    Gets formatted information about a module
+  ]]--
+  info: !Module -o> (!Module * S)
+
+  --[[
+    Gets the metadata of a module
+  ]]--
+  meta: !Module -o> (!Module * !Meta)
+
+  --[[
+    Generates a detailed description of a module
+  ]]--
+  describe: !Module -o> (!Module * S)
+
+  --[[
+    Validates a module's structure and dependencies
+  ]]--
+  validate: !Module -o> (!Module * Bool * [S])
+
+  --[[
+    Creates a new module context
+  ]]--
+  new_context: [S] -o> !Context
+
+  --[[
+    Executes an operation within a specific context
+  ]]--
+  in_context: !Context * (!Context -o> (!Context * a)) -o> (!Context * a)
+
+  --[[
+    Binds a module to a context as the active module
+  ]]--
+  bind_context: !Context * !Module -o> !Context
+
+  --[[
+    Swaps the active module in a context
+  ]]--
+  swap_context: !Context * !Module -o> (!Context * ?!Module)
+
+  --[[
+    Releases a context, finalizing all its modules
+  ]]--
+  release_context: !Context -o> Bool
+
+  --[[
+    Creates a deep clone of a module
+  ]]--
+  clone: !Module -o> (!Module * !Module)
+
+  --[[
+    Gets the namespace of a module
+  ]]--
+  namespace: !Module -o> (!Module * S)
+
+  --[[
+    Gets the file path of a module
+  ]]--
+  path: !Module -o> (!Module * S)
+
+  --[[
+    Qualifies a name with a module's namespace
+  ]]--
+  qualify: !Module * S -o> (!Module * S)
+
+  --[[
+    Checks if a module exists in the current context
+  ]]--
+  module_exists: !Context * S -o> (!Context * Bool)
+
+  --[[
+    Gets all dependencies of a module
+  ]]--
+  get_dependencies: !Module -o> (!Module * {!Dependency})
+
+  --[[
+    Converts a module to a reference
+  ]]--
+  to_ref: !Module -o> (!Module * !ModuleRef)
+
+  --[[
+    Attempts to resolve a reference to a module in a context
+  ]]--
+  from_ref: !Context * !ModuleRef -o> (!Context * ?!Module)
+
+  --[[
+    Tries to load a module, returning None if it fails
+  ]]--
+  try_load: !Context * S -o> (!Context * ?!Module)
+
+  --[[
+    Module import operator
+  ]]--
+  =>: !Module * !Module -o> !Module [target source ->
+    target |> import source
   ]
 
   --[[
-    Checks if module e1 imports module e2
+    Component access operator
   ]]--
-  is_imported: E E Bool -> [ e1 e2 ->
-    deps |> [ triplet ->
-      let (import_m, export_m, direct) = triplet in
-      (e1 |> teq import_m and e2 |> teq export_m and direct) or
-      (e1 |> teq export_m and e2 |> teq import_m and not direct)
-    ] exists_p
+  #: !Module * S -o> (!Module * ?!Component) [module name ->
+    module |> get_component name
   ]
 
   --[[
-    Checks if module e1 exports module e2
+    Module linking operator
   ]]--
-  is_exported: E E Bool -> [ e1 e2 ->
-    deps |> [ triplet ->
-      let (import_m, export_m, direct) = triplet in
-      e1 |> teq import_m and e2 |> teq export_m and direct
-    ] exists_p
+  <>: !Module * !Module -o> !Module [m1 m2 ->
+    -- Create bidirectional references between modules
+    let {m1_with_ref, ref1} = m1 |> to_ref;
+    let {m2_with_ref, ref2} = m2 |> to_ref;
+
+    let m1_with_dep = m1_with_ref |> add_dependency ref2 "*";
+    let m2_with_dep = m2_with_ref |> add_dependency ref1 "*";
+
+    m1_with_dep |> merge m2_with_dep
   ]
 
   --[[
-    Checks if module m1 exports module m2
+    Linear pipeline operator
   ]]--
-  exports_module: E E Bool -> [ m1 m2 ->
-    deps |> [ triplet ->
-      let (import_m, export_m, direct) = triplet in
-      import_m |> teq m1 and export_m |> teq m2 and direct
-    ] exists_p
+  |>: a * (a -o> b) -o> b [x f ->
+    f x
   ]
 
   --[[
-    @@ is the module access operator
-    Usage: module@@component accesses a component from a module
+    Law: A module must be initialized before use and finalized after use
   ]]--
-  @@: E * S -> Any [module name ->
-    module |> components |> Prim.filter [c -> c |> Prim.name |> Prim.eq name] |> Prim.head
-  ]
+  -- law.proper_lifecycle: !Module |> forall [m ->
+  --   m.state == :initialized and
+  --   (m |> finalize).success
+  -- ]
 
   --[[
-    @@> is the qualified import operator
-    Usage: module1 @@> module2 imports all of module2 into module1's namespace
+    Law: Module dependencies must form a directed acyclic graph
   ]]--
-  @@>: E * E -> E [m1 m2 ->
-    m1 |> Prim.extend (m2 |> components) |> Prim.register_deps m2
-  ]
+  -- law.acyclic_deps: !Module |> forall [m ->
+  --   m |> get_dependencies |> has_cycle not
+  -- ]
 
   --[[
-    <@@ is the selective import operator
-    Usage: module <@@ [components] imports specific components
+    Law: All imported components must come from initialized modules
   ]]--
-  <@@: E * [S] -> E [m names ->
-    names |> Prim.fold m [acc name ->
-      acc |> Prim.import name
-    ]
-  ]
-
-  --[[
-    ~@ is the lazy import operator
-    Usage: module ~@ other_module creates a lazy binding to other_module
-  ]]--
-  ~@: E * E -> E [m1 m2 ->
-    m1 |> Prim.lazy_bind m2
-  ]
-
-  --[[
-    Get the version of a module
-  ]]--
-  get_version: E -> Version [m ->
-    m |> Prim.version
-  ]
-
-  --[[
-    Check if a module is compatible with a version requirement
-  ]]--
-  check_compatibility: E * S -> Bool [m version_req ->
-    m version_req |> Prim.check_compatibility
-  ]
-
-  --[[
-    Import a module by name or path
-  ]]--
-  import: S -> E [name ->
-    name |> Prim.import
-  ]
-
-  --[[
-    Import all modules from a directory
-  ]]--
-  import_all: S -> [E] [dir ->
-    dir |> Prim.list_modules |> Prim.map [name -> name |> import]
-  ]
-
-  --[[
-    Import a module lazily (on first use)
-  ]]--
-  lazy_import: S -> LazyModule [name ->
-    {
-      spec: {
-        path: name,
-        version: "*",
-        dependencies: [],
-        config: {}
-      },
-      loader: [ -> name |> import]
-    }
-  ]
-
-  --[[
-    Reload a module and its dependencies
-  ]]--
-  reload_module: E -> E [m ->
-    m |> Prim.reload
-  ]
-
-  --[[
-    Get information about a module
-  ]]--
-  module_info: E -> {name: S, version: S, meta: Meta} [m ->
-    {
-      name: m |> Prim.name,
-      version: m |> Prim.version,
-      meta: m |> Prim.meta
-    }
-  ]
-
-  --[[
-    Register a new module in the module registry
-  ]]--
-  register_module: S * E -> Bool [name m ->
-    name m |> Prim.register_module
-  ]
-
-  --[[
-    Unregister a module from the module registry
-  ]]--
-  unregister_module: S -> Bool [name ->
-    name |> Prim.unregister_module
-  ]
-
-  --[[
-    Check if a module exists in the registry
-  ]]--
-  module_exists: S -> Bool [name ->
-    name |> Prim.module_exists
-  ]
-
-  --[[
-    Set configuration options for the current module
-  ]]--
-  set_config: {S:Any} -> Bool [cfg ->
-    cfg |> Prim.set_config
-  ]
-
-  --[[
-    Get the current configuration
-  ]]--
-  get_config: () -> Config [_ ->
-    Prim.get_config
-  ]
-
-  --[[
-    Configure a module with specific options
-  ]]--
-  configure: E * {S:Any} -> E [m cfg ->
-    m |> Prim.configure cfg
-  ]
-
-  --[[
-    Execute a function with temporary configuration
-  ]]--
-  with_config: {S:Any} * (() -> Any) -> Any [cfg f ->
-    Prim.get_config -> old_cfg
-    cfg |> Prim.set_config
-    f() -> result
-    old_cfg |> Prim.set_config
-    result
-  ]
-
-  --[[
-    Export all components of a module
-  ]]--
-  export_all: E -> E [m ->
-    m |> Prim.export_all
-  ]
-
-  --[[
-    Restrict exports to specific components
-  ]]--
-  restrict_exports: E * [S] -> E [m names ->
-    m |> Prim.restrict_exports names
-  ]
-
-  --[[
-    Get all dependencies of a module
-  ]]--
-  module_dependencies: E -> [E] [m ->
-    m |> Prim.dependencies
-  ]
-
-  --[[
-    Require a module as a dependency
-  ]]--
-  require: S * ?S -> E [name version ->
-    name version |> Prim.require
-  ]
-
-  --[[
-    Ensure a module is loaded
-  ]]--
-  ensure_loaded: S -> Bool [name ->
-    name |> Prim.ensure_loaded
-  ]
-
-  --[[
-    Register a callback to be executed when a module is loaded
-  ]]--
-  on_load: E * (() -> Any) -> Bool [m f ->
-    m f |> Prim.on_load
-  ]
-
-  --[[
-    Register a callback to be executed when a module is unloaded
-  ]]--
-  on_unload: E * (() -> Any) -> Bool [m f ->
-    m f |> Prim.on_unload
-  ]
-
-  --[[
-    Optimize a module for better performance
-  ]]--
-  optimize: E * Z -> E [m level ->
-    m level |> Prim.optimize
-  ]
+  -- law.valid_imports: !Module |> forall [m ->
+  --   m.imports.explicit |> forall [ref ->
+  --     (some_context |> from_ref ref)?.state == :initialized
+  --   ]
+  -- ]
 }

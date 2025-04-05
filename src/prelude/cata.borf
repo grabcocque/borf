@@ -1,0 +1,734 @@
+--[[
+  Categorical Abstraction Framework
+
+  This module provides a formal theoretically robust infrastructure for abstracting between
+  different categories in the Borf ecosystem. It defines functors, natural transformations,
+  structural isomorphisms, and compositional rules that ensure coherent transformations
+  between categories of strings, graphs, wires, nets, and other core abstractions.
+]]--
+
+
+@Cata: {
+  typ: {
+    -- Core types
+    Cata Functor NaturalTransformation Isomorphism Adjunction
+
+    -- Domain-specific transformations
+    StringRep GraphRep WireRep NetRep SyntaxRep RewriteRep ReduceRep
+
+    -- Transformation categories
+    Category Monoidal Cartesian Bicartesian Closed
+
+    -- Transformation properties
+    Structure Preserving Reflecting Creating
+
+    -- Composition models
+    Sequential Parallel Hierarchical Incremental
+
+    -- Result types
+    Result Success Failure Partial
+  }
+
+  op: {
+    -- Transformation operators
+    ==> <== <=> ~~ ==
+
+    -- Composition operators
+    >>> <<< ||| &&&
+
+    -- Categorical operators
+    * tensor product unit counit
+
+    -- Structure mapping operators
+    map fmap bmap lens prism
+  }
+
+  fn: {
+    -- Core category theory functions
+    functor natural_transformation isomorphism adjunction
+    compose id unit counit tensor product
+
+    -- Basic transformations
+    string_to_net net_to_string graph_to_wire wire_to_graph
+    wire_to_net net_to_wire net_to_rewrite rewrite_to_red
+    string_to_wire wire_to_string
+
+    -- Homoiconicity integration (enhanced)
+    string_to_syntax syntax_to_string syntax_to_net net_to_syntax
+    expr_to_net net_to_expr quote unquote
+    eval_syntax transform_syntax syntax_pipeline
+
+    -- Structural mapping
+    map_structure preserve_structure reflect_structure
+    structure_isomorphism structure_embedding structure_abstraction
+
+    -- High-level pipelines
+    process chain parallel_process bidirectional_transform
+    process_files safe_pipeline string_to_runnable_net full_pipeline
+    incremental_transform cached_transform
+
+    -- Verification and analysis
+    verify_functorial verify_natural verify_coherent verify_consistent
+    analyze_transformation optimize_pipeline
+
+    -- Laws and theorems
+    law.functor_composition law.functor_identity
+    law.natural_transformation_coherence law.adjunction_unit_counit
+    law.iso_inverse law.lens_laws law.prism_laws
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Cata, @Hom, true)   -- Add dependency on Hom module
+    (@Cata, @T, true)     -- Add dependency on Type system
+    (@Cata, @Wire, true)  -- Add dependency on Wire module
+    (@Cata, @Grph, true)  -- Add dependency on Graph module
+  }
+
+  --------------------------------------------------
+  -- Category Theory Foundations
+  --------------------------------------------------
+
+  --[[
+    Category: Mathematical structure with objects and morphisms
+  ]]--
+  Category: T.Type_0
+
+  --[[
+    Functor: Structure-preserving mapping between categories
+  ]]--
+  Functor: Category -> Category -> T.Type_0
+
+  --[[
+    Natural Transformation: Family of morphisms between functors
+  ]]--
+  NaturalTransformation: Functor -> Functor -> T.Type_0
+
+  --[[
+    Isomorphism: Invertible transformation between structures
+  ]]--
+  Isomorphism: T.Type_0 -> T.Type_0 -> T.Type_0
+
+  --[[
+    Adjunction: Pair of functors that are adjoint to each other
+  ]]--
+  Adjunction: Functor -> Functor -> T.Type_0
+
+  --[[
+    Functor law: F(g . f) = F(g) . F(f)
+
+    For all functors F and morphisms f: A -> B, g: B -> C,
+    F(g >>> f) is equivalent to F(g) >>> F(f)
+  ]]--
+  law.functor_composition: Functor |> forall [F ->
+    forall [A B C f g ->
+      -- A, B, C are objects in the source category
+      -- f: A -> B, g: B -> C are morphisms
+      F(g >>> f) teq F(g) >>> F(f)
+    ]
+  ]
+
+  --[[
+    Functor law: F(id) = id
+
+    For all functors F and objects A, F(id A) is equivalent to id(F A)
+  ]]--
+  law.functor_identity: Functor |> forall [F ->
+    forall [A ->
+      -- A is an object in the source category
+      F(id A) teq id(F A)
+    ]
+  ]
+
+  --[[
+    Natural transformation coherence law:
+    For every morphism f: A -> B, F(f) . alpha_A = alpha_B . G(f)
+
+    For all natural transformations alpha: F => G, objects A, B, and morphism f: A -> B,
+    (F f) >>> (alpha B) is equivalent to (alpha A) >>> (G f)
+  ]]--
+  law.natural_transformation_coherence:
+    NaturalTransformation |> forall [alpha F G ->
+      forall [A B f ->
+        -- alpha is a natural transformation from F to G
+        -- A, B are objects in the source category
+        -- f: A -> B is a morphism
+        (F f) >>> (alpha B) teq (alpha A) >>> (G f)
+      ]
+    ]
+
+  --[[
+    Adjunction unit-counit law:
+    (id_F) = (F epsilon) . (eta F) and (id_G) = (eta G) . (G epsilon)
+
+    For all adjunctions between functors F and G, with unit eta and counit epsilon,
+    these equations must hold for all objects A in the source category and B in the target
+  ]]--
+  law.adjunction_unit_counit: Adjunction |> forall [adj F G ->
+    forall [A ->
+      -- F is a functor from category C to D
+      -- G is a functor from category D to C
+      -- A is an object in C
+      -- unit_F is F applied to the unit at A
+      -- unit is the unit natural transformation
+      (F(unit A)) >>> unit_F teq id(F A)
+    ] and
+    forall [B ->
+      -- B is an object in D
+      -- counit_G is G applied to the counit at B
+      -- counit is the counit natural transformation
+      counit_G >>> (G(counit B)) teq id(G B)
+    ]
+  ]
+
+  --[[
+    Isomorphism inverse law: f . f^{-1} = id and f^{-1} . f = id
+
+    For all isomorphisms between types A and B, composing the forward and reverse
+    mappings gives the identity in both directions
+  ]]--
+  law.iso_inverse: Isomorphism |> forall [iso A B ->
+    -- iso.forward: A -> B is the forward mapping
+    -- iso.reverse: B -> A is the reverse mapping
+    (iso.forward >>> iso.reverse) teq id(A) and
+    (iso.reverse >>> iso.forward) teq id(B)
+  ]
+
+  --[[
+    Lens laws: get-put, put-get, put-put
+
+    For all lenses focusing on a component A of a structure S:
+  ]]--
+  law.lens_laws: T.Type_0 |> forall [lens S A ->
+    -- get-put: get (put s a) = a
+    forall [s a ->
+      -- s is a source structure
+      -- a is a value for the focus
+      lens.get(lens.put(s a)) teq a
+    ] and
+
+    -- put-get: put s (get s) = s
+    forall [s ->
+      lens.put(s lens.get(s)) teq s
+    ] and
+
+    -- put-put: put (put s a) a' = put s a'
+    forall [s a aprime ->
+      lens.put(lens.put(s a) aprime) teq lens.put(s aprime)
+    ]
+  ]
+
+  --[[
+    Prism laws: match-build, build-match
+
+    For all prisms focusing on a case A of a sum type S:
+  ]]--
+  law.prism_laws: T.Type_0 |> forall [prism S A ->
+    -- match-build: match (build a) = Some a
+    forall [a ->
+      prism.match(prism.build(a)) teq ?a
+    ] and
+
+    -- build-match: s = build(match(s).value) when match(s) is Some
+    forall [s ->
+      prism.match(s) |> [ma ->
+        ma.exists |> [a -> prism.build(a) teq s] |> T.default true
+      ]
+    ]
+  ]
+
+  --------------------------------------------------
+  -- Basic Transformations
+  --------------------------------------------------
+
+  --[[
+    Generic transformation function with enhanced typing
+  ]]--
+  Cata: forall(A: T.Type_0 B: T.Type_0) -> A -> B
+
+  --[[
+    Functor: Structure-preserving mapping
+  ]]--
+  functor: forall(A: Category B: Category) -> (A -> B) -> Functor A B
+
+  --[[
+    Natural Transformation: Morphism between functors
+  ]]--
+  natural_transformation:
+    forall(A: Category B: Category F: Functor A B G: Functor A B) ->
+    (forall(X: A) -> F X -> G X) ->
+    NaturalTransformation F G
+
+  --[[
+    Isomorphism: Invertible transformation
+  ]]--
+  isomorphism:
+    forall(A: T.Type_0 B: T.Type_0) ->
+    (A -> B) -> (B -> A) ->
+    Isomorphism A B
+
+  --[[
+    Adjunction: Pair of adjoint functors
+  ]]--
+  adjunction:
+    forall(A: Category B: Category F: Functor A B G: Functor B A) ->
+    (forall(X: A Y: B) -> (F X -> Y) -> (X -> G Y)) ->
+    Adjunction F G
+
+  --[[
+    Category composition
+  ]]--
+  compose: forall(A: T.Type_0 B: T.Type_0 C: T.Type_0) ->
+           (B -> C) -> (A -> B) -> (A -> C)
+
+  --[[
+    Categorical identity
+  ]]--
+  id: forall(A: T.Type_0) -> A -> A
+
+  --[[
+    Monoidal tensor product
+  ]]--
+  tensor: forall(A: T.Type_0 B: T.Type_0 C: T.Type_0 D: T.Type_0) ->
+          (A -> C) -> (B -> D) -> (A * B -> C * D)
+
+  --[[
+    Category product
+  ]]--
+  product: forall(A: T.Type_0 B: T.Type_0 C: T.Type_0) ->
+           (C -> A) -> (C -> B) -> (C -> A * B)
+
+  --------------------------------------------------
+  -- String/Graph/Wire/Net Transformations
+  --------------------------------------------------
+
+  --[[
+    Transform string to interaction net
+  ]]--
+  string_to_net: S -> Net [s ->
+    -- Enhanced with error reporting and diagnostics
+    s |> Prim.parse_to_net
+  ]
+
+  --[[
+    Transform net to string
+  ]]--
+  net_to_string: Net -> S [net ->
+    -- Enhanced with formatting options
+    net |> Prim.net_to_string
+  ]
+
+  --[[
+    Transform graph to wiring diagram
+  ]]--
+  graph_to_wire: Grph -> Wire [g ->
+    -- Convert graph structure to wiring diagram
+    g |> Prim.graph_to_wire
+  ]
+
+  --[[
+    Transform wiring diagram to graph
+  ]]--
+  wire_to_graph: Wire -> Grph [w ->
+    -- Convert wiring diagram to graph structure
+    w |> Prim.wire_to_graph
+  ]
+
+  --[[
+    Transform wiring diagram to interaction net
+  ]]--
+  wire_to_net: Wire -> Net [w ->
+    -- Convert wiring diagram to interaction net
+    w |> Prim.wire_to_net
+  ]
+
+  --[[
+    Transform interaction net to wiring diagram
+  ]]--
+  net_to_wire: Net -> Wire [net ->
+    -- Convert interaction net to wiring diagram
+    net |> Prim.net_to_wire
+  ]
+
+  --[[
+    Transform net to rewrite system
+  ]]--
+  net_to_rewrite: Net -> Rewrite [net ->
+    -- Convert interaction net to rewrite system
+    net |> Prim.net_to_rewrite
+  ]
+
+  --[[
+    Transform rewrite system to reduction system
+  ]]--
+  rewrite_to_red: Rewrite -> Red [rewrite ->
+    -- Convert rewrite system to reduction system
+    rewrite |> Prim.rewrite_to_red
+  ]
+
+  --[[
+    Transform string to wiring diagram
+  ]]--
+  string_to_wire: S -> Wire [s ->
+    -- Parse string directly to wiring diagram
+    s |> Prim.parse_to_wire
+  ]
+
+  --[[
+    Transform wiring diagram to string
+  ]]--
+  wire_to_string: Wire -> S [w ->
+    -- Convert wiring diagram to string representation
+    w |> Prim.wire_to_string
+  ]
+
+  --------------------------------------------------
+  -- Homoiconicity Integration (Enhanced)
+  --------------------------------------------------
+
+  --[[
+    Transform string to syntax representation (homoiconic form)
+  ]]--
+  string_to_syntax: S -> Hom.Expr [s ->
+    -- Enhanced with source position tracking and error recovery
+    s |> Hom.parse_with_diagnostics
+  ]
+
+  --[[
+    Transform syntax representation back to string
+  ]]--
+  syntax_to_string: Hom.Expr -> S [expr ->
+    -- Enhanced with pretty-printing options
+    expr |> Hom.to_string_with_options
+  ]
+
+  --[[
+    Transform syntax to an interaction net
+  ]]--
+  syntax_to_net: Hom.Expr -> Net [expr ->
+    -- More robust transformation with validation
+    expr |> Hom.eval_syntax_to_net
+  ]
+
+  --[[
+    Transform a net to syntax representation
+  ]]--
+  net_to_syntax: Net -> Hom.Expr [net ->
+    -- Enhanced reverse mapping
+    net |> Hom.net_to_expr
+  ]
+
+  --[[
+    Quote an expression (prevent evaluation)
+  ]]--
+  quote: Hom.Expr -> Hom.Expr [expr ->
+    expr |> Hom.quote
+  ]
+
+  --[[
+    Unquote an expression (allow evaluation)
+  ]]--
+  unquote: Hom.Expr -> Hom.Expr [expr ->
+    expr |> Hom.unquote
+  ]
+
+  --[[
+    Transform an expression to a net
+  ]]--
+  expr_to_net: Hom.Expr -> Net [expr ->
+    expr |> unquote |> syntax_to_net
+  ]
+
+  --[[
+    Transform a net to an expression
+  ]]--
+  net_to_expr: Net -> Hom.Expr [net ->
+    net |> net_to_syntax |> quote
+  ]
+
+  --[[
+    Evaluate syntax and return the result
+  ]]--
+  eval_syntax: Hom.Expr -> Result [expr ->
+    -- Enhanced with execution context and error handling
+    expr |> Hom.eval_with_context
+  ]
+
+  --[[
+    Apply a transformer to syntax
+  ]]--
+  transform_syntax: Hom.Expr * Hom.Transformer -> Hom.Expr [expr transformer ->
+    -- Enhanced with transformation tracking and composition
+    expr |> Hom.transform_with_context transformer
+  ]
+
+  --------------------------------------------------
+  -- Structural Mapping
+  --------------------------------------------------
+
+  --[[
+    Map a transformation over a structure preserving its shape
+  ]]--
+  map: forall(A: T.Type_0 B: T.Type_0 F: T.Type_0) ->
+       (A -> B) -> F A -> F B
+
+  --[[
+    Functorial mapping that preserves structure
+  ]]--
+  fmap: forall(A: T.Type_0 B: T.Type_0 F: T.Type_0 -> T.Type_0) ->
+        (A -> B) -> F A -> F B [f fa ->
+    fa |> Prim.fmap f
+  ]
+
+  --[[
+    Bifunctorial mapping for binary type constructors
+  ]]--
+  bmap: forall(A: T.Type_0 B: T.Type_0 C: T.Type_0 D: T.Type_0 F: T.Type_0 -> T.Type_0 -> T.Type_0) ->
+        (A -> C) -> (B -> D) -> F A B -> F C D [f g fab ->
+    fab |> Prim.bimap f g
+  ]
+
+  --[[
+    Lens for focusing on a part of a structure
+  ]]--
+  lens: forall(S: T.Type_0 A: T.Type_0) ->
+        (S -> A) -> (S -> A -> S) -> {get: S -> A put: S * A -> S} [get set ->
+    {get: get put: [s a -> set s a]}
+  ]
+
+  --[[
+    Prism for focusing on a case of a sum type
+  ]]--
+  prism: forall(S: T.Type_0 A: T.Type_0) ->
+         (S -> ?A) -> (A -> S) -> {match: S -> ?A build: A -> S} [match_fn build_fn ->
+    {match: match_fn build: build_fn}
+  ]
+
+  --[[
+    Map a transformation while preserving structural properties
+  ]]--
+  map_structure: forall(A: T.Type_0 B: T.Type_0 P: A -> Bool Q: B -> Bool) ->
+                (A -> B) -> (forall(x: A) -> P x -> Q(f x)) ->
+                {A | P} -> {B | Q} [f proof struct ->
+    struct |> Prim.map_preserving f proof
+  ]
+
+  --[[
+    Create a structure-preserving transformation
+  ]]--
+  preserve_structure: forall(A: T.Type_0 B: T.Type_0 P: A -> T.Type_0 Q: B -> T.Type_0) ->
+                     (A -> B) -> (forall(x: A) -> P x -> Q(f x)) ->
+                     Preserving A B P Q [f proof ->
+    {transform: f proof: proof}
+  ]
+
+  --[[
+    Create a structure-reflecting transformation
+  ]]--
+  reflect_structure: forall(A: T.Type_0 B: T.Type_0 P: A -> T.Type_0 Q: B -> T.Type_0) ->
+                    (A -> B) -> (forall(y: B) -> Q y -> P(g y)) ->
+                    Reflecting A B P Q [f proof ->
+    {transform: f proof: proof}
+  ]
+
+  --[[
+    Create an isomorphism between structures
+  ]]--
+  structure_isomorphism: forall(A: T.Type_0 B: T.Type_0) ->
+                        (A -> B) -> (B -> A) -> (A * B -> Bool) ->
+                        Isomorphism A B [f g predicate ->
+    {forward: f reverse: g preserves: predicate}
+  ]
+
+  --[[
+    Create a structure embedding
+  ]]--
+  structure_embedding: forall(A: T.Type_0 B: T.Type_0) ->
+                      (A -> B) -> (forall(x: A y: A) -> x teq y <-> f x teq f y) ->
+                      Embedding A B [f injectivity ->
+    {embed: f injective: injectivity}
+  ]
+
+  --[[
+    Create a structure abstraction
+  ]]--
+  structure_abstraction: forall(A: T.Type_0 B: T.Type_0) ->
+                       (A -> B) -> (B -> ?A) ->
+                       Abstraction A B [f partial_inverse ->
+    {abstract: f lift: partial_inverse}
+  ]
+
+  --------------------------------------------------
+  -- High-level Pipelines
+  --------------------------------------------------
+
+  --[[
+    Process a value through a transformation
+  ]]--
+  process: forall(A: T.Type_0 B: T.Type_0) ->
+           A -> (A -> B) -> Result B [value transform ->
+    value |> transform |> [result -> Success result] |> Prim.catch [e -> Failure e]
+  ]
+
+  --[[
+    Chain multiple transformations
+  ]]--
+  chain: forall(A: T.Type_0 B: T.Type_0 C: T.Type_0) ->
+        (A -> B) -> (B -> C) -> (A -> C) [f g ->
+    [a -> a |> f |> g]
+  ]
+
+  --[[
+    Process multiple values in parallel
+  ]]--
+  parallel_process: forall(A: T.Type_0 B: T.Type_0) ->
+                   [A] -> (A -> B) -> [Result B] [values transform ->
+    values |> Prim.parallel_map [v -> v |> process transform]
+  ]
+
+  --[[
+    Create a bidirectional transformation
+  ]]--
+  bidirectional_transform: forall(A: T.Type_0 B: T.Type_0) ->
+                          (A -> B) -> (B -> A) -> {forward: A -> B backward: B -> A} [f g ->
+    {forward: f backward: g}
+  ]
+
+  --[[
+    Map a transformation over a collection of inputs
+  ]]--
+  map: forall(A: T.Type_0 B: T.Type_0) ->
+       (A -> B) * [A] -> [B] [transform inputs ->
+    inputs |> Prim.map transform
+  ]
+
+  --[[
+    Process multiple files through a transformation function
+  ]]--
+  process_files: [S] * (S -> S) -> [S] [files transform ->
+    files |> map transform
+  ]
+
+  --[[
+    Safely evaluate a string as Borf code, handling parse errors
+  ]]--
+  safe_pipeline: S -> Result Net [s ->
+    s |> Prim.try_eval [s -> s |> string_to_net |> [net -> Success net]]
+      |> Prim.catch [err -> Failure err]
+  ]
+
+  --[[
+    Parses a string to a net that's ready for execution
+  ]]--
+  string_to_runnable_net: S -> Result Net [s ->
+    s |> string_to_syntax
+      |> transform_syntax Prim.optimize_transformer
+      |> syntax_to_net
+      |> [net -> Success net]
+      |> Prim.catch [err -> Failure err]
+  ]
+
+  --[[
+    Complete pipeline for executing Borf code with enhanced error handling
+  ]]--
+  full_pipeline: S -> Result S [s ->
+    s |> string_to_net
+      |> [net -> net |> Red.red]
+      |> [reduced -> reduced |> net_to_string]
+      |> [result -> Success result]
+      |> Prim.catch [err -> Failure err]
+  ]
+
+  --[[
+    Perform incremental transformation with change tracking
+  ]]--
+  incremental_transform: forall(A: T.Type_0 B: T.Type_0) ->
+                        A -> (A -> B) -> (A -> A -> Bool) -> (B -> B -> B) -> B -> B [
+    new_input transform has_changed merge old_result ->
+      has_changed new_input old_input |> [
+        true -> new_input |> transform
+        false -> old_result
+      ]
+  ]
+
+  --[[
+    Cached transformation with memoization
+  ]]--
+  cached_transform: forall(A: T.Type_0 B: T.Type_0) ->
+                   (A -> B) -> (A -> A -> Bool) -> (A -> B) [transform equality ->
+    Prim.memoize transform equality
+  ]
+
+  --[[
+    Syntax manipulation pipeline with enhanced capabilities
+  ]]--
+  syntax_pipeline: S * Hom.Transformer -> Result Any [s transformer ->
+    s |> string_to_syntax
+      |> [syntax -> syntax |> transform_syntax transformer]
+      |> [transformed -> transformed |> eval_syntax]
+      |> Prim.catch [err -> Failure err]
+  ]
+
+  --------------------------------------------------
+  -- Verification and Analysis
+  --------------------------------------------------
+
+  --[[
+    Verify that a transformation is functorial
+  ]]--
+  verify_functorial: forall(A: Category B: Category) ->
+                    (A -> B) -> Bool [f ->
+    -- Check functor laws
+    Prim.verify_functor_laws f
+  ]
+
+  --[[
+    Verify that a transformation is natural
+  ]]--
+  verify_natural: forall(A: Category B: Category F: Functor A B G: Functor A B) ->
+                 (forall(X: A) -> F X -> G X) -> Bool [alpha ->
+    -- Check naturality condition
+    Prim.verify_naturality alpha
+  ]
+
+  --[[
+    Verify that transformations are coherent
+  ]]--
+  verify_coherent: forall(A: T.Type_0 B: T.Type_0 C: T.Type_0) ->
+                  (A -> B) -> (B -> C) -> (A -> C) -> Bool [f g h ->
+    -- Check that h = g . f
+    Prim.verify_composition f g h
+  ]
+
+  --[[
+    Verify that bidirectional transformations are consistent
+  ]]--
+  verify_consistent: forall(A: T.Type_0 B: T.Type_0) ->
+                    (A -> B) -> (B -> A) -> Bool [f g ->
+    -- Check round-trip properties
+    Prim.verify_round_trip f g
+  ]
+
+  --[[
+    Analyze a transformation for performance characteristics
+  ]]--
+  analyze_transformation: forall(A: T.Type_0 B: T.Type_0) ->
+                         (A -> B) -> {complexity: S space: S bottlenecks: [S]} [f ->
+    -- Analyze transformation
+    Prim.analyze_transform f
+  ]
+
+  --[[
+    Optimize a transformation pipeline
+  ]]--
+  optimize_pipeline: forall(A: T.Type_0 B: T.Type_0) ->
+                    (A -> B) -> (A -> B) [pipeline ->
+    -- Optimize pipeline
+    Prim.optimize_transform pipeline
+  ]
+}

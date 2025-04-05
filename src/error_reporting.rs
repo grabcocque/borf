@@ -1,52 +1,34 @@
+#![allow(dead_code)]
 use colored::*;
-use miette::{Diagnostic, LabeledSpan, NamedSource, Report, SourceSpan};
-use pest::error::{Error as PestError, ErrorVariant, LineColLocation};
-use std::path::PathBuf;
+use miette::Diagnostic;
+use std::sync::Arc;
 use thiserror::Error;
 
-use crate::parser::ast;
+use crate::errors::{self, ParseError};
+use crate::parser;
+use crate::parser::{ast, BorfParser, Rule};
+use pest::Parser;
 
-/// An enhanced error type for parser errors with rich context and suggestions
-#[derive(Debug, Error, Diagnostic)]
+/// Custom errors with enhanced diagnostics for better error reporting
+#[derive(Debug, Error, Clone, Diagnostic)]
 pub enum EnhancedError {
-    #[error("Syntax Error: {message} at {location}")]
-    #[diagnostic(code(borf::parser::syntax_error))]
-    SyntaxError {
-        message: String,
-        #[source_code]
-        src: NamedSource<String>,
-        #[label("here")]
-        span: SourceSpan,
-        location: String, // e.g., "line:col"
-        #[help]
-        help_message: String,
-        suggestion: Option<String>,
-    },
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    ParseError(Box<ParseError>),
 
-    #[error("Unexpected Token: expected {expected}, found {found} at {location}")]
-    #[diagnostic(code(borf::parser::unexpected_token))]
-    UnexpectedToken {
-        expected: String,
-        found: String,
-        #[source_code]
-        src: NamedSource<String>,
-        #[label("unexpected token")]
-        span: SourceSpan,
-        location: String,
-        #[help]
-        help_message: String,
-        suggestion: Option<String>,
-    },
+    #[error("I/O Error: {0}")]
+    #[diagnostic(code(borf::parser::io_error))]
+    Io(String), // Can't contain io::Error directly as it's not Clone
 
-    #[error("Missing Token: expected {expected} at {location}")]
-    #[diagnostic(code(borf::parser::missing_token))]
-    MissingToken {
-        expected: String,
+    #[error("Unexpected Error: {0}")]
+    #[diagnostic(code(borf::parser::unexpected))]
+    Unexpected(String),
+
+    #[error("Empty Input: {help_message}")]
+    #[diagnostic(code(borf::parser::empty_input))]
+    EmptyInput {
         #[source_code]
-        src: NamedSource<String>,
-        #[label("token expected here")]
-        span: SourceSpan,
-        location: String,
+        src: Arc<miette::NamedSource<String>>,
         #[help]
         help_message: String,
         suggestion: Option<String>,
@@ -58,371 +40,211 @@ pub enum EnhancedError {
         #[related]
         errors: Vec<EnhancedError>,
     },
-
-    #[error("I/O Error: {0}")]
-    #[diagnostic(code(borf::io_error))]
-    Io(#[from] std::io::Error),
-
-    #[error("Unexpected Condition: {0}")]
-    #[diagnostic(code(borf::parser::unexpected_condition))]
-    Unexpected(String),
 }
 
-/// Convert a Pest error into an EnhancedError with rich context
-pub fn enhance_pest_error(
-    error: PestError<crate::parser::Rule>,
-    input: &str,
-    source_name: Option<String>,
-) -> EnhancedError {
-    let (line, col) = match error.line_col {
-        LineColLocation::Pos((line, col)) => (line, col),
-        LineColLocation::Span((line, col), _) => (line, col),
-    };
-    let location = format!("{}:{}", line, col);
-
-    let span: SourceSpan = match error.location {
-        pest::error::InputLocation::Pos(pos) => (pos, 0).into(), // Zero-length span for position
-        pest::error::InputLocation::Span((start, end)) => (start, end - start).into(),
-    };
-
-    // Use provided source name or fallback
-    let source_name = source_name.unwrap_or_else(|| "<unknown>".to_string());
-    let src = NamedSource::new(source_name, input.to_string());
-
-    match error.variant {
-        ErrorVariant::ParsingError {
-            positives,
-            negatives,
-        } => {
-            // Format expected rules nicely
-            let expected = positives
-                .iter()
-                .map(|r| format!("'{:?}'", r)) // Use rule names directly
-                .collect::<Vec<_>>()
-                .join(" or ");
-
-            // Extract the text at the error position
-            let found_text = input
-                .get(span.offset()..span.offset() + span.len())
-                .unwrap_or("<end of input>") // Handle case where span is at EOF
-                .trim();
-
-            // Determine found description (either text or negative rules if no text)
-            let found_desc = if !found_text.is_empty() && span.len() > 0 {
-                format!("'{}'", found_text)
-            } else if !negatives.is_empty() {
-                negatives
-                    .iter()
-                    .map(|r| format!("'{:?}'", r))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            } else if found_text == "<end of input>" {
-                "end of input".to_string()
-            } else {
-                "an unexpected token".to_string() // Fallback
-            };
-
-            // Generate suggestion based on the error
-            let suggestion = suggest_fix(&positives, found_text);
-
-            // Generate help message
-            let help_message = generate_help_message(&positives, found_text, &expected);
-
-            // Decide between MissingToken and UnexpectedToken
-            if positives.is_empty() && negatives.is_empty() {
-                // Should ideally not happen with Pest errors, but handle defensively
-                EnhancedError::SyntaxError {
-                    message: "Unknown syntax error".to_string(),
-                    src,
-                    span,
-                    location,
-                    help_message,
-                    suggestion,
-                }
-            } else if positives.is_empty() {
-                // Only negatives means something unexpected was found where nothing specific was expected (rare)
-                EnhancedError::UnexpectedToken {
-                    expected: "something else".to_string(), // Generic
-                    found: found_desc,
-                    src,
-                    span,
-                    location,
-                    help_message,
-                    suggestion,
-                }
-            } else if span.len() == 0 && found_text == "<end of input>" {
-                // Zero-length span at EOF usually means something is missing
-                EnhancedError::MissingToken {
-                    expected,
-                    src,
-                    span: (input.len(), 0).into(), // Point to the very end
-                    location: format!("{}:{}", line, col), // Use original line/col guess
-                    help_message: format!("Expected {} before the end of the input.", expected),
-                    suggestion,
-                }
-            } else if span.len() == 0 {
-                // Zero-length span implies something expected is missing *before* the current point
-                EnhancedError::MissingToken {
-                    expected,
-                    src,
-                    span, // Span points right *before* where token was expected
-                    location,
-                    help_message,
-                    suggestion,
-                }
-            } else {
-                // Non-zero span or negatives means an actual token was found that wasn't expected
-                EnhancedError::UnexpectedToken {
-                    expected,
-                    found: found_desc,
-                    src,
-                    span,
-                    location,
-                    help_message,
-                    suggestion,
-                }
-            }
-        }
-        ErrorVariant::CustomError { message } => EnhancedError::SyntaxError {
-            message, // Use the custom message directly
-            src,
-            span, // Span provided by CustomError location
-            location,
-            help_message: "Check the syntax or logic around this location.".to_string(), // Generic help
-            suggestion: None, // No suggestion for custom errors yet
-        },
+impl From<ParseError> for EnhancedError {
+    fn from(err: ParseError) -> Self {
+        EnhancedError::ParseError(Box::new(err))
     }
 }
 
-/// Generate a helpful suggestion based on the error context
-fn suggest_fix(rules: &[crate::parser::Rule], found: &str) -> Option<String> {
-    if rules.is_empty() {
-        return None;
+impl EnhancedError {
+    /// Create an enhanced error from a pest error with source information
+    pub fn from_pest_with_source(
+        pest_error: pest::error::Error<Rule>,
+        source: &str,
+        source_name: Option<String>,
+    ) -> Self {
+        // Convert to ParseError first, then to EnhancedError
+        let parse_error = errors::ParseError::from_pest(pest_error, source, source_name);
+        EnhancedError::from(parse_error)
     }
-
-    // Helper function to check if a rule is within a list
-    let rule_is = |rule: crate::parser::Rule, names: &[&str]| -> bool {
-        let rule_name = format!("{:?}", rule).to_lowercase();
-        names.iter().any(|&name| rule_name.contains(name))
-    };
-
-    let rule = rules[0]; // Take the first rule as primary
-
-    // Common typos and mistakes by rule type
-    if rule_is(rule, &["fn_decl", "function"]) {
-        if found.contains("fun") || found.contains("func") {
-            return Some("Did you mean 'fn'?".to_string());
-        }
-    } else if rule_is(rule, &["type_decl", "type"]) {
-        if found == "Type" {
-            return Some("Did you mean 'type'?".to_string());
-        }
-    } else if rule_is(rule, &["op_decl", "operation"]) {
-        if found == "Op" {
-            return Some("Did you mean 'op'?".to_string());
-        }
-    } else if rule_is(rule, &["module_decl", "module"]) && !found.starts_with('@') {
-        return Some(format!(
-            "Module names must start with '@', like '@{}'?",
-            found
-        ));
-    }
-
-    // Simple structural suggestions
-    if rule_is(rule, &["parenthesized_expr"]) && found.ends_with('(') {
-        return Some("Missing closing ')'?".to_string());
-    } else if rule_is(rule, &["module_body"]) && found.ends_with('{') {
-        return Some("Missing closing '}'?".to_string());
-    } else if (rule_is(rule, &["list_literal"]) || rule_is(rule, &["list_pattern"]))
-        && found.ends_with('[')
-    {
-        return Some("Missing closing ']'?".to_string());
-    }
-
-    // No specific suggestion found
-    None
 }
 
-/// Generate a helpful message based on the error context
-fn generate_help_message(rules: &[crate::parser::Rule], found: &str, expected: &str) -> String {
-    if rules.is_empty() {
-        if !found.is_empty() {
-            // Generic structure-based hints
-            if found.contains('(') && !found.contains(')') {
-                return "It looks like you're missing a closing parenthesis ')'.".to_string();
-            } else if found.contains('{') && !found.contains('}') {
-                return "It looks like you're missing a closing brace '}'.".to_string();
-            } else if found.contains('[') && !found.contains(']') {
-                return "It looks like you're missing a closing bracket ']'.".to_string();
-            }
-        }
-
-        // Default message
-        if !expected.is_empty() {
-            return format!(
-                "Expected {}. Check the syntax near this location.",
-                expected
-            );
-        } else {
-            return format!(
-                "Something isn't right here. Expected {}, but found '{}'.",
-                expected, found
-            );
-        }
-    }
-
-    // Helper function to check if a rule is within a list
-    let rule_is = |rule: crate::parser::Rule, names: &[&str]| -> bool {
-        let rule_name = format!("{:?}", rule).to_lowercase();
-        names.iter().any(|&name| rule_name.contains(name))
-    };
-
-    let rule = rules[0]; // Take the first rule as primary
-
-    // Specific messages based on rule type
-    if rule_is(rule, &["fn_decl", "function"]) {
-        return format!(
-            "Function declarations start with 'fn'. Found '{}' instead.",
-            found
-        );
-    } else if rule_is(rule, &["type_decl", "type"]) {
-        return format!(
-            "Type declarations start with 'type'. Found '{}' instead.",
-            found
-        );
-    } else if rule_is(rule, &["module_decl", "module"]) {
-        return format!(
-            "Module declarations start with '@'. Found '{}' instead.",
-            found
-        );
-    }
-
-    // Default message with expected and found
-    format!(
-        "Expected {}. Check the syntax near this location.",
-        expected
-    )
-}
-
-/// Create a nicely formatted report for an EnhancedError
 pub fn create_enhanced_report(error: EnhancedError) -> miette::Report {
     miette::Report::new(error)
 }
 
-/// Helper function to print a colored error message to the console
 pub fn print_error_message(error: &EnhancedError) {
+    eprintln!("{}", "Error:".red().bold());
+
     match error {
-        EnhancedError::SyntaxError {
-            message,
-            location,
-            help_message,
-            suggestion,
-            ..
-        } => {
-            eprintln!("{}: {}", "Syntax Error".bright_red().bold(), message);
-            eprintln!("{}: {}", "Location".yellow(), location);
-            eprintln!("{}: {}", "Help".cyan(), help_message);
-            if let Some(suggestion) = suggestion {
-                eprintln!("{}: {}", "Suggestion".green(), suggestion);
+        EnhancedError::MultipleErrors { errors } => {
+            eprintln!("  Multiple errors occurred:");
+            for (i, e) in errors.iter().enumerate() {
+                eprintln!("  Error {}:", i + 1);
+                print_nested_error(e, "    ");
             }
         }
-        EnhancedError::UnexpectedToken {
-            expected,
-            found,
-            location,
-            help_message,
-            suggestion,
-            ..
-        } => {
-            eprintln!(
-                "{}: Expected {}, found {}",
-                "Unexpected Token".bright_red().bold(),
-                expected,
-                found
-            );
-            eprintln!("{}: {}", "Location".yellow(), location);
-            eprintln!("{}: {}", "Help".cyan(), help_message);
-            if let Some(suggestion) = suggestion {
-                eprintln!("{}: {}", "Suggestion".green(), suggestion);
+        _ => {
+            eprintln!("  {}", error);
+            if let Some(help) = get_help_message(error) {
+                eprintln!("  Help: {}", help.cyan());
+            }
+            if let Some(suggestion) = get_suggestion(error) {
+                eprintln!("  Suggestion: {}", suggestion.yellow());
             }
         }
-        EnhancedError::MissingToken {
-            expected,
-            location,
-            help_message,
-            suggestion,
-            ..
-        } => {
-            eprintln!(
-                "{}: Expected {}",
-                "Missing Token".bright_red().bold(),
-                expected
-            );
-            eprintln!("{}: {}", "Location".yellow(), location);
-            eprintln!("{}: {}", "Help".cyan(), help_message);
-            if let Some(suggestion) = suggestion {
-                eprintln!("{}: {}", "Suggestion".green(), suggestion);
+    }
+}
+
+fn print_nested_error(error: &EnhancedError, indent: &str) {
+    eprintln!("{}{}", indent, error);
+    if let Some(help) = get_help_message(error) {
+        eprintln!("{}> Help: {}", indent, help.cyan());
+    }
+    if let Some(suggestion) = get_suggestion(error) {
+        eprintln!("{}> Suggestion: {}", indent, suggestion.yellow());
+    }
+    if let EnhancedError::MultipleErrors { errors } = error {
+        let nested_indent = format!("{}  ", indent);
+        for e in errors {
+            print_nested_error(e, &nested_indent);
+        }
+    }
+}
+
+// Function to extract help message from an error
+fn get_help_message(error: &EnhancedError) -> Option<&str> {
+    match error {
+        EnhancedError::ParseError(pe) => {
+            match &**pe {
+                ParseError::SyntaxError { help_message, .. } => Some(help_message),
+                ParseError::EmptyInput { help_message, .. } => Some(help_message),
+                ParseError::ValueError { help_message, .. } => Some(help_message),
+                ParseError::UnexpectedToken { help_message, .. } => Some(help_message),
+                ParseError::MissingToken { help_message, .. } => Some(help_message),
+                // Other variants as needed
+                _ => None,
             }
+        }
+        EnhancedError::EmptyInput { help_message, .. } => Some(help_message),
+        // Simple string messages don't have help
+        EnhancedError::Io(_) | EnhancedError::Unexpected(_) => None,
+        // For multiple errors, return the first help message
+        EnhancedError::MultipleErrors { errors } => errors.iter().find_map(get_help_message),
+    }
+}
+
+// Function to extract suggestion from an error
+fn get_suggestion(error: &EnhancedError) -> Option<&str> {
+    match error {
+        EnhancedError::ParseError(pe) => {
+            match &**pe {
+                ParseError::SyntaxError { suggestion, .. } => suggestion.as_deref(),
+                ParseError::EmptyInput { suggestion, .. } => suggestion.as_deref(),
+                ParseError::ValueError { suggestion, .. } => suggestion.as_deref(),
+                ParseError::UnexpectedToken { suggestion, .. } => suggestion.as_deref(),
+                ParseError::MissingToken { suggestion, .. } => suggestion.as_deref(),
+                // Other variants as needed
+                _ => None,
+            }
+        }
+        EnhancedError::EmptyInput { suggestion, .. } => suggestion.as_deref(),
+        // Simple string messages don't have suggestions
+        EnhancedError::Io(_) | EnhancedError::Unexpected(_) => None,
+        // For multiple errors, return the first suggestion
+        EnhancedError::MultipleErrors { errors } => errors.iter().find_map(get_suggestion),
+    }
+}
+
+/// Parses a file, converting parser errors to EnhancedError.
+pub fn parse_file_with_enhanced_errors<P: AsRef<std::path::Path>>(
+    path: P,
+) -> Result<ast::Module, EnhancedError> {
+    let path_buf = path.as_ref().to_path_buf();
+    let file_name = path_buf
+        .file_name()
+        .and_then(|os_str| os_str.to_str())
+        .unwrap_or("<unknown>")
+        .to_string();
+    let source_name = Some(file_name.clone());
+
+    // Read the file
+    let file_content = match std::fs::read_to_string(&path) {
+        Ok(content) => content,
+        Err(io_err) => {
+            return Err(EnhancedError::Io(io_err.to_string()));
+        }
+    };
+
+    parse_string_to_module_with_enhanced_errors(&file_content, source_name)
+}
+
+/// Parses a string, converting parser errors to EnhancedError.
+pub fn parse_string_to_module_with_enhanced_errors(
+    input: &str,
+    source_name: Option<String>,
+) -> Result<ast::Module, EnhancedError> {
+    // Try to parse the input as a module
+    match BorfParser::parse(Rule::file, input) {
+        Ok(mut pairs) => {
+            // Get the first (and only) successful parse result
+            let module_pair = pairs.next().unwrap();
+            // Extract the module declaration from inside the file rule
+            let module_decl_pair = module_pair.into_inner().next().unwrap();
+
+            // Convert to AST
+            parser::parse_module(module_decl_pair, &source_name)
+                .map_err(|e| EnhancedError::from(*e))
+        }
+        Err(err) => {
+            // Add source information to the error
+            let error_with_source =
+                EnhancedError::from_pest_with_source(err, input, source_name.clone());
+            Err(error_with_source)
+        }
+    }
+}
+
+/// Attempts to parse, potentially recovering from errors.
+#[allow(dead_code)]
+fn handle_parse_error() {
+    // Empty implementation for now
+}
+
+/// Convert a pest error to an enhanced error for better reporting
+#[allow(dead_code)]
+fn create_enhanced_error(
+    error: pest::error::Error<Rule>,
+    input: &str,
+    source_name: Option<String>,
+) -> EnhancedError {
+    // First convert to a ParseError
+    let parse_error = ParseError::from_pest(error, input, source_name);
+
+    // Now wrap in our EnhancedError
+    EnhancedError::from(parse_error)
+}
+
+// Function to convert a ParseError to EnhancedError
+pub fn convert_parse_error_to_enhanced(
+    error: ParseError,
+    _additional_context: Option<&str>,
+) -> EnhancedError {
+    // Simply use the From implementation
+    EnhancedError::from(error)
+}
+
+// Function to extract diagnostics from an EnhancedError
+pub fn get_diagnostics_from_error(error: &EnhancedError) -> Vec<String> {
+    match error {
+        EnhancedError::ParseError(parse_error) => {
+            // Extract diagnostics from the parse error
+            vec![format!("Parse error: {}", parse_error)]
+        }
+        EnhancedError::EmptyInput { help_message, .. } => {
+            vec![format!("Empty input: {}", help_message)]
+        }
+        EnhancedError::Io(message) => {
+            vec![format!("IO error: {}", message)]
+        }
+        EnhancedError::Unexpected(message) => {
+            vec![format!("Unexpected error: {}", message)]
         }
         EnhancedError::MultipleErrors { errors } => {
-            eprintln!(
-                "{}: Found {} errors",
-                "Multiple Errors".bright_red().bold(),
-                errors.len()
-            );
-            for (i, error) in errors.iter().enumerate() {
-                eprintln!("{}:", format!("Error #{}", i + 1).yellow().bold());
-                print_error_message(error);
-                eprintln!(); // Add a blank line between errors
-            }
-        }
-        EnhancedError::Io(e) => {
-            eprintln!("{}: {}", "I/O Error".bright_red().bold(), e);
-        }
-        EnhancedError::Unexpected(msg) => {
-            eprintln!("{}: {}", "Unexpected Error".bright_red().bold(), msg);
-        }
-    }
-}
-
-/// Parse a file and return enhanced error reporting if it fails
-pub fn parse_file_with_enhanced_errors(
-    path: impl AsRef<std::path::Path>,
-) -> Result<ast::Module, EnhancedError> {
-    let path_string = path.as_ref().to_string_lossy().to_string();
-    let input = std::fs::read_to_string(&path).map_err(EnhancedError::Io)?;
-
-    parse_string_with_enhanced_errors(&input, Some(path_string))
-}
-
-/// Parse a string and return enhanced error reporting if it fails
-pub fn parse_string_with_enhanced_errors(
-    input: &str,
-    source_name: Option<String>,
-) -> Result<ast::Module, EnhancedError> {
-    match crate::parser::parse_string(input) {
-        Ok(module) => Ok(module),
-        Err(err) => match err {
-            crate::errors::ParseError::Pest(e) => Err(enhance_pest_error(e, input, source_name)),
-            // Handle other error types
-            _ => Err(EnhancedError::Unexpected(format!("{}", err))),
-        },
-    }
-}
-
-/// Try to parse using existing parser, but provide enhanced errors if it fails
-pub fn try_parse_with_recovery(
-    input: &str,
-    source_name: Option<String>,
-) -> Result<(ast::Module, Vec<EnhancedError>), EnhancedError> {
-    let result = parse_string_with_enhanced_errors(input, source_name.clone());
-
-    match result {
-        Ok(module) => Ok((module, vec![])),
-        Err(error) => {
-            // In a real implementation, we would try to recover and continue parsing
-            // For now, we'll just return the single error
-            Err(error)
+            // Collect diagnostics from each error
+            errors.iter().flat_map(get_diagnostics_from_error).collect()
         }
     }
 }

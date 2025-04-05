@@ -27,27 +27,37 @@ path = "src/lib.rs"
 
 [dependencies]
 clap = { version = "4.5.4", features = ["derive"] }
-miette = { version = "4.2", default-features = false }
-pest = { version = "2.7.10", features = ["pretty-print"] }
+miette = { version = "7.2.0", features = ["fancy"] }
+pest = "2.7.10"
 pest_derive = "2.7.10"
 rustyline = "14.0.0"
-thiserror = { version = "1.0" }
+thiserror = "1.0.61"
 lazy_static = "1.4.0"
 once_cell = "1.19.0"
 colored = "2.1.0"
 regex = "1.10.4"  # Added for the formatter
 anyhow = "1.0"
 tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-tree = "0.2"
+tracing-timing = "0.6"
+tracing-tracy = "0.10"  # Added for Tracy integration
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-smallvec = { version = "1.13.1", features = ["serde"] }
+smallvec = { version = "1.13.2", features = ["serde"] }
 rustc-hash = "1.1.0"
 derive_more = "0.99.17"
+petgraph = "0.6"  # Added for parse tree visualization
+rayon = "1.8"     # Added for concurrent parsing
+dashmap = "5.5"   # Added for concurrent parsing
+crossbeam-utils = "0.8"  # Added for synchronization primitives
+crossbeam-channel = "0.5" # Added for concurrent worker pool example
 
 # Dependencies for fuzzing
 libfuzzer-sys = { version = "0.4", optional = true }
 arbitrary = { version = "1", features = ["derive"], optional = true }
-lru = "0.13.0"
+lru = "0.12.3"
 
 [features]
 fuzzing = ["dep:libfuzzer-sys", "dep:arbitrary"]
@@ -61,3 +71,7 @@ default = ["rich_errors", "custom_eq"]
 insta = "1.39.0"
 rstest = "0.19.0"
 pretty_assertions = "1.4"
+assert_cmd = "2.0"
+predicates = "3.0"
+
+tracing-tracy = "0.10"

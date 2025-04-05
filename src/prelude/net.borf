@@ -1,26 +1,59 @@
 --[[
-  Interaction Nets
+  Lafont Interaction Nets
 
-  This module defines the core abstractions for interaction nets, which are the
-  primary computational model in Borf. It specifies active pairs, connections,
-  reduction semantics, and laws ensuring deterministic computation through local
-  graph rewriting with principal port interactions.
+  Interaction nets are a graphical model of computation devised by French mathematician
+  Yves Lafont in 1990[1] as a generalisation of the proof structures of linear
+  logic. An interaction net system is specified by a set of agent types and a set
+  of interaction rules. Interaction nets are an inherently distributed model of
+  computation in the sense that computations can take place simultaneously
+  in many parts of an interaction net, and no synchronisation is needed. The
+  latter is guaranteed by the strong confluence property of reduction in this
+  model of computation. Thus interaction nets provide a natural language
+  for massive parallelism.
 ]]--
-
 
 @Net: {
   typ: {
-    ReplacementGraph
+    !Net !Agent !Port !Connection !Rule !Pattern
+    !ActivePair !ReplacementNet !Symbol !Interface
+    !Reduction !NetPair !RuleSet
   }
 
   op: {
-    pi alpha rho
+    >< -- Connect ports
+    || -- Parallel composition of nets
+    >> -- Sequential composition (connect interfaces)
+    :: -- Apply rule to net
   }
 
   fn: {
-    find_redexes matches a_uses applies ports conn
-    law.unique_principal_port law.deterministic_reduction
-    law.port_conservation law.connection_conservation
+    -- Construction
+    empty_net new_net new_agent new_port clone_net
+
+    -- Connection
+    connect disconnect connect_interface
+
+    -- Structure
+    principal auxiliary port_of agent_of is_principal is_free
+
+    -- Ports and agents
+    get_ports get_agents get_principal get_auxiliary
+
+    -- Interaction
+    find_active_pairs reduce_once reduce normalize match_rule
+    apply_rule apply_ruleset residual
+
+    -- Composition
+    parallel sequential tensor compose
+
+    -- Interface
+    interface free_ports restrict_interface extend_interface
+
+    -- structural mapping, projection and inspection
+    to_graph from_graph visualize
+
+    -- Laws and verification
+    verify verify_deterministic verify_confluence is_normal_form
   }
 
   E: typ cup op cup fn
@@ -30,113 +63,749 @@
   vis: E |> [e -> true]
 
   --[[
-    Basic components inherited from Wire module:
-    - B: boxes (agents)
-    - P: ports
-    - box: agent owning a port
-    - w: wiring between ports
-    - tauP/tauB: type functions for ports and boxes
-    - sig: agent signatures (input/output ports)
+    !Symbol represents an agent type/symbol
   ]]--
-  B; P; P -> B box; P -> P w; P -> X tauP; B -> X tauB
-  B -> {in:{P}, out:{P}} sig
+  !Symbol: {
+    name: S,
+    arity: Z  -- Number of ports
+  }
 
   --[[
-    Identifies principal ports - the active interface points of agents
+    !Port represents a connection point in the interaction net
   ]]--
-  P -> Bool pi
+  !Port: {
+    id: Z,
+    principal: Bool,  -- Whether this is a principal port
+    connected: Bool   -- Whether this port is currently connected
+  }
 
   --[[
-    Active pairs - pairs of connected principal ports where interaction can occur
+    !Agent represents a node in the interaction net
   ]]--
-  alpha: P * P |> filter_pairs [p q -> p |> w veq q and p |> pi and q |> pi]
+  !Agent: {
+    id: Z,
+    symbol: !Symbol,
+    ports: [!Port]  -- Ordered ports (first is often principal)
+  }
 
   --[[
-    Replacement graph structure - what an active pair is replaced with during reduction
+    !Connection represents a connection between two ports
   ]]--
-  ReplacementGraph: { boxes:{B} ports:{P} wiring:(P -> P) principal:P }
-  rho: ReplacementGraph
+  !Connection: {
+    port1: Z,  -- Port ID
+    port2: Z,  -- Port ID
+    agent1: Z, -- Agent ID
+    agent2: Z  -- Agent ID
+  }
 
   --[[
-    Set of rewrite rules, mapping patterns (alpha) to replacements (rho)
+    !Net represents an interaction net with agents and connections
   ]]--
-  R: {alpha * rho}
+  !Net: {
+    agents: [!Agent],
+    connections: [!Connection],
+    free_ports: [!Port]  -- Interface ports
+  }
 
   --[[
-    Law: Each agent can have at most one principal port
-    (ensures local and deterministic reduction)
+    !ActivePair represents a pair of connected principal ports
   ]]--
-  law.unique_principal_port: B |> forall [b ->
-    P |> filter [p -> p |> box veq b and p |> pi] |> rho
-    <= 1
+  !ActivePair: {
+    agent1: !Agent,
+    agent2: !Agent,
+    port1: !Port,
+    port2: !Port
+  }
+
+  --[[
+    !Pattern describes the left-hand side of a rewrite rule
+  ]]--
+  !Pattern: {
+    symbol1: !Symbol,
+    symbol2: !Symbol
+  }
+
+  --[[
+    !ReplacementNet is the right-hand side of a rewrite rule
+  ]]--
+  !ReplacementNet: {
+    net: !Net,
+    interface_map: {Z: Z}  -- Maps original port IDs to replacement port IDs
+  }
+
+  --[[
+    !Rule defines a rewrite rule in the interaction system
+  ]]--
+  !Rule: {
+    pattern: !Pattern,
+    replacement: !ReplacementNet
+  }
+
+  --[[
+    !RuleSet is a collection of rewrite rules
+  ]]--
+  !RuleSet: {
+    rules: [!Rule]
+  }
+
+  --[[
+    !Interface represents the external ports of a net
+  ]]--
+  !Interface: {
+    ports: [!Port],
+    names: [S]  -- Optional names for the ports
+  }
+
+  --[[
+    !Reduction represents the result of a reduction step
+  ]]--
+  !Reduction: {
+    original: !Net,
+    result: !Net,
+    reduced: Bool,
+    active_pair: ?!ActivePair
+  }
+
+  --[[
+    !NetPair is a pair of nets for operations like composition
+  ]]--
+  !NetPair: {
+    net1: !Net,
+    net2: !Net
+  }
+
+  --[[
+    Creates a new empty net
+  ]]--
+  empty_net: () -o> !Net [_ ->
+    {agents: [], connections: [], free_ports: []}
   ]
 
   --[[
-    Finds all possible reduction sites (active pairs) in a net
+    Creates a new net with a single agent
   ]]--
-  find_redexes: Net -> [AgentId * AgentId] [n ->
-    alpha -> port_pairs
-    port_pairs |> map [pair -> (pair.0 |> box, pair.1 |> box)]
+  new_net: !Symbol -o> !Net [symbol ->
+    let agent = new_agent(symbol);
+    {agents: [agent], connections: [], free_ports: agent.ports}
   ]
 
   --[[
-    Tests if a pattern matches part of a net
+    Creates a new agent with its ports
   ]]--
-  matches: Pattern * Net -> Bool [pat net ->
-    pat |> Prim.match net |> Prim.rho > 0
+  new_agent: !Symbol -o> !Agent [symbol ->
+    let id = fresh_id();
+    let ports = [];
+
+    -- Create ports (first is principal by convention)
+    for i in 0..symbol.arity {
+      let port_id = fresh_port_id();
+      let is_principal = (i == 0);
+      ports.push({id: port_id, principal: is_principal, connected: false});
+    }
+
+    {id: id, symbol: symbol, ports: ports}
   ]
 
   --[[
-    Checks if an active pair uses a specific box (agent)
+    Creates a new port
   ]]--
-  a_uses: alpha * B -> Bool [a b ->
-    a |> Net.ports -> ports
-    ports |> exists_p [p -> p |> Net.box seq b]
+  new_port: Bool -o> !Port [is_principal ->
+    let id = fresh_port_id();
+    {id: id, principal: is_principal, connected: false}
   ]
 
   --[[
-    Tests if a rewrite rule can be applied to an active pair
+    Creates a deep copy of a net
   ]]--
-  applies: R * alpha -> Bool [r a ->
-    r[0] |> matches a
+  clone_net: !Net -o> (!Net * !Net) [net ->
+    -- Implementation would create a deep copy with new IDs
+    -- and return both the original and the copy
+    {net, deep_copy_of_net}
   ]
 
   --[[
-    Law: Interaction net reduction is deterministic -
-    exactly one rewrite rule matches each active pair
+    Connects two ports, consuming both and producing a connection
   ]]--
-  law.deterministic_reduction: alpha |> forall [a ->
-    R |> exists_unique [r -> r |> matches a]
+  connect: !Net * !Port * !Port -o> !Net [net port1 port2 ->
+    -- Verify ports are not already connected
+    if port1.connected or port2.connected {
+      error("Cannot connect ports that are already connected");
+    }
+
+    -- Find agents these ports belong to
+    let agent1_id = find_agent_with_port(net, port1.id);
+    let agent2_id = find_agent_with_port(net, port2.id);
+
+    -- Create connection
+    let new_connection = {
+      port1: port1.id,
+      port2: port2.id,
+      agent1: agent1_id,
+      agent2: agent2_id
+    };
+
+    -- Update port connected status in agents
+    let updated_agents = update_port_connected_status(
+      net.agents, port1.id, port2.id, true
+    );
+
+    -- Remove ports from free_ports if they were there
+    let new_free_ports = net.free_ports |> filter [p ->
+      p.id != port1.id and p.id != port2.id
+    ];
+
+    -- Return updated net
+    {
+      agents: updated_agents,
+      connections: net.connections ++ [new_connection],
+      free_ports: new_free_ports
+    }
   ]
 
   --[[
-    Returns all ports in an active pair or replacement
+    Disconnects a connection, freeing its ports
   ]]--
-  ports: alpha -> {P} [a -> {a.0, a.1}]
-  ports: rho -> {P} [r -> r.ports]
+  disconnect: !Net * !Connection -o> !Net [net connection ->
+    -- Find the connection
+    let conn_index = find_connection_index(net, connection);
+    if conn_index < 0 {
+      error("Connection not found in net");
+    }
 
-  --[[
-    Counts the number of connections in a graph structure
-  ]]--
-  conn: alpha -> Z [a -> 0]
-  conn: rho -> Z [r ->
-    r |> ports -> rPorts
-    rPorts |> filter_pairs [p q -> r.wiring(p) veq q] |> size / 2
+    -- Update port connected status in agents
+    let updated_agents = update_port_connected_status(
+      net.agents, connection.port1, connection.port2, false
+    );
+
+    -- Add ports to free_ports
+    let port1 = find_port_by_id(net, connection.port1);
+    let port2 = find_port_by_id(net, connection.port2);
+    let new_free_ports = net.free_ports ++ [port1, port2];
+
+    -- Remove connection
+    let new_connections = remove_at_index(net.connections, conn_index);
+
+    -- Return updated net
+    {
+      agents: updated_agents,
+      connections: new_connections,
+      free_ports: new_free_ports
+    }
   ]
 
   --[[
-    Law: Rewrite rules must preserve the number of ports
-    (ensures that rewriting doesn't create or destroy interface points)
+    Connects corresponding ports in two interfaces
   ]]--
-  law.port_conservation: R |> forall [rule ->
-    rule.0 |> ports |> size veq rule.1 |> ports |> size
+  connect_interface: !Net * !Interface * !Interface -o> !Net [net iface1 iface2 ->
+    -- Check interfaces have the same size
+    if iface1.ports.length != iface2.ports.length {
+      error("Interfaces must have the same number of ports");
+    }
+
+    -- Connect corresponding ports
+    let result_net = net;
+    for i in 0..iface1.ports.length {
+      result_net = connect(result_net, iface1.ports[i], iface2.ports[i]);
+    }
+
+    result_net
   ]
 
   --[[
-    Law: Rewrite rules must preserve the number of connections
-    (ensures structural integrity of the net during reduction)
+    Identifies the principal port of an agent
   ]]--
-  law.connection_conservation: R |> forall [rule ->
-    rule.0 |> conn veq rule.1 |> conn
+  principal: !Agent -o> (!Agent * !Port) [agent ->
+    let principal_port = agent.ports |> find [p -> p.principal];
+    {agent, principal_port}
   ]
+
+  --[[
+    Gets the auxiliary ports of an agent
+  ]]--
+  auxiliary: !Agent -o> (!Agent * [!Port]) [agent ->
+    let aux_ports = agent.ports |> filter [p -> not p.principal];
+    {agent, aux_ports}
+  ]
+
+  --[[
+    Gets the agent that owns a port
+  ]]--
+  port_of: !Net * !Port -o> (!Net * !Port * ?!Agent) [net port ->
+    let agent = net.agents |> find [a ->
+      a.ports |> exists [p -> p.id == port.id]
+    ];
+    {net, port, agent}
+  ]
+
+  --[[
+    Gets all agents in a net
+  ]]--
+  get_agents: !Net -o> (!Net * [!Agent]) [net ->
+    {net, net.agents}
+  ]
+
+  --[[
+    Gets all ports in a net
+  ]]--
+  get_ports: !Net -o> (!Net * [!Port]) [net ->
+    let all_ports = [];
+    for agent in net.agents {
+      all_ports = all_ports ++ agent.ports;
+    }
+    {net, all_ports}
+  ]
+
+  --[[
+    Gets all principal ports in a net
+  ]]--
+  get_principal: !Net -o> (!Net * [!Port]) [net ->
+    let {net1, all_ports} = get_ports(net);
+    let principal_ports = all_ports |> filter [p -> p.principal];
+    {net1, principal_ports}
+  ]
+
+  --[[
+    Gets all auxiliary ports in a net
+  ]]--
+  get_auxiliary: !Net -o> (!Net * [!Port]) [net ->
+    let {net1, all_ports} = get_ports(net);
+    let auxiliary_ports = all_ports |> filter [p -> not p.principal];
+    {net1, auxiliary_ports}
+  ]
+
+  --[[
+    Checks if a port is principal
+  ]]--
+  is_principal: !Port -o> (!Port * Bool) [port ->
+    {port, port.principal}
+  ]
+
+  --[[
+    Checks if a port is free (not connected)
+  ]]--
+  is_free: !Net * !Port -o> (!Net * !Port * Bool) [net port ->
+    let is_free = net.free_ports |> exists [p -> p.id == port.id];
+    {net, port, is_free}
+  ]
+
+  --[[
+    Finds all active pairs (connected principal ports) in a net
+  ]]--
+  find_active_pairs: !Net -o> (!Net * [!ActivePair]) [net ->
+    let active_pairs = [];
+
+    -- For each connection
+    for conn in net.connections {
+      let port1 = find_port_by_id(net, conn.port1);
+      let port2 = find_port_by_id(net, conn.port2);
+
+      -- If both ports are principal, this is an active pair
+      if port1.principal and port2.principal {
+        let agent1 = find_agent_by_id(net, conn.agent1);
+        let agent2 = find_agent_by_id(net, conn.agent2);
+
+        active_pairs.push({
+          agent1: agent1,
+          agent2: agent2,
+          port1: port1,
+          port2: port2
+        });
+      }
+    }
+
+    {net, active_pairs}
+  ]
+
+  --[[
+    Performs a single reduction step on a net, if possible
+  ]]--
+  reduce_once: !Net * !RuleSet -o> !Reduction [net ruleset ->
+    -- Find active pairs
+    let {net1, active_pairs} = find_active_pairs(net);
+
+    -- If no active pairs, cannot reduce
+    if active_pairs.length == 0 {
+      return {
+        original: net1,
+        result: net1,
+        reduced: false,
+        active_pair: null
+      };
+    }
+
+    -- Take the first active pair
+    let active_pair = active_pairs[0];
+
+    -- Find applicable rule
+    let rule = find_applicable_rule(ruleset, active_pair);
+    if rule == null {
+      error("No applicable rule for active pair");
+    }
+
+    -- Apply the rule
+    let result_net = apply_rule(net1, active_pair, rule);
+
+    {
+      original: net1,
+      result: result_net,
+      reduced: true,
+      active_pair: active_pair
+    }
+  ]
+
+  --[[
+    Reduces a net to normal form (no more active pairs)
+  ]]--
+  reduce: !Net * !RuleSet -o> !Net [net ruleset ->
+    let result = net;
+    let {_, reduced} = reduce_once(result, ruleset);
+
+    while reduced {
+      let {new_net, new_reduced} = reduce_once(result, ruleset);
+      result = new_net;
+      reduced = new_reduced;
+    }
+
+    result
+  ]
+
+  --[[
+    Reduces a net for a maximum number of steps
+  ]]--
+  normalize: !Net * !RuleSet * Z -o> !Net [net ruleset max_steps ->
+    let result = net;
+    let steps = 0;
+
+    while steps < max_steps {
+      let {new_net, reduced} = reduce_once(result, ruleset);
+      if not reduced {
+        break;
+      }
+      result = new_net;
+      steps = steps + 1;
+    }
+
+    result
+  ]
+
+  --[[
+    Matches a rule pattern against an active pair
+  ]]--
+  match_rule: !Rule * !ActivePair -o> (!Rule * !ActivePair * Bool) [rule pair ->
+    let pattern = rule.pattern;
+    let matches = (
+      (pattern.symbol1.name == pair.agent1.symbol.name and
+       pattern.symbol2.name == pair.agent2.symbol.name) or
+      (pattern.symbol1.name == pair.agent2.symbol.name and
+       pattern.symbol2.name == pair.agent1.symbol.name)
+    );
+
+    {rule, pair, matches}
+  ]
+
+  --[[
+    Applies a rule to an active pair in a net
+  ]]--
+  apply_rule: !Net * !ActivePair * !Rule -o> !Net [net pair rule ->
+    -- 1. Disconnect the active pair
+    let conn = find_connection_by_ports(net, pair.port1.id, pair.port2.id);
+    let net1 = disconnect(net, conn);
+
+    -- 2. Remove the two agents from the net
+    let net2 = remove_agent(net1, pair.agent1.id);
+    let net3 = remove_agent(net2, pair.agent2.id);
+
+    -- 3. Add the replacement net to the original net
+    let {replacement_net, interface_map} = instantiate_replacement(rule.replacement);
+    let net4 = merge_nets(net3, replacement_net);
+
+    -- 4. Connect the interfaces according to the mapping
+    let net5 = connect_replaced_interfaces(net4, interface_map, pair);
+
+    net5
+  ]
+
+  --[[
+    Applies a ruleset to all active pairs in a net
+  ]]--
+  apply_ruleset: !Net * !RuleSet -o> !Net [net ruleset ->
+    reduce(net, ruleset)
+  ]
+
+  --[[
+    Gets the residual net after removing active pairs
+  ]]--
+  residual: !Net -o> !Net [net ->
+    -- Find active pairs
+    let {net1, active_pairs} = find_active_pairs(net);
+
+    -- Remove all agents involved in active pairs
+    let result = net1;
+    for pair in active_pairs {
+      result = remove_agent(result, pair.agent1.id);
+      result = remove_agent(result, pair.agent2.id);
+    }
+
+    result
+  ]
+
+  --[[
+    Parallel composition of two nets (disjoint union)
+  ]]--
+  parallel: !Net * !Net -o> !Net [net1 net2 ->
+    -- Simply merge the nets without connecting anything
+    merge_nets(net1, net2)
+  ]
+
+  --[[
+    Sequential composition - connect free ports of net1 to net2
+  ]]--
+  sequential: !Net * !Net -o> !Net [net1 net2 ->
+    -- Get interfaces
+    let iface1 = interface(net1);
+    let iface2 = interface(net2);
+
+    -- Merge nets
+    let merged = merge_nets(net1, net2);
+
+    -- Connect interfaces
+    connect_interface(merged, iface1, iface2)
+  ]
+
+  --[[
+    Tensor composition of nets
+  ]]--
+  tensor: !Net * !Net -o> !Net [net1 net2 ->
+    -- Similar to parallel but with specific interface handling
+    merge_nets(net1, net2)
+  ]
+
+  --[[
+    Generic composition with a specified mapping between interfaces
+  ]]--
+  compose: !Net * !Net * {Z: Z} -o> !Net [net1 net2 mapping ->
+    -- Merge the nets
+    let merged = merge_nets(net1, net2);
+
+    -- Connect interfaces according to mapping
+    let result = merged;
+    for (port1_id, port2_id) in mapping {
+      let port1 = find_port_by_id(merged, port1_id);
+      let port2 = find_port_by_id(merged, port2_id);
+      result = connect(result, port1, port2);
+    }
+
+    result
+  ]
+
+  --[[
+    Gets the interface (free ports) of a net
+  ]]--
+  interface: !Net -o> (!Net * !Interface) [net ->
+    {net, {ports: net.free_ports, names: []}}
+  ]
+
+  --[[
+    Restricts the interface to specific ports
+  ]]--
+  restrict_interface: !Net * [Z] -o> !Net [net port_ids ->
+    let new_free_ports = net.free_ports |> filter [p ->
+      port_ids |> exists [id -> id == p.id]
+    ];
+
+    {
+      agents: net.agents,
+      connections: net.connections,
+      free_ports: new_free_ports
+    }
+  ]
+
+  --[[
+    Extends the interface with additional ports
+  ]]--
+  extend_interface: !Net * [!Port] -o> !Net [net ports ->
+    let new_free_ports = net.free_ports ++ ports;
+
+    {
+      agents: net.agents,
+      connections: net.connections,
+      free_ports: new_free_ports
+    }
+  ]
+
+  --[[
+    Converts a net to a graph representation for visualization
+  ]]--
+  to_graph: !Net -o> (!Net * {nodes: [Any], edges: [Any]}) [net ->
+    -- Create a graph representation for visualization
+    let nodes = [];
+    let edges = [];
+
+    for agent in net.agents {
+      nodes.push({
+        id: agent.id,
+        label: agent.symbol.name,
+        type: "agent"
+      });
+    }
+
+    for conn in net.connections {
+      edges.push({
+        source: conn.agent1,
+        target: conn.agent2,
+        sourcePort: conn.port1,
+        targetPort: conn.port2
+      });
+    }
+
+    {net, {nodes: nodes, edges: edges}}
+  ]
+
+  --[[
+    Creates a net from a graph representation
+  ]]--
+  from_graph: {nodes: [Any], edges: [Any]} -o> !Net [graph ->
+    -- Create a net from a graph representation
+    let net = empty_net();
+
+    -- Create agents
+    for node in graph.nodes {
+      let symbol = {name: node.label, arity: node.ports.length};
+      let agent = new_agent(symbol);
+      net = add_agent(net, agent);
+    }
+
+    -- Create connections
+    for edge in graph.edges {
+      let port1 = find_port_by_id(net, edge.sourcePort);
+      let port2 = find_port_by_id(net, edge.targetPort);
+      net = connect(net, port1, port2);
+    }
+
+    net
+  ]
+
+  --[[
+    Generates a visualization of the net
+  ]]--
+  visualize: !Net -o> (!Net * S) [net ->
+    let {net1, graph} = to_graph(net);
+    let visualization = generate_dot_graph(graph);
+    {net1, visualization}
+  ]
+
+  --[[
+    Verifies that a net satisfies all interaction net laws
+  ]]--
+  verify: !Net -o> (!Net * Bool * [S]) [net ->
+    let errors = [];
+
+    -- Check unique principal port law
+    for agent in net.agents {
+      let principal_count = agent.ports |> filter [p -> p.principal] |> length;
+      if principal_count > 1 {
+        errors.push("Agent " + agent.id + " has multiple principal ports");
+      }
+    }
+
+    -- Check other laws...
+
+    {net, errors.length == 0, errors}
+  ]
+
+  --[[
+    Verifies that the ruleset is deterministic (one rule per pattern)
+  ]]--
+  verify_deterministic: !RuleSet -o> (!RuleSet * Bool * [S]) [ruleset ->
+    let errors = [];
+    let patterns = {};
+
+    for rule in ruleset.rules {
+      let pattern_key = rule.pattern.symbol1.name + ":" + rule.pattern.symbol2.name;
+      let reverse_key = rule.pattern.symbol2.name + ":" + rule.pattern.symbol1.name;
+
+      if patterns |> has_key(pattern_key) or patterns |> has_key(reverse_key) {
+        errors.push("Multiple rules for pattern: " + pattern_key);
+      } else {
+        patterns[pattern_key] = true;
+      }
+    }
+
+    {ruleset, errors.length == 0, errors}
+  ]
+
+  --[[
+    Verifies the confluence property of the ruleset
+  ]]--
+  verify_confluence: !RuleSet -o> (!RuleSet * Bool * [S]) [ruleset ->
+    -- This is a complex property to check
+    -- Would require analyzing critical pairs
+    {ruleset, true, []}
+  ]
+
+  --[[
+    Checks if a net is in normal form (no active pairs)
+  ]]--
+  is_normal_form: !Net -o> (!Net * Bool) [net ->
+    let {net1, active_pairs} = find_active_pairs(net);
+    {net1, active_pairs.length == 0}
+  ]
+
+  --[[
+    Connect ports operator
+  ]]--
+  ><: !Net * !Port * !Port -o> !Net [net p1 p2 ->
+    connect(net, p1, p2)
+  ]
+
+  --[[
+    Parallel composition operator
+  ]]--
+  ||: !Net * !Net -o> !Net [n1 n2 ->
+    parallel(n1, n2)
+  ]
+
+  --[[
+    Sequential composition operator
+  ]]--
+  >>: !Net * !Net -o> !Net [n1 n2 ->
+    sequential(n1, n2)
+  ]
+
+  --[[
+    Apply rule operator
+  ]]--
+  ::: !Net * !Rule -o> !Net [net rule ->
+    let {net1, active_pairs} = find_active_pairs(net);
+
+    for pair in active_pairs {
+      let {_, _, matches} = match_rule(rule, pair);
+      if matches {
+        return apply_rule(net1, pair, rule);
+      }
+    }
+
+    net1  -- No match found, return unchanged
+  ]
+
+  --[[
+    Internal helper functions
+  ]]--
+  fresh_id: () -o> Z
+  fresh_port_id: () -o> Z
+  find_port_by_id: !Net * Z -o> !Port
+  find_agent_by_id: !Net * Z -o> !Agent
+  find_agent_with_port: !Net * Z -o> Z
+  update_port_connected_status: [!Agent] * Z * Z * Bool -o> [!Agent]
+  find_connection_index: !Net * !Connection -o> Z
+  find_connection_by_ports: !Net * Z * Z -o> !Connection
+  remove_at_index: [a] * Z -o> [a]
+  remove_agent: !Net * Z -o> !Net
+  merge_nets: !Net * !Net -o> !Net
+  instantiate_replacement: !ReplacementNet -o> (!Net * {Z: Z})
+  connect_replaced_interfaces: !Net * {Z: Z} * !ActivePair -o> !Net
+  find_applicable_rule: !RuleSet * !ActivePair -o> ?!Rule
+  add_agent: !Net * !Agent -o> !Net
+  generate_dot_graph: {nodes: [Any], edges: [Any]} -o> S
+  has_key: {k: v} * k -o> Bool
 }

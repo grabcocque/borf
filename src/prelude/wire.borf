@@ -1,26 +1,73 @@
 --[[
-  Wiring Diagram (Specialized Graph)
+  Wiring Diagram (Categorical Interaction Network)
 
-  This module defines the structure of wiring diagrams, which are specialized
-  graphs used to represent the connection patterns in interaction nets. It
-  enforces proper connectivity constraints, port typing, and establishes the
-  relationship between boxes (agents) and their ports.
+  This module defines the structure of wiring diagrams as a categorical model
+  of interaction networks. It formalizes the compositional aspects of diagrams
+  while supporting hierarchical structures, diagram operations, and advanced
+  typing constraints. This formulation connects to monoidal categories in
+  category theory.
 ]]--
-
 
 @Wire: {
   typ: {
-    Wire
+    -- Core types
+    Wire Box Port
+
+    -- Diagram compositions
+    Diagram Composition Parallel Sequential Trace
+
+    -- Wiring patterns
+    Identity Swap Copy Delete Merge Create Loop
+
+    -- Mathematical structures
+    MonoidalStructure BraidedStructure SymmetricStructure TracedStructure
+
+    -- Port and box classifications
+    Principal Auxiliary Input Output Internal Interface
   }
 
   op: {
+    -- Type assignments
     tauP tauB
+
+    -- Diagram operators
+    seq par trace
+
+    -- Connection operators
+    -> <-> <=> >-<
+
+    -- Wiring pattern operators
+    id swap copy delete merge create loop
+
+    -- Tensor product for parallel composition
+    tensor
   }
 
   fn: {
-    box w sig
-    law.wiring_involution law.port_unique_owner
-    law.wiring_type_compat law.ports_in_signature
+    -- Basic structure functions
+    box ports owner w in_ports out_ports internal_ports interface
+
+    -- Signature and typing functions
+    sig port_type box_type compatible connection_type
+
+    -- Composition functions
+    compose connect tensor_compose trace_compose
+
+    -- Core laws
+    law.wiring_involution law.port_unique_owner law.wiring_type_compat
+    law.ports_in_signature law.interface_disjoint law.typing_preservation
+
+    -- Category theory laws
+    law.composition_associativity law.identity_unit
+    law.tensor_bifunctor law.braiding_naturality
+    law.symmetric_involution law.tensor_associativity
+    law.trace_sliding law.trace_vanishing law.trace_superposing
+
+    -- Operations
+    subdiagram zoom extract rewire transform optimize instantiate
+
+    -- Verification
+    verify_acyclic verify_connected verify_well_typed verify_well_formed
   }
 
   E: typ cup op cup fn
@@ -30,50 +77,127 @@
   vis: E |> [e -> true]
 
   --[[
-    B represents the set of boxes (agents) in a wiring diagram
+    Box represents a component in the wiring diagram (agent/node)
   ]]--
-  B
+  Box: T.Type_0
 
   --[[
-    P represents the set of ports that can be connected
+    Port represents a connection point on a box
   ]]--
-  P
+  Port: T.Type_0
+
+  --[[
+    Diagram represents a complete wiring structure
+  ]]--
+  Diagram: T.Type_0
 
   --[[
     Returns the box that owns a port
   ]]--
-  box: P -> B
+  box: Port -> Box
+
+  --[[
+    Returns all ports of a box
+  ]]--
+  ports: Box -> {Port}
+
+  --[[
+    Returns the box that owns a port (inverse of ports)
+  ]]--
+  owner: Port -> Box [p -> p |> box]
 
   --[[
     Wiring function - connects ports together
+    w is an involution (w ∘ w = id)
   ]]--
-  w: P -> P
+  w: Port -> Port
+
+  --[[
+    Returns the input ports of a box
+  ]]--
+  in_ports: Box -> {Port}
+
+  --[[
+    Returns the output ports of a box
+  ]]--
+  out_ports: Box -> {Port}
+
+  --[[
+    Returns the internal ports of a box (for hierarchical diagrams)
+  ]]--
+  internal_ports: Box -> {Port}
+
+  --[[
+    Returns the interface ports of a diagram (exposed to external connections)
+  ]]--
+  interface: Diagram -> {Port}
 
   --[[
     Port type function - assigns types to ports
   ]]--
-  tauP: P -> X
+  tauP: Port -> T.T
 
   --[[
     Box type function - assigns types to boxes/agents
   ]]--
-  tauB: B -> X
+  tauB: Box -> T.T
 
   --[[
-    Graph representation of a wiring diagram:
-    - Nodes are both boxes and ports
-    - Edges are the wiring connections between ports
+    Returns the signature of a box as its input and output ports
   ]]--
-  N: B cup P
-  E: P |> [p -> (p, p |> w)] |> pairs
+  sig: Box -> {in:{Port}, out:{Port}} [b -> {in: b |> in_ports, out: b |> out_ports}]
+
+  --[[
+    Returns the type of a port
+  ]]--
+  port_type: Port -> T.T [p -> p |> tauP]
+
+  --[[
+    Returns the type of a box
+  ]]--
+  box_type: Box -> T.T [b -> b |> tauB]
+
+  --[[
+    Checks if two ports have compatible types for connection
+  ]]--
+  compatible: Port * Port -> Bool [p1 p2 ->
+    -- Uses the enhanced type system for compatibility checking
+    p1 |> port_type |> T.refine [t -> t |> T.compatible_with (p2 |> port_type)]
+  ]
+
+  --[[
+    Returns the type of a connection between ports
+  ]]--
+  connection_type: Port * Port -> T.T [p1 p2 ->
+    -- Connection type is derived from the joined types of ports
+    (p1 |> port_type) <:> (p2 |> port_type)
+  ]
+
+  --[[
+    Diagram nodes include both boxes and ports
+  ]]--
+  N: Box cup Port
+
+  --[[
+    Edges represent wiring connections between ports
+  ]]--
+  E: Port |> [p -> (p, p |> w)] |> pairs
+
+  --[[
+    Source of an edge is the first port
+  ]]--
   src: E |> [e -> e.0]
+
+  --[[
+    Target of an edge is the second port
+  ]]--
   tgt: E |> [e -> e.1]
 
   --[[
     Node labeling based on whether the node is a box or port
   ]]--
   lambdaN: N |> [n ->
-    n |> tauB iff n |> in B or_else n |> tauP
+    n |> tauB iff n |> in Box or_else n |> tauP
   ]
 
   --[[
@@ -86,27 +210,285 @@
   --[[
     Law: Wiring is an involution - connecting a port twice returns to the original port
   ]]--
-  law.wiring_involution: P |> forall [p -> p |> w |> w veq p]
+  law.wiring_involution: Port |> forall [p -> p |> w |> w veq p]
 
   --[[
     Law: Every port has exactly one owner box
   ]]--
-  law.port_unique_owner: P |> forall [p -> B |> exists_unique [b -> p |> box veq b]]
+  law.port_unique_owner: Port |> forall [p -> Box |> exists_unique [b -> p |> box veq b]]
 
   --[[
     Law: Connected ports must have compatible types
   ]]--
-  law.wiring_type_compat: P * P |> forall [p q -> p |> w veq q ->
-                           p |> tauP |> R.omega (q |> tauP)]
-
-  --[[
-    Returns the signature of a box as its input and output ports
-  ]]--
-  sig: B -> {in:{P}, out:{P}}
+  law.wiring_type_compat: Port * Port |> forall [p q -> p |> w veq q -> p |> compatible q]
 
   --[[
     Law: All ports of a box must be included in its signature
   ]]--
-  law.ports_in_signature: B * P |> forall [b p -> p |> box veq b ->
+  law.ports_in_signature: Box * Port |> forall [b p -> p |> box veq b ->
                   p |> in (b |> sig.in) or p |> in (b |> sig.out)]
+
+  --[[
+    Law: Input and output interfaces of a diagram must be disjoint
+  ]]--
+  law.interface_disjoint: Diagram |> forall [d ->
+    empty(d |> interface.in cap d |> interface.out)
+  ]
+
+  --[[
+    Law: Type preservation under composition
+  ]]--
+  law.typing_preservation: Diagram * Diagram |> forall [d1 d2 ->
+    (d1 `seq` d2) |> interface.out |> port_type teq d2 |> interface.out |> port_type
+  ]
+
+  --[[
+    Law: Composition is associative
+  ]]--
+  law.composition_associativity: Diagram * Diagram * Diagram |> forall [d1 d2 d3 ->
+    (d1 `seq` d2) `seq` d3 teq d1 `seq` (d2 `seq` d3)
+  ]
+
+  --[[
+    Law: Identity diagrams act as units for composition
+  ]]--
+  law.identity_unit: Diagram |> forall [d ->
+    d `seq` id teq d and id `seq` d teq d
+  ]
+
+  --[[
+    Law: Tensor product forms a bifunctor
+  ]]--
+  law.tensor_bifunctor:
+    Diagram * Diagram * Diagram * Diagram |> forall [d1 d2 d3 d4 ->
+      (d1 `seq` d2) `tensor` (d3 `seq` d4) teq (d1 `tensor` d3) `seq` (d2 `tensor` d4)
+    ]
+
+  --[[
+    Law: Braiding is natural
+  ]]--
+  law.braiding_naturality:
+    Diagram * Diagram * Diagram * Diagram |> forall [d1 d2 d3 d4 ->
+      (d1 `seq` d2) `swap` (d3 `seq` d4) teq
+      (d1 `swap` d3) `seq` (d2 `swap` d4)
+    ]
+
+  --[[
+    Law: Symmetric structure means swap is an involution
+  ]]--
+  law.symmetric_involution:
+    Diagram * Diagram |> forall [d1 d2 ->
+      (d1 `swap` d2) `swap` teq d1 `tensor` d2
+    ]
+
+  --[[
+    Law: Tensor product is associative
+  ]]--
+  law.tensor_associativity:
+    Diagram * Diagram * Diagram |> forall [d1 d2 d3 ->
+      (d1 `tensor` d2) `tensor` d3 teq d1 `tensor` (d2 `tensor` d3)
+    ]
+
+  --[[
+    Law: Trace operation satisfies sliding
+  ]]--
+  law.trace_sliding:
+    Diagram * Diagram |> forall [d1 d2 ->
+      trace(d1 `seq` d2) teq d1 `seq` trace(d2) when d1 |> trace_compatible
+    ]
+
+  --[[
+    Law: Trace operation satisfies vanishing
+  ]]--
+  law.trace_vanishing:
+    Diagram |> forall [d ->
+      trace(trace(d)) teq trace(d)
+    ]
+
+  --[[
+    Law: Trace operation satisfies superposing
+  ]]--
+  law.trace_superposing:
+    Diagram * Diagram |> forall [d1 d2 ->
+      trace(d1) `tensor` d2 teq trace(d1 `tensor` d2) when d2 |> trace_independent
+    ]
+
+  --[[
+    Sequential composition of two diagrams
+  ]]--
+  compose: Diagram * Diagram -> Diagram [d1 d2 ->
+    -- Connect output interface of d1 to input interface of d2
+    -- and construct a new diagram with combined internal structure
+    Prim.compose_diagrams d1 d2
+  ]
+
+  --[[
+    Connect specific ports together
+  ]]--
+  connect: Port * Port -> Diagram [p1 p2 ->
+    -- Verify compatibility
+    p1 |> compatible p2 |> Prim.enforce "Incompatible port types"
+
+    -- Create a diagram with just this connection
+    Prim.connect_ports p1 p2
+  ]
+
+  --[[
+    Tensor product (parallel composition) of two diagrams
+  ]]--
+  tensor_compose: Diagram * Diagram -> Diagram [d1 d2 ->
+    -- Place diagrams side by side without connecting them
+    Prim.tensor_diagrams d1 d2
+  ]
+
+  --[[
+    Trace composition (feedback loop) of a diagram
+  ]]--
+  trace_compose: Diagram * Port * Port -> Diagram [d p1 p2 ->
+    -- Connect an output port back to an input port
+    p1 |> compatible p2 |> Prim.enforce "Incompatible ports for trace"
+
+    Prim.trace_diagram d p1 p2
+  ]
+
+  --[[
+    Create a subdiagram from a subset of boxes
+  ]]--
+  subdiagram: Diagram * {Box} -> Diagram [d boxes ->
+    -- Extract a subdiagram containing only the specified boxes
+    -- and their internal connections
+    Prim.extract_subdiagram d boxes
+  ]
+
+  --[[
+    Zoom into a hierarchical box, exposing its internal structure
+  ]]--
+  zoom: Diagram * Box -> Diagram [d b ->
+    -- Expand a hierarchical box to show its internal structure
+    Prim.zoom_box d b
+  ]
+
+  --[[
+    Extract a box as a standalone diagram
+  ]]--
+  extract: Box -> Diagram [b ->
+    -- Convert a box to a diagram with the box's internal structure
+    Prim.box_to_diagram b
+  ]
+
+  --[[
+    Rewire a diagram according to a transformation function
+  ]]--
+  rewire: Diagram * (Port -> Port) -> Diagram [d f ->
+    -- Apply a transformation to the wiring pattern
+    Prim.transform_wiring d f
+  ]
+
+  --[[
+    Transform a diagram by applying a function to each box
+  ]]--
+  transform: Diagram * (Box -> Box) -> Diagram [d f ->
+    -- Apply a transformation to each box in the diagram
+    Prim.transform_boxes d f
+  ]
+
+  --[[
+    Optimize a diagram by applying simplification rules
+  ]]--
+  optimize: Diagram * {Rule} -> Diagram [d rules ->
+    -- Apply optimization rules to simplify the diagram
+    Prim.optimize_diagram d rules
+  ]
+
+  --[[
+    Instantiate a diagram template with specific parameters
+  ]]--
+  instantiate: Diagram * {T.T} -> Diagram [d params ->
+    -- Create a concrete diagram from a parameterized template
+    Prim.instantiate_diagram d params
+  ]
+
+  --[[
+    Verify that a diagram has no cycles
+  ]]--
+  verify_acyclic: Diagram -> Bool [d ->
+    -- Check that the diagram has no feedback loops
+    Prim.is_acyclic d
+  ]
+
+  --[[
+    Verify that a diagram is fully connected
+  ]]--
+  verify_connected: Diagram -> Bool [d ->
+    -- Check that the diagram has no disconnected components
+    Prim.is_connected d
+  ]
+
+  --[[
+    Verify that a diagram is well-typed
+  ]]--
+  verify_well_typed: Diagram -> Bool [d ->
+    -- Check that all connections have compatible types
+    Prim.is_well_typed d
+  ]
+
+  --[[
+    Verify that a diagram satisfies all structural constraints
+  ]]--
+  verify_well_formed: Diagram -> Bool [d ->
+    -- Check all diagram constraints
+    d |> verify_acyclic and
+    d |> verify_connected and
+    d |> verify_well_typed
+  ]
+
+  --[[
+    Alias for sequential composition
+  ]]--
+  seq: Diagram * Diagram -> Diagram [d1 d2 -> d1 |> compose d2]
+
+  --[[
+    Alias for parallel composition
+  ]]--
+  par: Diagram * Diagram -> Diagram [d1 d2 -> d1 |> tensor_compose d2]
+
+  --[[
+    Alias for trace composition
+  ]]--
+  trace: Diagram * Port * Port -> Diagram [d p1 p2 -> d |> trace_compose p1 p2]
+
+  --[[
+    Identity wiring pattern (no transformation)
+  ]]--
+  id: Diagram [-> Prim.identity_diagram]
+
+  --[[
+    Swap wiring pattern (crossing connections)
+  ]]--
+  swap: Diagram [-> Prim.swap_diagram]
+
+  --[[
+    Copy wiring pattern (duplicate a signal)
+  ]]--
+  copy: Diagram [-> Prim.copy_diagram]
+
+  --[[
+    Delete wiring pattern (terminate a signal)
+  ]]--
+  delete: Diagram [-> Prim.delete_diagram]
+
+  --[[
+    Merge wiring pattern (combine two signals)
+  ]]--
+  merge: Diagram [-> Prim.merge_diagram]
+
+  --[[
+    Create wiring pattern (generate a signal)
+  ]]--
+  create: Diagram [-> Prim.create_diagram]
+
+  --[[
+    Loop wiring pattern (feedback)
+  ]]--
+  loop: Diagram [-> Prim.loop_diagram]
 }

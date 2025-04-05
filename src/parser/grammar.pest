@@ -1,15 +1,19 @@
 // Borf language grammar
 
 // Main entry points
-file = { SOI ~ module_decl ~ EOI }
+repl_input = { SOI ~ (declaration | expr) ~ EOI }
+file = { SOI ~ (COMMENT | MULTILINE_COMMENT | WHITESPACE)* ~ module_decl ~ EOI }
+
 module_decl = { "@" ~ identifier ~ ":" ~ "{" ~ module_body ~ "}" }
 module_body = { (declaration | COMMENT | MULTILINE_COMMENT)* }
 
 // Declarations
-declaration = { type_decl | op_decl | fn_decl }
+declaration = { type_decl | op_decl | fn_decl | dep_decl | entity_decl }
 type_decl = { "typ" ~ ":" ~ "{" ~ (identifier ~ WHITESPACE*)* ~ "}" }
 op_decl = { "op" ~ ":" ~ "{" ~ (identifier ~ WHITESPACE*)* ~ "}" }
 fn_decl = { "fn" ~ ":" ~ "{" ~ (identifier ~ WHITESPACE*)* ~ "}" }
+dep_decl = { "dep" ~ ":" ~ "{" ~ (identifier ~ WHITESPACE*)* ~ "}" }
+entity_decl = { "entity" ~ ":" ~ "{" ~ (identifier ~ WHITESPACE*)* ~ "}" }
 
 // Expressions - flat structure for Pratt parsing
 expr = {
@@ -18,7 +22,7 @@ expr = {
     lambda |
     application |
     let_expr |
-    if_expr |
+    ternary |
     parenthesized_expr |
     quoting_expr
 }
@@ -63,10 +67,12 @@ primary = {
     lambda |
     application |
     let_expr |
-    if_expr |
     parenthesized_expr |
     quoting_expr
 }
+
+// Ternary expression (renamed from if_expr to avoid ambiguity)
+ternary = { primary ~ "iff" ~ expr ~ "or_else" ~ primary }
 
 parenthesized_expr = { "(" ~ expr ~ ")" }
 
@@ -77,8 +83,6 @@ application = { "(" ~ expr ~ (WHITESPACE+ ~ expr)* ~ ")" }
 
 let_expr = { "let" ~ binding ~ ("in" ~ expr)? }
 binding = { pattern ~ "=" ~ expr }
-
-if_expr = { "if" ~ expr ~ "then" ~ expr ~ "else" ~ expr }
 
 // Literals - organized into categories
 literal = {
@@ -121,9 +125,12 @@ pattern = {
     list_pattern |
     map_pattern |
     set_pattern |
-    (identifier ~ op_colon ~ type_expr) |
-    "_"
+    type_annotation_pattern |
+    wildcard
 }
+
+wildcard = { "_" }
+type_annotation_pattern = { identifier ~ op_colon ~ type_expr }
 
 list_pattern = { "[" ~ (pattern ~ ("," ~ pattern)*)? ~ "]" }
 map_pattern = { "{" ~ (map_pattern_entry ~ ("," ~ map_pattern_entry)*)? ~ "}" }

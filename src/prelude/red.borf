@@ -1,25 +1,36 @@
 --[[
-  Reduction Semantics
+  Core Language Prim
 
-  This module defines the execution semantics of Borf through reduction of
-  interaction nets. It provides strategies for applying rewrite rules,
-  detecting normal forms, and managing the reduction process. The module
-  establishes both deterministic and non-deterministic reduction paths.
+  This module defines the fundamental primitive operations that form the foundation
+  of the Borf language. These Prim represent the core computational capabilities
+  that are directly implemented by the runtime system rather than being defined in
+  terms of other operations. They provide essential functionality for manipulating
+  data, performing logic, and interacting with the system.
 ]]--
 
 
-@Red: {
-  typ: {
+@Prim: {
+  deps: {
+    (@Core, @Prim, true)
+  }
 
+  typ: {
+    Prim
   }
 
   op: {
-
+    rho map fold concat transpose at slice where
+    compose lookup update veq teq ceq seq typeof
+    oplus ominus match eval format state io
+    insert cons head tail append_string
+    cup cap subseteq in
+    forall exists and or not implies iff
+    pipe fcomp
+    reverse split join range zip unzip keys values remove_key
   }
 
   fn: {
-    step red normal strategy extract_data apply apply_rule
-    prioritize_io io_strategy history
+
   }
 
   E: typ cup op cup fn
@@ -29,99 +40,280 @@
   vis: E |> [e -> true]
 
   --[[
-    Performs a single reduction step on a net
+    rho - Reflects a value to its runtime representation
   ]]--
-  step: Net -> Net
+  rho: Any -> Z
 
   --[[
-    Fully reduces a net to normal form by repeatedly applying steps
+    Higher-order function that applies a function to each element of a collection
   ]]--
-  red: Net -> Net
+  map: (a -> b) * [a] -> [b]
 
   --[[
-    Checks if a net is in normal form (no more reduction possible)
+    Reduces a collection to a single value using an accumulator function
   ]]--
-  normal: Net -> Bool
+  fold: (b * a -> b) * b * [a] -> b
 
   --[[
-    Creates a reduction strategy by combining:
-    1. A function that finds redexes in a net
-    2. A function that prioritizes which redex to reduce first
+    Combines multiple collections into one
   ]]--
-  strategy: (Net -> [AgentId * AgentId]) * ([AgentId * AgentId] -> AgentId * AgentId) -> (Net -> Net)
+  concat: [a] * [a] -> [a]
 
   --[[
-    Extracts string data from a fully reduced net
+    Transforms a collection of pairs into a pair of collections
   ]]--
-  extract_data: Net -> S [n ->
-    n iff n |> normal or_else n |> red -> final_net
-    final_net |> Prim.format -> result
-    result |> Flp.extract_value iff result |> Flp.is_valid or_else "<Format Error>"
-  ]
+  transpose: [a * b] -> [b * a]
 
   --[[
-    Applies a rewrite rule to a net, substituting matching pattern with its replacement
+    Accesses an element at a specific index
   ]]--
-  apply: (alpha * rho) * Net -> Net [rule n ->
-    rule[0] |> Prim.match n -> matches
-    (n |> Prim.ominus matches[0][0] |> Prim.oplus rule[1]) iff matches |> Prim.rho > 0 or_else
-      n
-  ]
+  at: [a] * Z -> a
 
   --[[
-    Implementation of a single reduction step:
-    1. Find all possible redexes (active pairs)
-    2. If any exist, apply the rule to the first one
-    3. Otherwise return the net unchanged
+    Extracts a subcollection between two indices
   ]]--
-  step: Net [n ->
-    n |> Net.find_redexes -> redexes
-    (n redexes[0] |> apply_rule) iff redexes |> Prim.rho > 0 or_else
-      n
-  ]
+  slice: [a] * Z * Z -> [a]
 
   --[[
-    Applies a specific rewrite rule to a redex in a net
+    Finds indices of elements that satisfy a predicate
   ]]--
-  apply_rule: Net * (AgentId * AgentId) -> Net [n redex ->
-    Net.R[redex] n |> apply
-  ]
+  where: (a -> Bool) * [a] -> [Z]
 
   --[[
-    Recursively reduces a net until it reaches normal form
+    Function composition - applies g after f
   ]]--
-  red: Net [n ->
-    n iff n |> normal or_else n |> step |> red
-  ]
+  compose: (b -> c) * (a -> b) -> (a -> c)
 
   --[[
-    Checks if a net is in normal form by looking for redexes
+    Retrieves a value from a map by key
   ]]--
-  normal: Net [n ->
-    n |> Net.find_redexes |> Prim.rho veq 0
-  ]
+  lookup: Map * Any -> ?Any
 
   --[[
-    Prioritizes IO redexes over other redexes to ensure IO operations
-    are processed as soon as possible
+    Updates a map by inserting or modifying a key-value pair
   ]]--
-  prioritize_io: [AgentId * AgentId] -> [AgentId * AgentId]
+  update: Map * Any * Any -> Map
 
   --[[
-    Reduction strategy that prioritizes IO operations
+    Specialized fold for sequences
   ]]--
-  io_strategy: Net -> Net
+  fold: (a * b -> a) * a * Seq(b) -> a
 
   --[[
-    Captures the entire reduction history of a net as a sequence of states
+    Specialized map for sequences
   ]]--
-  history: Net -> [Net] [n ->
-    [] -> steps
-    n -> current
-    [current |> normal |> not] [
-      steps current |> Std.List.append -> steps
-      current |> step -> current
-    ] |> while
-    steps current |> Std.List.append
-  ]
+  map: (a -> b) * Seq(a) -> Seq(b)
+
+  --[[
+    Specialized filter for sequences
+  ]]--
+  where: (a -> Bool) * Seq(a) -> Seq(a)
+
+  --[[
+    Flattens a sequence of sequences
+  ]]--
+  concat: Seq(Seq(a)) -> Seq(a)
+
+  --[[
+    Value equality - compares two values for equality
+  ]]--
+  veq: Any * Any -> Bool
+
+  --[[
+    Type equality - compares two types for equality
+  ]]--
+  teq: Any * Any -> Bool
+
+  --[[
+    Category equality - compares objects within a category
+  ]]--
+  ceq: Any * Any -> Bool
+
+  --[[
+    Sequence equality - compares two sequences
+  ]]--
+  seq: Any * Any -> Bool
+
+  --[[
+    Returns the type of a value
+  ]]--
+  typeof: Any -> T
+
+  --[[
+    Combines two interaction nets
+  ]]--
+  oplus: Net * Net -> Net
+
+  --[[
+    Removes one interaction net from another
+  ]]--
+  ominus: Net * Net -> Net
+
+  --[[
+    Pattern matching for interaction nets
+  ]]--
+  match: Pattern * Net -> {Net}
+
+  --[[
+    Evaluates a string as code
+  ]]--
+  eval: S -> ?Net
+
+  --[[
+    Formats a net as a string representation
+  ]]--
+  format: Net -> ?S
+
+  --[[
+    Checks the state of a boolean condition
+  ]]--
+  state: B -> Bool
+
+  --[[
+    Performs I/O operations with a source and string data
+  ]]--
+  io: Op * Src * S -> ?S
+
+  --[[
+    Inserts a key-value pair into a map
+  ]]--
+  insert: (k:-> v) * k * v -> (k:-> v)
+
+  --[[
+    Looks up a value in a map by key
+  ]]--
+  lookup: (k:-> v) * k -> ?v
+
+  --[[
+    Adds an element to the beginning of a sequence
+  ]]--
+  cons: a * (Seq a) -> (Seq a)
+
+  --[[
+    Returns the first element of a sequence if non-empty
+  ]]--
+  head: (Seq a) -> ?a
+
+  --[[
+    Returns the sequence without its first element if non-empty
+  ]]--
+  tail: (Seq a) -> ?(Seq a)
+
+  --[[
+    Concatenates two strings
+  ]]--
+  append_string: S * S -> S
+
+  --[[
+    Set union operation
+  ]]--
+  cup: {a} * {a} -> {a}
+
+  --[[
+    Set intersection operation
+  ]]--
+  cap: {a} * {a} -> {a}
+
+  --[[
+    Checks if one set is a subset of another
+  ]]--
+  subseteq: {a} * {a} -> Bool
+
+  --[[
+    Tests if an element is a member of a set
+  ]]--
+  in: a * {a} -> Bool
+
+  --[[
+    Universal quantification over a set
+  ]]--
+  forall: (a -> Bool) * {a} -> Bool
+
+  --[[
+    Existential quantification over a set
+  ]]--
+  exists: (a -> Bool) * {a} -> Bool
+
+  --[[
+    Logical AND
+  ]]--
+  and: Bool * Bool -> Bool
+
+  --[[
+    Logical OR
+  ]]--
+  or: Bool * Bool -> Bool
+
+  --[[
+    Logical NOT
+  ]]--
+  not: Bool -> Bool
+
+  --[[
+    Logical implication (if-then)
+  ]]--
+  implies: Bool * Bool -> Bool
+
+  --[[
+    Logical equivalence (if and only if)
+  ]]--
+  iff: Bool * Bool -> Bool
+
+  --[[
+    Forward function application (x |> f becomes pipe(x, f))
+  ]]--
+  pipe: a * (a -> b) -> b
+
+  --[[
+    Forward function composition (f >> g becomes fcomp(f, g))
+  ]]--
+  fcomp: (a -> b) * (b -> c) -> (a -> c)
+
+  --[[
+    Reverses the elements of a list or sequence
+  ]]--
+  reverse: [a] -> [a]
+  reverse: Seq(a) -> Seq(a)
+
+  --[[
+    Splits a string by a delimiter string
+  ]]--
+  split: S * S -> [S]
+
+  --[[
+    Joins a list of strings with a separator string
+  ]]--
+  join: S * [S] -> S
+
+  --[[
+    Generates a sequence of integers from start (inclusive) to end (exclusive)
+  ]]--
+  range: Z * Z -> Seq(Z)
+
+  --[[
+    Combines two collections element-wise into pairs
+  ]]--
+  zip: [a] * [b] -> [a * b]
+  zip: Seq(a) * Seq(b) -> Seq(a * b)
+
+  --[[
+    Splits a collection of pairs into two separate collections
+  ]]--
+  unzip: [a * b] -> ([a] * [b])
+  unzip: Seq(a * b) -> (Seq(a) * Seq(b))
+
+  --[[
+    Returns a list of keys from a map
+  ]]--
+  keys: (k:-> v) -> [k]
+
+  --[[
+    Returns a list of values from a map
+  ]]--
+  values: (k:-> v) -> [v]
+
+  --[[
+    Removes a key-value pair from a map by key
+  ]]--
+  remove_key: (k:-> v) * k -> (k:-> v)
 }

@@ -5,22 +5,57 @@
   enabling pattern matching and rule-based transformations. It provides
   the foundation for computation in Borf through local graph rewriting,
   with guarantees for consistency and connectivity preservation.
+
+  Notation:
+  - 'a -o> b' indicates a function that consumes its input (linear)
+  - '!a' represents a linear type
 ]]--
 
 
 @RW: {
   typ: {
-    Pattern
+    -- Core pattern types
+    Pattern           -- Pattern for matching in a net
+    Replacement       -- Replacement graph for a matched pattern
+    Rule              -- A rewrite rule (pattern + replacement)
+    RuleSet           -- A collection of rewrite rules
+
+    -- Pattern components
+    Agent             -- An agent in a pattern
+    Port              -- A port in a pattern
+    Wire              -- A connection between ports
+
+    -- Pattern classification
+    Critical          -- Critical pair (overlapping patterns)
+    Deterministic     -- Pattern with deterministic matching
+    NonDeterministic  -- Pattern with non-deterministic matching
+
+    -- Pattern annotation
+    Constraint        -- Additional constraints on pattern matching
+    Binding           -- Variable binding in a pattern
+    Guard             -- Conditional guard for rule application
   }
 
   op: {
-    alpha rho
+    -- Core operations
+    alpha rho match RW apply transform
+
+    -- Pattern operations
+    pattern_graph consistent connected neighborhood
+    create_pattern create_rule add_constraint
+
+    -- Rule management
+    compose_rules prioritize override conflict_check
+
+    -- Special rules
+    io_rule lambda_rule builtin_rule
   }
 
   fn: {
     match RW neighborhood pattern_graph consistent connected
     io_rule law.replacement_consistency law.connectivity_preservation
-    law.io_rule_specificity
+    law.io_rule_specificity is_critical find_critical_pairs
+    commute determinism_check create_ruleset optimize_rules
   }
 
   E: typ cup op cup fn
@@ -39,6 +74,10 @@
   B; P; P -> P w; P -> Bool pi
 
   --[[
+    Pattern Types and Core Operations
+  ]]--
+
+  --[[
     alpha: Pattern type - left-hand side of a RW rule
   ]]--
   alpha: Type
@@ -51,22 +90,26 @@
   --[[
     R: The set of all RW rules (pattern-replacement pairs)
   ]]--
-  R: {alpha * rho}
+  R: {(alpha * rho)}
 
   --[[
     Tests if a pattern matches a given net
   ]]--
-  match: Pattern * Net -> Bool
+  match: Pattern * !Net -> Bool
 
   --[[
     Applies a RW rule to transform a matched pattern
   ]]--
-  RW: alpha -> rho
+  RW: !alpha -o> rho
 
   --[[
     Pattern type representing a graph pattern to match
   ]]--
   Pattern: alpha
+
+  --[[
+    Pattern Analysis and Validation
+  ]]--
 
   --[[
     Retrieves the neighborhood context of a pattern
@@ -90,6 +133,114 @@
   connected: rho -> Bool
 
   --[[
+    Tests if two patterns can match overlapping parts of a net (critical pair)
+  ]]--
+  is_critical: alpha * alpha -> Bool
+
+  --[[
+    Finds all critical pairs in a ruleset
+  ]]--
+  find_critical_pairs: RuleSet -> {(alpha * alpha)}
+
+  --[[
+    Checks if two rules commute (ordering doesn't matter)
+  ]]--
+  commute: (alpha * rho) * (alpha * rho) -> Bool
+
+  --[[
+    Analyzes a rule for determinism in matching and application
+  ]]--
+  determinism_check: (alpha * rho) -> Bool
+
+  --[[
+    Rule Creation and Manipulation
+  ]]--
+
+  --[[
+    Creates a pattern from a net fragment
+  ]]--
+  create_pattern: !Net -o> Pattern
+
+  --[[
+    Creates a rule from a pattern and replacement
+  ]]--
+  create_rule: !alpha * !rho -o> (alpha * rho)
+
+  --[[
+    Adds a constraint to a pattern
+  ]]--
+  add_constraint: !Pattern * Constraint -o> Pattern
+
+  --[[
+    Creates a ruleset from multiple rules
+  ]]--
+  create_ruleset: ![(alpha * rho)] -o> RuleSet
+
+  --[[
+    Optimizes a ruleset by merging compatible rules and eliminating redundancies
+  ]]--
+  optimize_rules: !RuleSet -o> RuleSet
+
+  --[[
+    Rule Application
+  ]]--
+
+  --[[
+    Applies a specific rule to a matched subgraph in a net
+  ]]--
+  apply: !(alpha * rho) * !Net -o> Net
+
+  --[[
+    Transforms a net by applying all applicable rules
+    until no more rules can be applied
+  ]]--
+  transform: !RuleSet * !Net -o> Net
+
+  --[[
+    Composes two rules to create a new rule (when possible)
+    R1;R2 means "apply R1 then R2"
+  ]]--
+  compose_rules: !(alpha * rho) * !(alpha * rho) -o> ?(alpha * rho)
+
+  --[[
+    Defines a rule priority for conflict resolution
+  ]]--
+  prioritize: !(alpha * rho) * !(alpha * rho) -o> Z
+
+  --[[
+    Makes one rule override another in case of conflicts
+  ]]--
+  override: !(alpha * rho) * !(alpha * rho) -o> RuleSet
+
+  --[[
+    Checks for conflicts between rules in a ruleset
+  ]]--
+  conflict_check: !RuleSet -o> [(alpha * rho) * (alpha * rho)]
+
+  --[[
+    Special Rules
+  ]]--
+
+  --[[
+    Special RW rule for IO operations
+  ]]--
+  io_rule: !alpha -o> rho
+
+  --[[
+    Special RW rule for lambda calculus operations
+  ]]--
+  lambda_rule: !alpha -o> rho
+
+  --[[
+    Special RW rule for built-in operations
+  ]]--
+  builtin_rule: !alpha -o> rho
+
+  --[[
+    Laws and Guarantees
+  ]]--
+
+  --[[
     Law: All RW rules must generate consistent replacements
   ]]--
   law.replacement_consistency: R |> forall [rule ->
@@ -105,15 +256,107 @@
   ]
 
   --[[
-    Special RW rule for IO operations
-  ]]--
-  io_rule: alpha -> rho
-
-  --[[
     Law: IO-specific patterns must be handled by io_rule rather than general RW
   ]]--
   law.io_rule_specificity: alpha * {B |> filter [b -> b |> IO.io_agent]} |> forall [a boxSet ->
     a |> Net.a_uses boxSet ->
     a |> io_rule != (a |> RW) -- Assuming `!=` for inequality
+  ]
+
+  --[[
+    Law: Rule application preserves port connectivity
+    (no dangling edges after replacement)
+  ]]--
+  law.connectivity_preservation: R |> forall [rule ->
+    rule.0 |> boundary_ports -> ports1
+    rule.1 |> boundary_ports -> ports2
+    ports1 |> Prim.rho veq ports2 |> Prim.rho
+  ]
+
+  --[[
+    Law: Self-contained patterns must have self-contained replacements
+    (no references to outside context if none existed in pattern)
+  ]]--
+  law.context_independence: R |> forall [rule ->
+    rule.0 |> has_external_refs |> not ->
+    rule.1 |> has_external_refs |> not
+  ]
+
+  --[[
+    Implementation Details
+  ]]--
+
+  --[[
+    Implementation of pattern matching against a net
+  ]]--
+  match: Pattern * !Net -> Bool [pat net ->
+    -- Find all potential mappings from pattern nodes to net nodes
+    pat |> get_agents -> pattern_agents
+    net |> Net.get_agents -> net_agents
+
+    -- For each possible root mapping, try to match the full pattern
+    [a in pattern_agents, n in net_agents] [
+      a |> agent_type veq n |> agent_type -> [
+        -- Try to match starting from this root
+        pat n |> match_from_root -> result
+        result -> [return true]
+      ]
+    ] |> foreach
+
+    -- No complete match found
+    false
+  ]
+
+  --[[
+    Implementation of rule application
+  ]]--
+  apply: !(alpha * rho) * !Net -o> Net [rule net ->
+    rule.0 -> pattern
+    rule.1 -> replacement
+
+    -- Find all matches of the pattern in the net
+    pattern net |> find_matches -> matches
+
+    -- If no matches, return the original net
+    matches |> Prim.rho veq 0 -> [return net]
+
+    -- Apply the rule to the first match
+    matches[0] -> match_data
+
+    -- Remove matched subgraph from net
+    net match_data |> remove_subgraph -> reduced_net
+
+    -- Instantiate replacement
+    replacement match_data |> instantiate -> replacement_net
+
+    -- Merge the replacement with the reduced net
+    reduced_net replacement_net |> Prim.oplus
+  ]
+
+  --[[
+    Implementation of rule composition
+  ]]--
+  compose_rules: !(alpha * rho) * !(alpha * rho) -o> ?(alpha * rho) [rule1 rule2 ->
+    rule1.1 -> r1
+    rule2.0 -> a2
+
+    -- Check if the replacement of rule1 can match the pattern of rule2
+    r1 a2 |> can_match -> matchable
+
+    matchable |> not -> [return ?None]
+
+    -- Find the overlap between r1 and a2
+    r1 a2 |> find_overlap -> overlap
+
+    -- Create new pattern and replacement
+    rule1.0 -> new_pattern
+    rule2.1 -> new_replacement
+
+    -- Adjust the new pattern and replacement based on the overlap
+    new_pattern overlap |> adjust_pattern -> adjusted_pattern
+    new_replacement overlap |> adjust_replacement -> adjusted_replacement
+
+    -- Return the composed rule
+    ?Some((adjusted_pattern, adjusted_replacement))
   ]
 }

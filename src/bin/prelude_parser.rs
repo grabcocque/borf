@@ -58,44 +58,58 @@ fn run(dir_path: &str, verbose: bool) -> Result<(), Box<dyn Error>> {
                         let mut type_count = 0;
                         let mut op_count = 0;
                         let mut fn_count = 0;
-
+                        let mut dep_count = 0;
+                        let mut entity_count = 0;
                         for decl in &module.declarations {
                             match decl {
-                                borf::parser::ast::Declaration::TypeDecl(type_decl) => {
-                                    type_count += type_decl.names.len();
+                                borf::parser::ast::Declaration::Type(name, _, _) => {
+                                    type_count += 1;
                                     if verbose {
-                                        for name in &type_decl.names {
-                                            println!("    * Type: {}", name);
-                                        }
+                                        println!("    - Type: {}", name);
                                     }
                                 }
-                                borf::parser::ast::Declaration::OpDecl(op_decl) => {
-                                    op_count += op_decl.names.len();
+                                borf::parser::ast::Declaration::Operation(name, _, _) => {
+                                    op_count += 1;
                                     if verbose {
-                                        for name in &op_decl.names {
-                                            println!("    * Operator: {}", name);
-                                        }
+                                        println!("    - Operation: {}", name);
                                     }
                                 }
-                                borf::parser::ast::Declaration::FnDecl(fn_decl) => {
+                                borf::parser::ast::Declaration::Function(name, _, _, _) => {
+                                    // Counts both declarations and implementations now
                                     fn_count += 1;
                                     if verbose {
-                                        println!("    * Function: {}", fn_decl.name);
+                                        println!("    - Function: {}", name);
                                     }
                                 }
-                                borf::parser::ast::Declaration::FnImpl(fn_impl) => {
-                                    fn_count += 1;
+                                borf::parser::ast::Declaration::Dependency(
+                                    import,
+                                    export,
+                                    direct,
+                                    _,
+                                ) => {
+                                    dep_count += 1;
                                     if verbose {
-                                        println!("    * Function: {}", fn_impl.name);
+                                        println!(
+                                            "    - Dependency: {} {} {}",
+                                            import,
+                                            if *direct { "=>" } else { "<=" },
+                                            export
+                                        );
                                     }
                                 }
-                                _ => {}
+                                borf::parser::ast::Declaration::Entity(name, _, _, _) => {
+                                    entity_count += 1;
+                                    if verbose {
+                                        println!("    - Entity: {}", name);
+                                    }
+                                }
                             }
                         }
 
-                        println!("  - Types: {}", type_count);
-                        println!("  - Operators: {}", op_count);
-                        println!("  - Functions: {}", fn_count);
+                        println!(
+                            "    Types: {}, Ops: {}, Fns: {}, Deps: {}, Entities: {}",
+                            type_count, op_count, fn_count, dep_count, entity_count
+                        );
                     }
                 }
                 Err(e) => {

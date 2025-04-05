@@ -10,7 +10,7 @@
 
 @Core: {
   typ: {
-    T.T R.R Cat.Cat Mod.Mod Grph.Grph Wire.Wire Net.Net IO.IO RW.Rewrite Red.Red Term.Term Xf.Xf Prim.Prim Flp.Flp Std.Std Hom.Hom
+    T.T R.R Cat.Cat Mod.Mod Grph.Grph Wire.Wire Net.Net IO.IO RW.Rewrite Red.Red Term.Term Cata.Proj Prim.Prim Flp.Flp Std.Std Hom.Hom
     T.Sym T.Any T.Void RW.Pattern
     T.Seq
     Flp.!Result
@@ -83,13 +83,13 @@
     Term.terminates Term.detect_cycles Term.apply_k Term.reaches_normal_form Term.has_cycle
     Term.io_processed Term.io_agents_processed Term.io_terminates
 
-    -- Xf
-    Xf.Xf Xf.string_to_net Xf.net_to_string Xf.graph_to_wire Xf.wire_to_net
-    Xf.net_to_rewrite Xf.rewrite_to_red Xf.map Xf.process_files
-    Xf.string_to_wire Xf.string_to_runnable_net Xf.full_pipeline
-    Xf.string_to_syntax Xf.syntax_to_string Xf.syntax_to_net
-    Xf.net_to_syntax Xf.expr_to_net Xf.net_to_expr
-    Xf.eval_syntax Xf.transform_syntax Xf.syntax_pipeline
+    -- Proj
+    Cata.Proj Cata.string_to_net Cata.net_to_string Cata.graph_to_wire Cata.wire_to_net
+    Cata.net_to_rewrite Cata.rewrite_to_red Cata.map Cata.process_files
+    Cata.string_to_wire Cata.string_to_runnable_net Cata.full_pipeline
+    Cata.string_to_syntax Cata.syntax_to_string Cata.syntax_to_net
+    Cata.net_to_syntax Cata.expr_to_net Cata.net_to_expr
+    Cata.eval_syntax Cata.transform_syntax Cata.syntax_pipeline
 
     -- Std
     Std.Map.empty Std.Map.insert Std.Map.lookup Std.Map.contains_key
@@ -132,7 +132,7 @@
     (@Core, Term, true),
     (@Core, Red, true),
     (@Core, Std, true),
-    (@Core, Xf, true),
+    (@Core, Proj, true),
     (@Core, Mod, true),
     (@Core, Hom, true), -- Add dependency on Hom module
   }
@@ -242,7 +242,7 @@
     Mod.OpSym iff e |> in op or_else
     Mod.FnSym iff e |> in fn or_else
     Mod.TypeSym iff e |> in syms or_else
-    Mod.ModSym iff e |> in {T R Cat Mod Grph Wire Net IO Rewrite Red Term Xf Prim Flp Std Hom Core} or_else
+    Mod.ModSym iff e |> in {T R Cat Mod Grph Wire Net IO Rewrite Red Term Proj Prim Flp Std Hom Core} or_else
     Mod.TypeSym
   ] match
 

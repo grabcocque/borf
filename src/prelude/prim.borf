@@ -2,12 +2,17 @@
   Core Language Prim
 
   This module defines the fundamental primitive operations that form the foundation
-  of the Borf language. These Prim represent the core computational capabilities
+  of the Borf language. These primitives represent the core computational capabilities
   that are directly implemented by the runtime system rather than being defined in
   terms of other operations. They provide essential functionality for manipulating
   data, performing logic, and interacting with the system.
-]]--
 
+  Notation:
+  - 'a -o> b' indicates a function that consumes its input (linear)
+  - '&a -> b' indicates a function that borrows but doesn't consume its input
+  - '?a' represents an optional type
+  - '!a' represents a linear type
+]]--
 
 @Prim: {
   deps: {
@@ -15,22 +20,79 @@
   }
 
   typ: {
-    Prim
+    -- Base Types
+    Unit    -- Unit/void type
+    Bool    -- Boolean type
+    Z       -- Integer type
+    Float   -- Floating point type
+    S       -- String type
+    T       -- Type of types
+
+    -- Collection Types
+    [a]        -- List of elements
+    Seq(a)     -- Sequence of elements
+    {a}        -- Set of elements
+    (k:-> v)   -- Map from k to v
+
+    -- Type Constructors
+    (a * b)    -- Product type
+    ?a         -- Optional value
+    !a         -- Linear type
+    Result(a)  -- Result type (success or error)
+
+    -- Advanced Types
+    Pattern    -- Pattern for matching
+    Net        -- Interaction net
+    Op         -- I/O operation
+    Src        -- I/O source
   }
 
   op: {
-    rho map fold concat transpose at slice where
-    compose lookup update veq teq ceq seq typeof
-    oplus ominus match eval format state io
-    insert cons head tail append_string
+    -- Core Operations
+    rho typeof eval format state
+
+    -- Collection Operations
+    map fold concat transpose at slice where
+    cons head tail reverse split join range
+    zip unzip
+
+    -- Map Operations
+    lookup update insert keys values remove_key
+
+    -- Set Operations
     cup cap subseteq in
-    forall exists and or not implies iff
-    pipe fcomp
-    reverse split join range zip unzip keys values remove_key
+    forall exists
+
+    -- String Operations
+    append_string
+
+    -- Logical Operations
+    and or not implies iff
+
+    -- Equality Operations
+    veq teq ceq seq
+
+    -- Function Composition
+    compose pipe fcomp
+
+    -- Pattern Matching
+    match
+
+    -- I/O Operations
+    io
+
+    -- Interaction Net Operations
+    oplus ominus
+
+    -- Resource Management
+    clone consume
+
+    -- Error Handling
+    ok error unwrap match_result
   }
 
   fn: {
-
+    -- Derived functions (implemented in terms of primitives)
   }
 
   E: typ cup op cup fn
@@ -40,280 +102,261 @@
   vis: E |> [e -> true]
 
   --[[
-    rho - Reflects a value to its runtime representation
+    Core Operations
   ]]--
-  rho: Any -> Z
 
-  --[[
-    Higher-order function that applies a function to each element of a collection
-  ]]--
-  map: (a -> b) * [a] -> [b]
+  -- Reflects a value to its runtime representation
+  rho: a -> Z
 
-  --[[
-    Reduces a collection to a single value using an accumulator function
-  ]]--
-  fold: (b * a -> b) * b * [a] -> b
+  -- Returns the type of a value
+  typeof: a -> T
 
-  --[[
-    Combines multiple collections into one
-  ]]--
-  concat: [a] * [a] -> [a]
-
-  --[[
-    Transforms a collection of pairs into a pair of collections
-  ]]--
-  transpose: [a * b] -> [b * a]
-
-  --[[
-    Accesses an element at a specific index
-  ]]--
-  at: [a] * Z -> a
-
-  --[[
-    Extracts a subcollection between two indices
-  ]]--
-  slice: [a] * Z * Z -> [a]
-
-  --[[
-    Finds indices of elements that satisfy a predicate
-  ]]--
-  where: (a -> Bool) * [a] -> [Z]
-
-  --[[
-    Function composition - applies g after f
-  ]]--
-  compose: (b -> c) * (a -> b) -> (a -> c)
-
-  --[[
-    Retrieves a value from a map by key
-  ]]--
-  lookup: Map * Any -> ?Any
-
-  --[[
-    Updates a map by inserting or modifying a key-value pair
-  ]]--
-  update: Map * Any * Any -> Map
-
-  --[[
-    Specialized fold for sequences
-  ]]--
-  fold: (a * b -> a) * a * Seq(b) -> a
-
-  --[[
-    Specialized map for sequences
-  ]]--
-  map: (a -> b) * Seq(a) -> Seq(b)
-
-  --[[
-    Specialized filter for sequences
-  ]]--
-  where: (a -> Bool) * Seq(a) -> Seq(a)
-
-  --[[
-    Flattens a sequence of sequences
-  ]]--
-  concat: Seq(Seq(a)) -> Seq(a)
-
-  --[[
-    Value equality - compares two values for equality
-  ]]--
-  veq: Any * Any -> Bool
-
-  --[[
-    Type equality - compares two types for equality
-  ]]--
-  teq: Any * Any -> Bool
-
-  --[[
-    Category equality - compares objects within a category
-  ]]--
-  ceq: Any * Any -> Bool
-
-  --[[
-    Sequence equality - compares two sequences
-  ]]--
-  seq: Any * Any -> Bool
-
-  --[[
-    Returns the type of a value
-  ]]--
-  typeof: Any -> T
-
-  --[[
-    Combines two interaction nets
-  ]]--
-  oplus: Net * Net -> Net
-
-  --[[
-    Removes one interaction net from another
-  ]]--
-  ominus: Net * Net -> Net
-
-  --[[
-    Pattern matching for interaction nets
-  ]]--
-  match: Pattern * Net -> {Net}
-
-  --[[
-    Evaluates a string as code
-  ]]--
+  -- Evaluates a string as code
   eval: S -> ?Net
 
-  --[[
-    Formats a net as a string representation
-  ]]--
-  format: Net -> ?S
+  -- Formats a value as a string representation
+  format: a -> ?S
 
-  --[[
-    Checks the state of a boolean condition
-  ]]--
+  -- Checks the state of a boolean condition
   state: B -> Bool
 
   --[[
-    Performs I/O operations with a source and string data
+    Collection Operations - Unified Interface
   ]]--
-  io: Op * Src * S -> ?S
+
+  -- Higher-order function that applies a function to each element of a collection
+  map: (a -o> b) * !([a]) -o> [b]
+  map: (a -o> b) * !(Seq(a)) -o> Seq(b)
+  map: (a -o> b) * !({a}) -o> {b}
+  map: (a -o> b) * !(k:-> a) -o> (k:-> b)  -- Maps over values only
+
+  -- Reduces a collection to a single value using an accumulator function
+  fold: (b * a -o> b) * b * !([a]) -o> b
+  fold: (b * a -o> b) * b * !(Seq(a)) -o> b
+  fold: (b * a -o> b) * b * !({a}) -o> b
+  fold: (b * (k * a) -o> b) * b * !(k:-> a) -o> b  -- Fold gets key-value pairs
+
+  -- Filters elements that satisfy a predicate
+  filter: (a -> Bool) * !([a]) -o> [a]
+  filter: (a -> Bool) * !(Seq(a)) -o> Seq(a)
+  filter: (a -> Bool) * !({a}) -o> {a}
+  filter: ((k * a) -> Bool) * !(k:-> a) -o> (k:-> a)
+
+  -- Combines multiple collections into one
+  concat: !([a]) * !([a]) -o> [a]
+  concat: !(Seq(a)) * !(Seq(a)) -o> Seq(a)
+  concat: !({a}) * !({a}) -o> {a}  -- Same as cup
+
+  -- Transforms a collection of pairs
+  transpose: !([(a * b)]) -o> [(b * a)]
+  transpose: !(Seq(a * b)) -o> Seq(b * a)
+
+  -- Accesses an element at a specific index (safe)
+  at: [a] * Z -> ?a
+  at: Seq(a) * Z -> ?a
+
+  -- Extracts a subcollection between two indices
+  slice: [a] * Z * Z -> [a]
+  slice: Seq(a) * Z * Z -> Seq(a)
+
+  -- Finds elements or indices that satisfy a predicate
+  where: (a -> Bool) * !([a]) -o> [a]      -- Filter elements
+  where_index: (a -> Bool) * [a] -> [Z]  -- Find indices
+
+  -- Adds an element to the beginning of a sequence
+  cons: a * !([a]) -o> [a]
+  cons: a * !(Seq(a)) -o> Seq(a)
+
+  -- Returns the first element of a sequence if non-empty
+  head: [a] -> ?a
+  head: Seq(a) -> ?a
+
+  -- Returns the sequence without its first element if non-empty
+  tail: [a] -> ?[a]
+  tail: Seq(a) -> ?Seq(a)
+
+  -- Reverses the elements of a collection
+  reverse: !([a]) -o> [a]
+  reverse: !(Seq(a)) -o> Seq(a)
+
+  -- Splits a string by a delimiter string
+  split: S * S -> [S]
+
+  -- Joins a list of strings with a separator string
+  join: S * [S] -> S
+
+  -- Generates a sequence of integers from start (inclusive) to end (exclusive)
+  range: Z * Z -> Seq(Z)
+
+  -- Combines two collections element-wise into pairs
+  zip: !([a]) * !([b]) -o> [(a * b)]
+  zip: !(Seq(a)) * !(Seq(b)) -o> Seq(a * b)
+
+  -- Splits a collection of pairs into two separate collections
+  unzip: !([(a * b)]) -o> ([a] * [b])
+  unzip: !(Seq(a * b)) -o> (Seq(a) * Seq(b))
 
   --[[
-    Inserts a key-value pair into a map
+    Map Operations
   ]]--
-  insert: (k:-> v) * k * v -> (k:-> v)
 
-  --[[
-    Looks up a value in a map by key
-  ]]--
+  -- Retrieves a value from a map by key
   lookup: (k:-> v) * k -> ?v
 
-  --[[
-    Adds an element to the beginning of a sequence
-  ]]--
-  cons: a * (Seq a) -> (Seq a)
+  -- Updates a map by inserting or modifying a key-value pair
+  update: !(k:-> v) * k * v -o> (k:-> v)
+
+  -- Inserts a key-value pair into a map
+  insert: !(k:-> v) * k * v -o> (k:-> v)
+
+  -- Returns a list of keys from a map
+  keys: (k:-> v) -> [k]
+
+  -- Returns a list of values from a map
+  values: (k:-> v) -> [v]
+
+  -- Removes a key-value pair from a map by key
+  remove_key: !(k:-> v) * k -o> (k:-> v)
 
   --[[
-    Returns the first element of a sequence if non-empty
+    Set Operations
   ]]--
-  head: (Seq a) -> ?a
 
-  --[[
-    Returns the sequence without its first element if non-empty
-  ]]--
-  tail: (Seq a) -> ?(Seq a)
+  -- Set union operation
+  cup: !({a}) * !({a}) -o> {a}
 
-  --[[
-    Concatenates two strings
-  ]]--
-  append_string: S * S -> S
+  -- Set intersection operation
+  cap: !({a}) * !({a}) -o> {a}
 
-  --[[
-    Set union operation
-  ]]--
-  cup: {a} * {a} -> {a}
-
-  --[[
-    Set intersection operation
-  ]]--
-  cap: {a} * {a} -> {a}
-
-  --[[
-    Checks if one set is a subset of another
-  ]]--
+  -- Checks if one set is a subset of another
   subseteq: {a} * {a} -> Bool
 
-  --[[
-    Tests if an element is a member of a set
-  ]]--
+  -- Tests if an element is a member of a set
   in: a * {a} -> Bool
 
-  --[[
-    Universal quantification over a set
-  ]]--
+  -- Universal quantification over a set
   forall: (a -> Bool) * {a} -> Bool
 
-  --[[
-    Existential quantification over a set
-  ]]--
+  -- Existential quantification over a set
   exists: (a -> Bool) * {a} -> Bool
 
   --[[
-    Logical AND
+    String Operations
   ]]--
+
+  -- Concatenates two strings
+  append_string: !S * !S -o> S
+
+  --[[
+    Logical Operations
+  ]]--
+
+  -- Logical AND
   and: Bool * Bool -> Bool
 
-  --[[
-    Logical OR
-  ]]--
+  -- Logical OR
   or: Bool * Bool -> Bool
 
-  --[[
-    Logical NOT
-  ]]--
+  -- Logical NOT
   not: Bool -> Bool
 
-  --[[
-    Logical implication (if-then)
-  ]]--
+  -- Logical implication (if-then)
   implies: Bool * Bool -> Bool
 
-  --[[
-    Logical equivalence (if and only if)
-  ]]--
+  -- Logical equivalence (if and only if)
   iff: Bool * Bool -> Bool
 
   --[[
-    Forward function application (x |> f becomes pipe(x, f))
+    Equality Operations
   ]]--
+
+  -- Value equality - compares two values for equality
+  veq: a * a -> Bool
+
+  -- Type equality - compares two types for equality
+  teq: T * T -> Bool
+
+  -- Category equality - compares objects within a category
+  ceq: a * a -> Bool
+
+  -- Sequence equality - compares two sequences
+  seq: [a] * [a] -> Bool
+  seq: Seq(a) * Seq(a) -> Bool
+
+  --[[
+    Function Composition
+  ]]--
+
+  -- Function composition - applies g after f
+  compose: (b -> c) * (a -> b) -> (a -> c)
+  compose: (b -o> c) * (a -o> b) -o> (a -o> c)
+
+  -- Forward function application (x |> f becomes pipe(x, f))
   pipe: a * (a -> b) -> b
+  pipe: !a * (a -o> b) -o> b
 
-  --[[
-    Forward function composition (f >> g becomes fcomp(f, g))
-  ]]--
+  -- Forward function composition (f >> g becomes fcomp(f, g))
   fcomp: (a -> b) * (b -> c) -> (a -> c)
+  fcomp: (a -o> b) * (b -o> c) -o> (a -o> c)
 
   --[[
-    Reverses the elements of a list or sequence
+    Pattern Matching
   ]]--
-  reverse: [a] -> [a]
-  reverse: Seq(a) -> Seq(a)
+
+  -- Pattern matching for interaction nets
+  match: Pattern * Net -> {Net}
+
+  -- Generic pattern matching
+  match_value: !a * [(Pattern * (b -o> c))] -o> c
 
   --[[
-    Splits a string by a delimiter string
+    I/O Operations
   ]]--
-  split: S * S -> [S]
+
+  -- Performs I/O operations with a source and string data
+  io: Op * Src * S -> ?S
+
+  -- File operations
+  read_file: !S -o> Result(S)
+  write_file: !S * !S -o> Result(Unit)
+
+  -- Console operations
+  print: !S -o> Unit
+  input: Unit -o> S
 
   --[[
-    Joins a list of strings with a separator string
+    Interaction Net Operations
   ]]--
-  join: S * [S] -> S
+
+  -- Combines two interaction nets
+  oplus: !Net * !Net -o> Net
+
+  -- Removes one interaction net from another
+  ominus: !Net * !Net -o> Net
 
   --[[
-    Generates a sequence of integers from start (inclusive) to end (exclusive)
+    Resource Management
   ]]--
-  range: Z * Z -> Seq(Z)
+
+  -- Clone a value (when permitted)
+  clone: a -> a  -- Only available for copyable types
+
+  -- Explicitly consume a value
+  consume: !a -o> Unit
 
   --[[
-    Combines two collections element-wise into pairs
+    Error Handling
   ]]--
-  zip: [a] * [b] -> [a * b]
-  zip: Seq(a) * Seq(b) -> Seq(a * b)
 
-  --[[
-    Splits a collection of pairs into two separate collections
-  ]]--
-  unzip: [a * b] -> ([a] * [b])
-  unzip: Seq(a * b) -> (Seq(a) * Seq(b))
+  -- Creates a successful result
+  ok: !a -o> Result(a)
 
-  --[[
-    Returns a list of keys from a map
-  ]]--
-  keys: (k:-> v) -> [k]
+  -- Creates an error result
+  error: !S -o> Result(a)
 
-  --[[
-    Returns a list of values from a map
-  ]]--
-  values: (k:-> v) -> [v]
+  -- Unwraps a result, panicking on error
+  unwrap: !Result(a) -o> a
 
-  --[[
-    Removes a key-value pair from a map by key
-  ]]--
-  remove_key: (k:-> v) * k -> (k:-> v)
+  -- Safely handles a result
+  match_result: !Result(a) * (a -o> b) * (S -o> b) -o> b
 }

@@ -1,25 +1,31 @@
 --[[
-  Graph Structure
+  Linear Graph Structure
 
-  This module defines the core graph theoretical foundations, providing
-  abstractions for nodes, edges, and their relationships. It supports both
-  basic graph operations and category-theoretic interpretations of graphs,
-  with labeled nodes and edges.
+  This module defines the core graph theoretical foundations using linear types,
+  providing abstractions for nodes, edges, and their relationships. It supports
+  both basic graph operations and category-theoretic interpretations of graphs,
+  with labeled nodes and edges. Linear typing ensures proper resource management
+  when manipulating and transforming graph structures.
 ]]--
-
 
 @Grph: {
   typ: {
-    Grph
+    !Grph !Node !Edge !Path !NodeLabel !EdgeLabel
   }
 
   op: {
-    lambdaN lambdaE
+    + -- edge composition
+    @ -- node/edge access
+    ~ -- edge reversal
   }
 
   fn: {
-    src tgt loop comp id node_eq
-    law.loop_src_tgt law.comp_src_tgt law.dec_comp law.dec_loop
+    new_graph add_node add_edge remove_node remove_edge
+    src tgt get_node get_edge neighbors incoming outgoing
+    label_node label_edge get_node_label get_edge_label
+    loop connect is_loop is_connected path
+    node_eq edge_eq subgraph merge transform veq constrain
+    to_category from_category visualize
   }
 
   E: typ cup op cup fn
@@ -29,95 +35,231 @@
   vis: E |> [e -> true]
 
   --[[
-    N represents the set of nodes in a graph
+    !Grph represents a graph with nodes and edges as linear resources
   ]]--
-  N
+  !Grph: { nodes: {!Node}, edges: {!Edge} }
 
   --[[
-    E represents the set of edges in a graph
+    !Node represents a node in a graph
   ]]--
-  E
+  !Node: { id: Z, label: !NodeLabel }
+
+  --[[
+    !Edge represents a directed edge between nodes
+  ]]--
+  !Edge: { id: Z, source: Z, target: Z, label: !EdgeLabel }
+
+  --[[
+    !Path represents a sequence of connected edges
+  ]]--
+  !Path: { edges: {!Edge}, start: !Node, end: !Node }
+
+  --[[
+    !NodeLabel represents the label attached to a node
+  ]]--
+  !NodeLabel: Any
+
+  --[[
+    !EdgeLabel represents the label attached to an edge
+  ]]--
+  !EdgeLabel: Any
+
+  --[[
+    Creates a new empty graph
+  ]]--
+  new_graph: -o> !Grph
+
+  --[[
+    Adds a node to the graph
+  ]]--
+  add_node: !Grph * !NodeLabel -o> (!Grph * !Node)
+
+  --[[
+    Adds an edge between nodes
+  ]]--
+  add_edge: !Grph * !Node * !Node * !EdgeLabel -o> (!Grph * !Edge)
+
+  --[[
+    Removes a node and all its connected edges
+  ]]--
+  remove_node: !Grph * !Node -o> !Grph
+
+  --[[
+    Removes an edge
+  ]]--
+  remove_edge: !Grph * !Edge -o> !Grph
 
   --[[
     Returns the source node of an edge
   ]]--
-  src: E -> N
+  src: !Grph * !Edge -o> (!Grph * !Node)
 
   --[[
     Returns the target node of an edge
   ]]--
-  tgt: E -> N
+  tgt: !Grph * !Edge -o> (!Grph * !Node)
 
   --[[
-    Node labeling function - maps nodes to their labels
+    Retrieves a node by ID
   ]]--
-  lambdaN: N -> X
+  get_node: !Grph * Z -o> (!Grph * !Node)
 
   --[[
-    Edge labeling function - maps edges to their labels
+    Retrieves an edge by ID
   ]]--
-  lambdaE: E -> X
+  get_edge: !Grph * Z -o> (!Grph * !Edge)
 
   --[[
-    Category-theoretic interpretations of graphs:
-    - O: objects are nodes
-    - M: morphisms are edges
+    Gets all neighboring nodes
   ]]--
-  O: N
-  M: E
-  dom: src
-  cod: tgt
+  neighbors: !Grph * !Node -o> (!Grph * {!Node})
+
+  --[[
+    Gets all incoming edges to a node
+  ]]--
+  incoming: !Grph * !Node -o> (!Grph * {!Edge})
+
+  --[[
+    Gets all outgoing edges from a node
+  ]]--
+  outgoing: !Grph * !Node -o> (!Grph * {!Edge})
+
+  --[[
+    Labels a node
+  ]]--
+  label_node: !Grph * !Node * !NodeLabel -o> (!Grph * !Node)
+
+  --[[
+    Labels an edge
+  ]]--
+  label_edge: !Grph * !Edge * !EdgeLabel -o> (!Grph * !Edge)
+
+  --[[
+    Gets the label of a node
+  ]]--
+  get_node_label: !Grph * !Node -o> (!Grph * !Node * !NodeLabel)
+
+  --[[
+    Gets the label of an edge
+  ]]--
+  get_edge_label: !Grph * !Edge -o> (!Grph * !Edge * !EdgeLabel)
 
   --[[
     Creates a self-loop on a node
   ]]--
-  loop: N -> E
+  loop: !Grph * !Node * !EdgeLabel -o> (!Grph * !Edge)
 
   --[[
-    Composes two edges when the target of the first equals the source of the second
+    Connects two nodes with an edge
   ]]--
-  comp: E * E -> E [e1 e2 ->
-    e1 |> tgt veq (e2 |> src) |> constrain -> _
-    e1 e2 |> comp
-  ]
+  connect: !Grph * !Node * !Node * !EdgeLabel -o> (!Grph * !Edge)
 
   --[[
-    Identity edge for a node (equivalent to its self-loop)
+    Checks if an edge is a loop
   ]]--
-  id: N -> E [n -> n |> loop]
+  is_loop: !Grph * !Edge -o> (!Grph * !Edge * !Bool)
 
   --[[
-    Law: the source and target of a loop edge are the same node
+    Checks if two nodes are directly connected
   ]]--
-  law.loop_src_tgt: N |> forall [n ->
-    n |> loop |> src veq n and
-    n |> loop |> tgt veq n
-  ]
+  is_connected: !Grph * !Node * !Node -o> (!Grph * !Node * !Node * !Bool)
 
   --[[
-    Law: the source and target of composed edges preserve the outer source and target
+    Creates a path between nodes if one exists
   ]]--
-  law.comp_src_tgt: E * E |> constrain [e1 e2 -> e1 |> tgt veq (e2 |> src)] |> forall [e1 e2 ->
-    e1 e2 |> comp |> src veq (e1 |> src) and
-    e1 e2 |> comp |> tgt veq (e2 |> tgt)
+  path: !Grph * !Node * !Node -o> (!Grph * !Node * !Node * !Path?)
+
+  --[[
+    Edge composition - creates a new edge representing the composition
+    of two edges where the target of first equals source of second
+  ]]--
+  +: !Grph * !Edge * !Edge -o> (!Grph * !Edge * !Edge * !Edge?) [g e1 e2 ->
+    -- First check if edges can be composed
+    g |> is_composable(e1, e2) |> match(
+      {g, e1, e2, true} -> {
+        -- Get target of e1 and source of e2
+        let {g1, n1} = g |> tgt(e1);
+        let {g2, n2} = g1 |> src(e2);
+
+        -- Check if they are the same node
+        if n1.id == n2.id {
+          -- Get labels
+          let {g3, e1, l1} = g2 |> get_edge_label(e1);
+          let {g4, e2, l2} = g3 |> get_edge_label(e2);
+
+          -- Create new composite edge
+          let {g5, e3} = g4 |> add_edge(
+            e1.source,
+            e2.target,
+            compose_labels(l1, l2)
+          );
+
+          {g5, e1, e2, Some(e3)}
+        } else {
+          {g, e1, e2, None}
+        }
+      },
+      {g, e1, e2, false} -> {g, e1, e2, None}
+    )
   ]
 
   --[[
     Node equality based on their labels
   ]]--
-  node_eq: N * N -> Bool [n1 n2 -> n1 |> lambdaN seq (n2 |> lambdaN)]
+  node_eq: !Grph * !Node * !Node -o> (!Grph * !Node * !Node * !Bool)
 
   --[[
-    Law: edge composition preserves the relationship between edge labels
+    Edge equality based on endpoints and labels
   ]]--
-  law.dec_comp: E * E |> constrain [e1 e2 -> e1 |> tgt veq (e2 |> src)] |> forall [e1 e2 ->
-    e1 e2 |> comp |> lambdaE |> R.rel ((e1 |> lambdaE) * (e2 |> lambdaE))
-  ]
+  edge_eq: !Grph * !Edge * !Edge -o> (!Grph * !Edge * !Edge * !Bool)
 
   --[[
-    Law: the label of a loop edge relates to the label of its node
+    Creates a subgraph from a subset of nodes
   ]]--
-  law.dec_loop: N |> forall [n ->
-    n |> loop |> lambdaE |> R.rel (n |> lambdaN)
-  ]
+  subgraph: !Grph * {!Node} -o> (!Grph * !Grph)
+
+  --[[
+    Merges two graphs
+  ]]--
+  merge: !Grph * !Grph -o> !Grph
+
+  --[[
+    Transforms a graph by applying functions to all nodes and edges
+  ]]--
+  transform: !Grph * (!NodeLabel -o> !NodeLabel) * (!EdgeLabel -o> !EdgeLabel) -o> !Grph
+
+  --[[
+    Value equality operator
+  ]]--
+  veq: * * -o> !Bool
+
+  --[[
+    Constraint function
+  ]]--
+  constrain: (* -o> !Bool) * * -o> *?
+
+  --[[
+    Converts a graph to a category
+  ]]--
+  to_category: !Grph -o> Cat.Cat
+
+  --[[
+    Creates a graph from a category
+  ]]--
+  from_category: Cat.Cat -o> !Grph
+
+  --[[
+    Produces a visualization of the graph
+  ]]--
+  visualize: !Grph -o> (!Grph * String)
+
+  --[[
+    Internal function to check if edges can be composed
+  ]]--
+  is_composable: !Grph * !Edge * !Edge -o> (!Grph * !Edge * !Edge * !Bool)
+
+  --[[
+    Internal function to compose edge labels
+  ]]--
+  compose_labels: !EdgeLabel * !EdgeLabel -o> !EdgeLabel
 }

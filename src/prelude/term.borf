@@ -5,24 +5,41 @@
   It detects cycles in reduction sequences, performs bounded evaluation,
   and verifies IO completion, ensuring that programs have well-defined
   behavior and don't enter infinite loops without progress.
+
+  Notation:
+  - 'a -o> b' indicates a function that consumes its input (linear)
+  - '!a' represents a linear type
 ]]--
 
 
 @Term: {
-  B; P; P -> P w; P -> Bool pi; Net -> Net step; Net -> Net red; Net -> Bool normal; Net -> [Net] history
+  B; P; P -> P w; P -> Bool pi; Net -> Net step; !Net -o> Net red; Net -> Bool normal; !Net -o> [Net] history
 
   typ: {
-
+    -- Types of termination results
+    TermResult       -- Information about termination behavior
+    CycleInfo        -- Information about detected cycles
+    BoundedResult    -- Result of bounded evaluation
+    TerminationProof -- Formal proof of termination
+    TermWitness      -- Witness for termination or non-termination
   }
 
   op: {
-
+    terminates detect_cycles apply_k reaches_normal_form has_cycle
+    io_processed io_agents_processed io_terminates
+    explain_termination smart_terminate bounded_eval find_minimum_cycle
+    analyze_convergence structural_termination stage_analysis
+    measure_complexity live_variables analyze_recursion
+    construct_proof find_counterexample
   }
 
   fn: {
     terminates detect_cycles apply_k reaches_normal_form has_cycle
     io_processed io_agents_processed io_terminates range
     explain_termination smart_terminate bounded_eval find_minimum_cycle
+    analyze_convergence structural_termination stage_analysis
+    measure_complexity live_variables analyze_recursion
+    construct_proof find_counterexample
   }
 
   E: typ cup op cup fn
@@ -30,6 +47,10 @@
   tau: T.tau
 
   vis: E |> [e -> true]
+
+  --[[
+    Core Termination Analysis
+  ]]--
 
   --[[
     Determines if a net will eventually terminate (reach normal form or cycle)
@@ -44,9 +65,9 @@
   detect_cycles: [Net] -> {(Z * Z)}
 
   --[[
-    Applies at most k reduction steps to a net
+    Applies at most k reduction steps to a net (consuming the net)
   ]]--
-  apply_k: Z * Net -> Net [k n ->
+  apply_k: Z * !Net -o> Net [k n ->
     n iff k <= 0 or_else n |> Red.step |> apply_k (k - 1)
   ]
 
@@ -120,7 +141,7 @@
   --[[
     Provides a detailed explanation of why a program does not terminate
   ]]--
-  explain_termination: Net -> Str [n ->
+  explain_termination: Net -> S [n ->
     n |> terminates -> does_terminate
 
     "Program terminates successfully." iff does_terminate or_else
@@ -141,7 +162,7 @@
     Smarter termination check that applies increasingly large bounds
     and returns detailed information about the termination behavior
   ]]--
-  smart_terminate: Net -> {status: Str, steps: Z, normal_form: Bool, cycle: (Z * Z)} [n ->
+  smart_terminate: !Net -o> {status: S, steps: Z, normal_form: Bool, cycle: (Z * Z)} [n ->
     -- Try with exponentially increasing bounds
     [10, 100, 1000, 10000] |> Prim.find_map [bound ->
       n |> bounded_eval bound -> result
@@ -161,14 +182,193 @@
   ]
 
   --[[
-    Evaluates a net for at most k steps and returns information about the result
+    Evaluates a net for at most k steps and returns information about the result (consuming the net)
   ]]--
-  bounded_eval: Z * Net -> {steps: Z, normal_form: Bool, result: Net} [k n ->
+  bounded_eval: Z * !Net -o> {steps: Z, normal_form: Bool, result: Net} [k n ->
     k |> range 0 |> Prim.find_map [i ->
       n |> apply_k i -> result
       {steps: i, normal_form: true, result: result} iff result |> Red.normal or_else null
     ] or {steps: k, normal_form: false, result: n |> apply_k k}
   ]
+
+  --[[
+    Advanced Termination Analysis
+  ]]--
+
+  --[[
+    Analyzes the convergence rate of a reduction sequence
+  ]]--
+  analyze_convergence: !Net -o> {terminates: Bool, bound: ?Z, rate: ?S} [n ->
+    n |> smart_terminate -> result
+
+    result.normal_form -> [
+      {
+        terminates: true,
+        bound: ?Some(result.steps),
+        rate: ?Some("Converges in " ++ result.steps |> Prim.to_str ++ " steps")
+      }
+    ] or_else [
+      result.status |> Prim.eq "Cycles" -> [
+        cycle_length = result.cycle[1] - result.cycle[0]
+        {
+          terminates: false,
+          bound: ?None,
+          rate: ?Some("Cycles with period " ++ cycle_length |> Prim.to_str)
+        }
+      ] or_else [
+        {
+          terminates: false,
+          bound: ?None,
+          rate: ?None
+        }
+      ]
+    ]
+  ]
+
+  --[[
+    Uses structural properties of the net to determine termination
+  ]]--
+  structural_termination: Net -> Bool [n ->
+    -- Check if the net has recursive patterns that might not terminate
+    n |> analyze_recursion -> recursive_patterns
+    recursive_patterns |> Prim.is_empty or
+    recursive_patterns |> Prim.all [pattern -> pattern.decreasing]
+  ]
+
+  --[[
+    Analyzes a net in stages, identifying different phases of execution
+  ]]--
+  stage_analysis: !Net -o> [{stage: Z, property: S, terminates: Bool}] [n ->
+    -- Identify major stages in the reduction process
+    n |> Red.history -> history
+
+    -- Find significant changes in the net structure
+    history |> Prim.zip(history |> Prim.tail) |> Prim.with_index |> Prim.filter [((prev, curr), i) ->
+      -- Detect significant structural changes
+      prev |> Net.complexity curr |> Net.complexity |> Prim.sub |> Prim.abs > 5 or
+      prev |> Net.agent_count curr |> Net.agent_count |> Prim.sub |> Prim.abs > 2
+    ] |> Prim.map [((_, _), i) -> i] -> stage_boundaries
+
+    -- Analyze each stage
+    stage_boundaries |> Prim.cons(0) |> Prim.map [stage_start ->
+      stage_end = stage_boundaries |> Prim.find [s -> s > stage_start] |> Prim.default(history |> Prim.length - 1)
+
+      stage_net = history[stage_start]
+      stage_terminates = stage_net |> terminates
+
+      {
+        stage: stage_start,
+        property: "Stage " ++ stage_start |> Prim.to_str ++ " to " ++ stage_end |> Prim.to_str,
+        terminates: stage_terminates
+      }
+    ]
+  ]
+
+  --[[
+    Measures the computational complexity of the net reduction
+  ]]--
+  measure_complexity: !Net -o> {steps: Z, space: Z, work: Z} [n ->
+    n |> bounded_eval 1000 -> result
+
+    -- Measure time (steps), space (max net size), and work (total operations)
+    steps = result.steps
+
+    result.result |> Net.history -> history
+    space = history |> Prim.map [state -> state |> Net.size] |> Prim.max
+
+    work = history |> Prim.map [state -> state |> Net.agent_count] |> Prim.sum
+
+    {steps: steps, space: space, work: work}
+  ]
+
+  --[[
+    Identifies the live variables at each reduction step
+  ]]--
+  live_variables: !Net -o> [{step: Z, live: [S]}] [n ->
+    n |> Red.history -> history
+
+    history |> Prim.with_index |> Prim.map [(state, i) ->
+      state |> Net.variables |> Net.filter_live -> live_vars
+      {step: i, live: live_vars}
+    ]
+  ]
+
+  --[[
+    Analyzes recursive patterns in the net for termination behavior
+  ]]--
+  analyze_recursion: Net -> [{pattern: Net, decreasing: Bool, measure: ?S}] [n ->
+    -- Find potential recursive patterns
+    n |> Net.detect_recursion -> recursive_components
+
+    recursive_components |> Prim.map [component ->
+      component |> Net.find_measure -> measure
+
+      has_measure = measure |> Prim.is_valid
+      decreasing = has_measure and (component |> Net.measure_decreases measure)
+
+      {
+        pattern: component,
+        decreasing: decreasing,
+        measure: measure
+      }
+    ]
+  ]
+
+  --[[
+    Formal Verification
+  ]]--
+
+  --[[
+    Attempts to construct a formal proof of termination
+  ]]--
+  construct_proof: Net -> ?TerminationProof [n ->
+    n |> terminates |> not -> [return ?None]
+
+    -- Analyze recursion patterns
+    n |> analyze_recursion -> recursive_patterns
+
+    recursive_patterns |> Prim.all [pattern -> pattern.decreasing] |> not -> [return ?None]
+
+    -- Construct a well-founded measure
+    recursive_patterns |> Prim.map [pattern -> pattern.measure] |> Net.combine_measures -> global_measure
+
+    ?Some({
+      measure: global_measure,
+      decreasing_steps: recursive_patterns |> Prim.map [pattern -> pattern.pattern],
+      proof_technique: "Well-founded recursion using " ++ global_measure |> Prim.to_str
+    })
+  ]
+
+  --[[
+    Finds a counterexample to termination if one exists
+  ]]--
+  find_counterexample: Net -> ?TermWitness [n ->
+    n |> terminates -> [return ?None]
+
+    n |> Red.history -> history
+    history |> has_cycle -> [
+      history |> find_minimum_cycle -> (start, end)
+
+      ?Some({
+        witness_type: "Cycle",
+        start_state: history[start],
+        end_state: history[end],
+        explanation: "The state at step " ++ start |> Prim.to_str ++
+                    " is equivalent to the state at step " ++ end |> Prim.to_str
+      })
+    ] or_else [
+      ?Some({
+        witness_type: "Divergence",
+        start_state: n,
+        steps_examined: history |> Prim.length,
+        explanation: "No cycle detected but reduction exceeds reasonable bounds"
+      })
+    ]
+  ]
+
+  --[[
+    IO Termination Analysis
+  ]]--
 
   --[[
     Checks if an IO agent has been processed (completed its operation)

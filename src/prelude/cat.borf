@@ -1,4 +1,3 @@
---[[
   Category Theory Foundations
 
   This module implements the mathematical foundation of category theory,
@@ -10,16 +9,22 @@
 @Cat: {
   typ: {
     Cat
+    Functor
   }
 
   op: {
-    . ceq
+    . ceq veq
   }
 
   fn: {
     dom cod id composable hom
     law.id_dom_cod law.id_right_neutral law.id_left_neutral
     law.associativity law.ceq_iff_iso example.composition
+    new add_object add_morphism constrain
+    product terminal initial is_terminal is_initial
+    to_graph is_valid_category find_law_violations
+    isomorphic get_isomorphism
+    example.Set example.Grp example.Top
   }
 
   E: typ cup op cup fn
@@ -63,6 +68,16 @@
     Category equivalence between objects
   ]]--
   ceq: O * O -> Bool
+
+  --[[
+    Value equality operator for comparing elements
+  ]]--
+  veq: * * -> Bool
+
+  --[[
+    Constrains a function to a specific domain
+  ]]--
+  constrain: (* -> *) -> (* -> *)
 
   --[[
     Identity law: the domain and codomain of an identity morphism are the same object
@@ -111,5 +126,91 @@
   ]]--
   hom: O * O -> {M} [a b -> M |> filter [f -> f |> dom veq a and f |> cod veq b]]
 
-  -- example.composition: [comp1 comp2 -> h . (g . f) -> comp1; (h . g) . f -> comp2; comp1 veq comp2]
+  --[[
+    Verifies associativity with an example
+  ]]--
+  example.composition: M * M * M -> Bool [f g h -> h . (g . f) veq (h . g) . f]
+
+  --[[
+    Creates a new category
+  ]]--
+  new: {O} -> {M} -> (M -> O) -> (M -> O) -> (O -> M) -> (M * M -> M) -> Cat
+
+  --[[
+    Adds an object to a category
+  ]]--
+  add_object: Cat -> O -> Cat
+
+  --[[
+    Adds a morphism to a category
+  ]]--
+  add_morphism: Cat -> M -> O -> O -> Cat
+
+  --[[
+    Common category examples
+  ]]--
+  example.Set: Cat  -- Category of sets and functions
+  example.Grp: Cat  -- Category of groups and homomorphisms
+  example.Top: Cat  -- Category of topological spaces and continuous maps
+
+  --[[
+    Functor between categories
+  ]]--
+  Functor: {
+    source: Cat
+    target: Cat
+    map_obj: source.O -> target.O
+    map_morph: source.M -> target.M
+
+    -- Functor laws
+    law.preserve_id: source.O |> forall [o ->
+      o |> source.id |> map_morph veq o |> map_obj |> target.id
+    ]
+
+    law.preserve_comp: source.M * source.M |>
+      [f g -> f source. g |> map_morph veq f |> map_morph target. g |> map_morph]
+      |> constrain |> forall
+  }
+
+  --[[
+    Universal Constructions
+  ]]--
+
+  -- Product of objects
+  product: Cat -> O -> O -> O
+
+  -- Terminal object
+  terminal: Cat -> O
+
+  -- Initial object
+  initial: Cat -> O
+
+  -- Is this object terminal?
+  is_terminal: Cat -> O -> Bool
+
+  -- Is this object initial?
+  is_initial: Cat -> O -> Bool
+
+  --[[
+    Visualization and Debugging
+  ]]--
+
+  -- Convert a category to a visualization format
+  to_graph: Cat -> Graph
+
+  -- Check if a structure satisfies all category laws
+  is_valid_category: Cat -> Bool
+
+  -- Find violations of category laws
+  find_law_violations: Cat -> {String}
+
+  --[[
+    Isomorphism Operations
+  ]]--
+
+  -- Check if two objects are isomorphic
+  isomorphic: Cat -> O -> O -> Bool
+
+  -- Get an isomorphism between objects if it exists
+  get_isomorphism: Cat -> O -> O -> Maybe (M * M)
 }

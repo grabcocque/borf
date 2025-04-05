@@ -1,9 +1,7 @@
 use super::SourceLocation;
 use rustc_hash::FxHashMap;
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
-use smallvec::{smallvec, SmallVec};
-use std::collections::HashMap;
-use std::hash::Hash;
+use smallvec::SmallVec;
 
 /// Type alias for small vectors that typically have few elements
 pub type SmallVec8<T> = SmallVec<[T; 8]>;

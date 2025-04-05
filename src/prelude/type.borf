@@ -1,37 +1,113 @@
 --[[
-  Type System Foundations
+  Type System Foundations (Enhanced)
 
-  This module defines the core type system of Borf, including base types,
-  type constructors, subtyping relations, type equivalence, and laws that
-  govern the type system. It establishes the algebraic foundation for the
-  entire language's static analysis capabilities.
+  This module defines the core type system of Borf with improved theoretical foundation,
+  integrating linear types and set theory in a more principled way while maintaining
+  the original syntax structure.
 ]]--
-
 
 @T: {
   typ: {
-    T U B N Z Q R C H S Sym Any Void Seq
-    Constraint Variance Generic Pattern TypeClass Instance
+    -- Core types
+    T U
+
+    -- Base types with clear hierarchy
+    B N Z Q R C H
+
+    -- String and symbol types
+    S Sym
+
+    -- Universe types (avoiding paradoxes)
+    Type_0 Type_1 Type_2
+
+    -- Special types
+    Any Void
+
+    -- Sequence type
+    Seq
+
+    -- Meta-types for the type system
+    Constraint Variance Generic Pattern TypeClass Instance Effect
+
+    -- Resource modalities
+    Linear Affine Relevant Unrestricted
   }
 
   op: {
-    <:: ~ teq -> ->+ * + ? !:->
-    :> =:= <:> @> |+|
+    -- Core type relations
+    <:: teq             -- Subtyping and type equivalence
+
+    -- Type constructors
+    -> * +              -- Function, product, and sum types
+    ->+ :->             -- Resource-aware function and map types
+
+    -- Type modifiers
+    ! ?                 -- Linear type and optional type
+
+    -- Set-theoretic operations
+    cap cup neg         -- Intersection, union, complement
+
+    -- Resource tracking
+    ~                   -- Resource usage indicator
+
+    -- Type operations
+    :> =:= <:> @> |+|   -- Type ascription, pattern matching, intersection, application, union
+
+    -- Dependent type constructors
+    Pi Sigma            -- Dependent product and sum
   }
 
   fn: {
+    -- Core type system laws
     law.subtype_refl law.subtype_trans law.subtype_antisymm
     law.teq_refl law.teq_symm law.teq_trans law.teq_implies_subtype
-    law.base_subtyping law.top_bottom law.constructors_binary law.constructors_unary
-    law.prod_sub law.sum_sub law.fn_sub law.map_sub law.list_sub law.set_sub law.opt_sub law.seq_sub
-    law.prod_eq law.sum_eq law.fn_eq law.map_eq law.list_eq law.set_eq law.opt_eq law.lin_eq law.seq_eq
+
+    -- Type hierarchy laws
+    law.base_subtyping law.top_bottom
+
+    -- Type constructor laws
+    law.constructors_binary law.constructors_unary
+
+    -- Subtyping rules for type constructors
+    law.prod_sub law.sum_sub law.fn_sub law.map_sub
+    law.list_sub law.set_sub law.opt_sub law.seq_sub
+
+    -- Type equivalence laws
+    law.prod_eq law.sum_eq law.fn_eq law.map_eq
+    law.list_eq law.set_eq law.opt_eq law.lin_eq law.seq_eq
+
+    -- Linear type laws
     law.linear_usage law.linear_never_sub_non_linear
+    law.linear_resource_hierarchy law.linear_distributivity
+
+    -- Set-theoretic type laws
+    law.intersection_commutativity law.union_commutativity
+    law.intersection_associativity law.union_associativity
+    law.intersection_identity law.union_identity
+    law.intersection_idempotence law.union_idempotence
+    law.union_intersection_absorption law.intersection_union_absorption
+    law.union_over_intersection_distributivity
+    law.intersection_over_union_distributivity
+    law.complement_involution law.complement_laws law.de_morgan
+
+    -- Example functions
     example.subtype example.equiv
+
+    -- Core type operations
     infer derive constrain validate
     match is_of type_name to_type with_constraint
+
+    -- Quantification operations
     forall exists mono poly ensure
+
+    -- Generic type handling
     generic_fn instantiate specialize pattern_match
+
+    -- Type class operations
     implements satisfies class instance extend_class with
+
+    -- New operations for advanced features
+    refine effect_fn type_family eval universe_of
   }
 
   E: typ cup op cup fn
@@ -50,16 +126,19 @@
   --[[
     <:: defines the subtyping relation between types.
     A <:: B means "A is a subtype of B" or "A can be used where B is expected"
+    Forms a partial order (reflexive, transitive, antisymmetric)
   ]]--
   T * T -> Bool <::
 
   --[[
-    ~ determines whether a type is "affine" - can be used at most once
+    ~ determines whether a type has specific resource usage requirements
+    Returns the resource modality of a type (Linear, Affine, Relevant, Unrestricted)
   ]]--
-  Any -> Bool ~
+  T -> Constraint ~
 
   --[[
     teq defines type equivalence - when two types are considered semantically identical
+    Forms an equivalence relation (reflexive, symmetric, transitive)
   ]]--
   T * T -> Bool teq
 
@@ -74,7 +153,7 @@
   Any * Pattern -> Bool =:=
 
   --[[
-    <:> defines type intersection
+    <:> defines type intersection (cap operation)
   ]]--
   T * T -> T <:>
 
@@ -84,24 +163,47 @@
   Generic * T -> T @>
 
   --[[
-    |+| defines type union operation
+    |+| defines type union operation (cup operation)
   ]]--
   T * T -> T |+|
+
+  --[[
+    Pi defines dependent product type - generalizes product types
+    Pi(x:A)(B) is the type of functions that map each value x of type A to a value of type B
+    where B may depend on x
+  ]]--
+  (x: T) * (T -> T) -> T Pi
+
+  --[[
+    Sigma defines dependent sum type - generalizes sum types
+    Sigma(x:A)(B) is the type of pairs (a,b) where a:A and b:B(a)
+  ]]--
+  (x: T) * (T -> T) -> T Sigma
 
   --[[
     Core subtyping laws defining reflexivity, transitivity, and antisymmetry
   ]]--
   law.subtype_refl: T |> forall [t -> t <:: t]
   law.subtype_trans: T * T * T |> forall [a b c -> a <:: b and b <:: c -> a <:: c]
-
   law.subtype_antisymm: T * T |> forall [a b -> a <:: b and b <:: a -> a teq b]
+
+  --[[
+    Core type equivalence laws defining reflexivity, symmetry, and transitivity
+  ]]--
   law.teq_refl: T |> forall [t -> t teq t]
   law.teq_symm: T * T |> forall [a b -> a teq b -> b teq a]
   law.teq_trans: T * T * T |> forall [a b c -> a teq b and b teq c -> a teq c]
-
   law.teq_implies_subtype: T * T |> forall [a b -> a teq b -> a <:: b and b <:: a]
 
+  --[[
+    Base types defined with clear hierarchy and organization
+  ]]--
   U in T; B in T; N in T; Z in T; Q in T; R in T; C in T; H in T; S in T; Sym in T
+
+  --[[
+    Universe types to avoid paradoxes in the type system
+  ]]--
+  Type_0 in T; Type_1 in T; Type_2 in T
 
   --[[
     Any is the "top" type, a supertype of all types (universal type)
@@ -114,41 +216,30 @@
   Void in T
 
   --[[
-    Constraint represents a type constraint that can be applied to type variables
+    Resource modality types
+  ]]--
+  Linear in T; Affine in T; Relevant in T; Unrestricted in T
+
+  --[[
+    Meta-types for the type system
   ]]--
   Constraint in T
-
-  --[[
-    Variance determines the subtyping behavior of generic type parameters
-    (covariant, contravariant, invariant)
-  ]]--
   Variance in T
-
-  --[[
-    Generic represents a generic type with constrained type parameters
-  ]]--
   Generic in T
-
-  --[[
-    Pattern represents a type pattern used for pattern matching and destructuring
-  ]]--
   Pattern in T
-
-  --[[
-    TypeClass defines a set of operations that types can implement
-  ]]--
   TypeClass in T
-
-  --[[
-    Instance represents an implementation of a type class for a specific type
-  ]]--
   Instance in T
+  Effect in T
 
   --[[
     Establishes the subtyping hierarchy for number types:
     Natural numbers ⊂ Integers ⊂ Rationals ⊂ Reals ⊂ Complex ⊂ Hyperreals
   ]]--
   law.base_subtyping: N <:: Z and Z <:: Q and Q <:: R and R <:: C and C <:: H
+
+  --[[
+    Establishes the top and bottom types properties
+  ]]--
   law.top_bottom: (T |> forall [t -> Void <:: t]) and (T |> forall [t -> t <:: Any])
 
   --[[
@@ -158,7 +249,8 @@
     a * b in T and
     a + b in T and
     a -> b in T and
-    a:-> b in T
+    a :-> b in T and
+    a ->+ b in T
   ]
 
   --[[
@@ -171,6 +263,72 @@
     !a in T and
     Seq a in T
   ]
+
+  --[[
+    Set-theoretic type operator laws - commutativity
+  ]]--
+  law.intersection_commutativity: T * T |> forall [a b -> a <:> b teq b <:> a]
+  law.union_commutativity: T * T |> forall [a b -> a |+| b teq b |+| a]
+
+  --[[
+    Set-theoretic type operator laws - associativity
+  ]]--
+  law.intersection_associativity: T * T * T |> forall [a b c -> (a <:> b) <:> c teq a <:> (b <:> c)]
+  law.union_associativity: T * T * T |> forall [a b c -> (a |+| b) |+| c teq a |+| (b |+| c)]
+
+  --[[
+    Set-theoretic type operator laws - identity
+  ]]--
+  law.intersection_identity: T |> forall [a -> a <:> Any teq a]
+  law.union_identity: T |> forall [a -> a |+| Void teq a]
+
+  --[[
+    Set-theoretic type operator laws - idempotence
+  ]]--
+  law.intersection_idempotence: T |> forall [a -> a <:> a teq a]
+  law.union_idempotence: T |> forall [a -> a |+| a teq a]
+
+  --[[
+    Set-theoretic type operator laws - absorption
+  ]]--
+  law.union_intersection_absorption: T * T |> forall [a b -> a |+| (a <:> b) teq a]
+  law.intersection_union_absorption: T * T |> forall [a b -> a <:> (a |+| b) teq a]
+
+  --[[
+    Set-theoretic type operator laws - distributivity
+  ]]--
+  law.union_over_intersection_distributivity: T * T * T |> forall [a b c ->
+    a |+| (b <:> c) teq (a |+| b) <:> (a |+| c)
+  ]
+
+  law.intersection_over_union_distributivity: T * T * T |> forall [a b c ->
+    a <:> (b |+| c) teq (a <:> b) |+| (a <:> c)
+  ]
+
+  --[[
+    Set-theoretic type operator laws - complement
+  ]]--
+  law.complement_involution: T |> forall [a -> neg(neg(a)) teq a]
+  law.complement_laws: T |> forall [a -> (a |+| neg(a)) teq Any and (a <:> neg(a)) teq Void]
+  law.de_morgan: T * T |> forall [a b ->
+    neg(a |+| b) teq (neg(a) <:> neg(b)) and
+    neg(a <:> b) teq (neg(a) |+| neg(b))
+  ]
+
+  --[[
+    Resource modality laws - defining the hierarchy of resource types
+  ]]--
+  law.linear_resource_hierarchy: T |> forall [a ->
+    (!a ~ Linear) <:: (!a ~ Affine) and
+    (!a ~ Linear) <:: (!a ~ Relevant) and
+    (!a ~ Affine) <:: (!a ~ Unrestricted) and
+    (!a ~ Relevant) <:: (!a ~ Unrestricted)
+  ]
+
+  --[[
+    Resource modality laws - distribution over product types
+  ]]--
+  law.linear_distributivity: T * T |> forall [a b -> !(a * b) teq !a * !b]
 
   --[[
     Subtyping laws for complex types - how subtyping relates to type constructors
@@ -228,6 +386,41 @@
   ]]--
   derive: T * (T -> T) -> T [base_type transform ->
     transform base_type
+  ]
+
+  --[[
+    Create a refinement type with a predicate
+  ]]--
+  refine: T * (Any -> Bool) -> T [t pred ->
+    t |> Prim.refine pred
+  ]
+
+  --[[
+    Create a function type with explicit effect tracking
+  ]]--
+  effect_fn: T * T * Effect -> T [a b e ->
+    a |> Prim.effect_arrow b e
+  ]
+
+  --[[
+    Define a type family (type-level function)
+  ]]--
+  type_family: (T -> T) -> Generic [f ->
+    f |> Prim.make_type_family
+  ]
+
+  --[[
+    Evaluate a type-level expression
+  ]]--
+  eval: T -> T [t ->
+    t |> Prim.normalize
+  ]
+
+  --[[
+    Get the universe level of a type
+  ]]--
+  universe_of: T -> T [t ->
+    t |> Prim.universe_level
   ]
 
   --[[

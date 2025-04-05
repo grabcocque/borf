@@ -1,25 +1,31 @@
 --[[
-  Fallible Computation / Result Types
+  Functional Logic Programming / Fallible Computation / Linear Result Types
 
-  This module defines the foundation for handling computations that may fail.
-  It implements a Result monad pattern similar to Rust's Result or Haskell's Either,
-  providing combinators for chaining, handling errors, and composition of fallible operations.
-  This enables robust error handling throughout the language ecosystem.
+  This module defines the foundation for handling computations that may fail using
+  linear types. It implements types like !Result for handling fallible computations
+  providing several combinators that consume their inputs exactly once and guarantee
+  correct error handling. The linear typing ensures resources are properly managed and
+  errors cannot be ignored, providing compile-time guarantees for robustness.
+
+  Narrowing is a technique for reducing the type of a value to a more specific type
+  under logical containts and is used in functional logic programming to ensure that
+  the type of a value always resolves to the most specific type that satisfies the constraints.
 ]]--
 
 
 @Flp: {
   typ: {
-    !Result !Error
+    !Result !Error !Ok !Err
   }
 
   op: {
-    -o>
+    ?
   }
 
   fn: {
-    !Success !Failure handle narrow seq alt choice constrain
-    map default is_valid extract_value parse_int
+    ok err match unwrap unwrap_or unwrap_or_else unwrap_or_throw
+    and_then or_else map map_err combine constrain
+    try from_opt is_ok is_err extract parse_int
   }
 
   E: typ cup op cup fn
@@ -35,74 +41,137 @@
   !Error: { code: Any, message: S }
 
   --[[
-    !Result is a parameterized type that represents either a successful computation
-    with a value of type 'a' or a failure with an error message.
+    !Result is a linear type that represents either a successful computation
+    with a value of type 'a' or a failure with an error.
+    Once a !Result is pattern matched or unwrapped, it is consumed.
   ]]--
   !Result: Type -> Type
 
   --[[
-    Wraps a value in a successful result
+    !Ok represents the success case of a !Result
   ]]--
-  !Success: a -> !Result(a)
+  !Ok: a -o> !Result(a)
+
+  --[[
+    !Err represents the failure case of a !Result
+  ]]--
+  !Err: !Error -o> !Result(a)
+
+  --[[
+    Creates a success result
+  ]]--
+  ok: a -o> !Result(a)
 
   --[[
     Creates a failure result with a structured error
   ]]--
-  !Failure: !Error -> !Result(a)
+  err: !Error -o> !Result(a)
+  err: S -o> !Result(a) [msg -> {code: "error", message: msg} |> err]
 
   --[[
-    Checks if a value represents a valid result
+    Pattern matches on a result, consuming it and executing exactly one function
   ]]--
-  is_valid: ?a -> Bool [x -> x |> nothing |> seq |> not]
+  match: !Result(a) * (a -o> b) * (!Error -o> b) -o> b
 
   --[[
-    Extracts the value from a valid result
+    Unwraps a result, returning the value or panicking with the error
   ]]--
-  extract_value: ?a -> a [x -> x.value]
+  unwrap: !Result(a) -o> a
 
   --[[
-    Parses a string into an integer, returning a result
+    Unwraps a result, returning the value or a provided default
   ]]--
-  parse_int: S -> !Result(Z) [s -> "TODO: parse_int not implemented" |> !Failure]
+  unwrap_or: !Result(a) * a -o> a
 
   --[[
-    Pattern matches on a result, executing one function for success case
-    and another for failure case
+    Unwraps a result, returning the value or computing a default from the error
   ]]--
-  handle: !Result(a) * (a -o> b) * (!Error -o> b) -> b
+  unwrap_or_else: !Result(a) * (!Error -o> a) -o> a
 
   --[[
-    Converts a result to a value or false in case of failure
+    Unwraps a result, returning the value or throwing the error
   ]]--
-  narrow: !Result(a) -> a|false -o>
+  unwrap_or_throw: !Result(a) -o> a
 
   --[[
-    Monadic bind - chains fallible computations together
+    Linear composition - applies a function to the value if successful,
+    preserving the error otherwise
   ]]--
-  seq: !Result(a) * (a -o> !Result(b)) -> !Result(b) -o>
+  and_then: !Result(a) * (a -o> !Result(b)) -o> !Result(b)
 
   --[[
-    Attempts the first operation, falls back to the second if the first fails
+    Applies a function to transform the error, leaving success values unchanged
   ]]--
-  alt: !Result(a) * !Result(a) -> !Result(a) -o>
+  or_else: !Result(a) * (!Error -o> !Result(a)) -o> !Result(a)
 
   --[[
-    Conditional choice between two values
+    Maps a function over the success value
   ]]--
-  choice: a * a -> a -o>
+  map: !Result(a) * (a -o> b) -o> !Result(b)
+
+  --[[
+    Maps a function over the error value
+  ]]--
+  map_err: !Result(a) * (!Error -o> !Error) -o> !Result(a)
+
+  --[[
+    Combines two results into one, succeeding only if both succeed
+  ]]--
+  combine: !Result(a) * !Result(b) -o> !Result(a * b)
 
   --[[
     Only succeeds if the value passes the constraint predicate
   ]]--
-  constrain: (a -o> !B) * a -> a -o>
+  constrain: !Result(a) * (a -o> !Bool) * !Error -o> !Result(a)
 
   --[[
-    Maps a function over the success value of a result
+    Try operator - applies a function that may fail and handles errors
   ]]--
-  map: (a -o> b) * !Result(a) -> !Result(b) -o>
+  ?: (a -o> !Result(b)) * a -o> !Result(b)
 
   --[[
-    Provides a default value to use in case of failure
+    Converts an option type to a result, with a provided error for None case
   ]]--
-  default: !Result(a) * a -> a -o>
+  from_opt: ?a * !Error -o> !Result(a)
+
+  --[[
+    Checks if a result is a success (consumes the result)
+  ]]--
+  is_ok: !Result(a) -o> !Bool
+
+  --[[
+    Checks if a result is an error (consumes the result)
+  ]]--
+  is_err: !Result(a) -o> !Bool
+
+  --[[
+    Extracts the value from a success case, or throws an error
+  ]]--
+  extract: !Result(a) -o> a
+
+  --[[
+    Parses a string into an integer, returning a result
+  ]]--
+  parse_int: S -o> !Result(Z) [s ->
+    -- Example implementation
+    s |> is_valid_int_format
+      ? (s |> string_to_int |> ok)
+      : ("Invalid integer format" |> err)
+  ]
+
+  --[[
+    Linear try block - evaluates expressions until one fails
+    All previous results are passed to the success handler
+  ]]--
+  try: {!Result(a)} * ((a, ...) -o> b) * (!Error -o> b) -o> b
+
+  --[[
+    Example helper function (not exposed)
+  ]]--
+  is_valid_int_format: S -o> !Bool
+
+  --[[
+    Example helper function (not exposed)
+  ]]--
+  string_to_int: S -o> Z
 }

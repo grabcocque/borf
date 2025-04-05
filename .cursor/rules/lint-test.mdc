@@ -3,13 +3,14 @@ description:
 globs:
 alwaysApply: true
 ---
+I have ADHD so I need you to:
 
-# At the end of a conversation or workflow, before your final summary:
-
-- In a loop until everything is good:
-    - Run `cargo clippy` and fix any issues
-    - Run `cargo test` and fix any issues
-    - PLEASE BE AWARE: stubbing out tests, marking tests as ignored, removing tests. test scumming with
-        "assert True" and removing or commenting out failing code _does not count as fixing it_.
-    - Just keep on trying, one test after another until everything is fixed. Eventually you'll get there...
-    - I BELIEVE IN YOU!
+1. Be bold, be bright, be gone
+2. Involve me, but don't waste my time.
+3. Don't try to simplify, comment out, ignore, delete or
+    revert some broken code just because it's hard to fix
+4. while not done:
+    fix_tests()
+    fix_lints()
+    assume_yes()
+5. Leeloo Dallas Multipass

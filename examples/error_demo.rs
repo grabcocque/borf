@@ -1,7 +1,5 @@
-use borf::error_reporting::{create_enhanced_report, print_error_message, EnhancedError};
+use borf::error_reporting::{create_enhanced_report, print_error_message};
 use std::io::{self, Write};
-use std::path::PathBuf;
-
 fn main() {
     // Process command-line arguments, if any
     let file_path = std::env::args().nth(1);
@@ -64,11 +62,11 @@ fn interactive_mode() {
         // Simple module wrapper for snippets
         let wrapped_input = format!("@Test: {{\n{}\n}}", input);
 
-        match borf::error_reporting::parse_string_with_enhanced_errors(
+        match borf::error_reporting::parse_string_to_module_with_enhanced_errors(
             &wrapped_input,
             Some("interactive".to_string()),
         ) {
-            Ok(module) => {
+            Ok(_module) => {
                 println!("✅ Successfully parsed!");
             }
             Err(error) => {

@@ -1,29 +1,58 @@
 --[[
-  IO System (Interaction Nets for Input/Output)
+  Linear IO System
 
-  This module defines the input/output capabilities of the Borf language through
-  interaction nets. It provides a framework for handling I/O operations in a
-  pure functional context, using agents that manage file, console, and network
-  interactions in a composable way.
+  This module defines the input/output capabilities of the Borf language using
+  linear types to ensure proper resource handling. It provides a framework for
+  safely handling I/O operations in a pure functional context, where each IO
+  resource must be explicitly acquired, used exactly once, and properly released.
+  Linear typing guarantees that resources cannot be duplicated or forgotten.
 ]]--
-
 
 @IO: {
   typ: {
-    IO Op Src Result Priority
+    !IO !File !Socket !Console !Stream !Dir
+    !Result !Error !Path !Buffer !Env
   }
 
   op: {
-
+    |>> -- Linear pipe operator
+    <|> -- Alternative operator
+    <+> -- Append operation
   }
 
   fn: {
-    io_agent processed io read write
-    read_file write_file read_cons write_cons
-    data err ok unused_agents
-    law.linear_io_agents law.io_completeness
-    async prioritize batch retry with_timeout
-    safe_read safe_write explain_error describe_io_state
+    -- Core operations
+    open_file close_file read_file write_file append_file
+    read_line read_bytes write_bytes flush seek
+    stdin stdout stderr
+
+    -- Directory operations
+    open_dir close_dir read_dir create_dir remove_dir
+
+    -- Path manipulation
+    path join_path split_path parent_path filename extension
+
+    -- Console operations
+    print println input prompt confirm
+
+    -- Network operations
+    connect disconnect send receive listen accept
+
+    -- Environment operations
+    get_env set_env all_env args
+
+    -- Error handling
+    ok error match_result try catch with_cleanup
+
+    -- Composition operations
+    sequence combine parallel timeout retry with_resource
+
+    -- Utility operations
+    to_string from_string serialize deserialize
+    buffer create_buffer buffer_size buffer_to_string
+
+    -- Status and debugging
+    describe format_error current_path temp_path
   }
 
   E: typ cup op cup fn
@@ -33,195 +62,426 @@
   vis: E |> [e -> true]
 
   --[[
-    Basic components for interaction net nodes and connections:
-    - B: boxes (agents)
-    - P: ports
-    - box: creates an agent with ports
-    - w: creates a wire between ports
-    - pi: checks if a port is principal
+    Error codes for IO operations
   ]]--
-  B; P; P -> B box; P -> P w; P -> Bool pi
+  ErrorCode: {:not_found, :permission_denied, :timeout, :network_error,
+               :parse_error, :already_exists, :interrupted, :invalid_argument,
+               :resource_busy, :unexpected_eof, :unknown_error}
 
   --[[
-    Operation types for IO actions
+    File open modes
   ]]--
-  Op: {:rd,:wr,:ok,:err}
+  Mode: {:read, :write, :append, :read_write, :create, :truncate, :exclusive}
 
   --[[
-    Source types for IO operations
+    !Result represents either success with a value or an error
   ]]--
-  Src: {:file,:cons,:net,:http,:ws}
+  !Result: Type -> Type
 
   --[[
-    Result type for IO operations
+    !Error represents a structured error with code and message
   ]]--
-  Result: {:success,:not_found,:permission_denied,:timeout,:network_error,:parse_error,:unknown_error}
+  !Error: { code: ErrorCode, message: S }
 
   --[[
-    Priority levels for IO operations
+    !File represents a file handle that must be properly closed
   ]]--
-  Priority: {:high,:medium,:low}
+  !File: { path: !Path, mode: Mode, handle: Handle }
 
   --[[
-    Checks if a box (agent) is an IO agent
+    !Socket represents a network connection that must be properly closed
   ]]--
-  io_agent: B -> Bool
+  !Socket: { address: S, port: Z, protocol: {:tcp, :udp}, handle: Handle }
 
   --[[
-    Checks if an IO agent has been processed (completed its operation)
+    !Console represents terminal interaction capabilities
   ]]--
-  processed: B -> Bool [b -> b |> Prim.state]
+  !Console: { raw_mode: Bool, color_support: Bool, width: Z, height: Z }
 
   --[[
-    Creates an IO interaction net for a given operation, source, and data
+    !Stream represents a sequential data stream
   ]]--
-  io: Op * Src * S -> Net
+  !Stream: { kind: {:input, :output, :bidirectional}, buffer: !Buffer }
 
   --[[
-    Creates a read operation on a specific source
+    !Dir represents a directory handle that must be properly closed
   ]]--
-  read: Src * S -> Net [src s ->:rd src s |> io]
+  !Dir: { path: !Path, handle: Handle }
 
   --[[
-    Creates a write operation on a specific source
+    !Path represents a filesystem path
   ]]--
-  write: Src * S -> Net [src s ->:wr src s |> io]
+  !Path: { segments: [S], absolute: Bool }
 
   --[[
-    File-specific IO operations
+    !Buffer represents a mutable data buffer
   ]]--
-  read_file: S -> Net [s ->:file s |> read]
-  write_file: S -> Net [s ->:file s |> write]
+  !Buffer: { data: [Byte], position: Z, capacity: Z }
 
   --[[
-    Console-specific IO operations
+    !Env represents environment access
   ]]--
-  read_cons: S -> Net [s ->:cons s |> read]
-  write_cons: S -> Net [s ->:cons s |> write]
+  !Env: { vars: {S: S} }
 
   --[[
-    Sets an IO operation to run asynchronously
+    !IO represents an IO operation that produces a result
   ]]--
-  async: Net -> Net [n ->
-    -- Mark the net as asynchronous in its metadata
-    n |> Prim.annotate {:async} |> Term.terminates |> assert
-  ]
+  !IO: Type -> Type
 
   --[[
-    Sets priority for an IO operation
+    Creates a successful result
   ]]--
-  prioritize: Priority * Net -> Net [p n ->
-    n |> Prim.annotate {p}
-  ]
+  ok: a -o> !Result(a)
 
   --[[
-    Batch multiple IO operations into a single composite operation
+    Creates an error result
   ]]--
-  batch: [Net] -> Net [operations ->
-    -- Create a composite net containing all operations
-    operations |> Prim.fold Net.empty [acc op -> acc |> Net.combine op]
-  ]
+  error: !Error -o> !Result(a)
+  error: S -o> !Result(a) [msg -> {code: :unknown_error, message: msg} |> error]
 
   --[[
-    Retry an IO operation with specified attempts and delay
+    Pattern matches on a result, consuming it and producing a value
   ]]--
-  retry: Z * Z * Net -> Net [attempts delay n ->
-    -- Create a recursive net that retries the operation
-    n iff attempts <= 0 or_else
-    {
-      n |> Net.on_err [err ->
-        Net.delay delay |> Net.then [retry (attempts - 1) delay n]
-      ]
-    }
-  ]
+  match_result: !Result(a) * (a -o> b) * (!Error -o> b) -o> b
 
   --[[
-    Add a timeout to an IO operation
+    Tries an operation, returning the result directly
   ]]--
-  with_timeout: Z * Net -> Net [ms n ->
-    -- Create a race between the operation and a timeout
-    Net.race [
-      n,
-      Net.delay ms |> Net.then [err "Operation timed out" |> Net.of]
-    ]
-  ]
+  try: !IO(a) -o> !Result(a)
 
   --[[
-    Safe file read with error handling
+    Catches errors in an IO operation
   ]]--
-  safe_read: S -> Net [s ->
-    s |> read_file |> Net.catch [err ->
-      err |> explain_error |> err |> Net.of
-    ]
-  ]
+  catch: !IO(a) * (!Error -o> !IO(a)) -o> !IO(a)
 
   --[[
-    Safe file write with error handling
+    Performs cleanup after an operation regardless of success/failure
   ]]--
-  safe_write: S * S -> Net [path content ->
-    path content |> write_file |> Net.catch [err ->
-      err |> explain_error |> err |> Net.of
-    ]
-  ]
+  with_cleanup: !IO(a) * (() -o> !IO(Unit)) -o> !IO(a)
 
   --[[
-    Converts an error code to a human-readable explanation
+    Opens a file, returning a handle that must be closed
   ]]--
-  explain_error: S -> S [code ->
-    code |> Prim.match [
-      ":not_found" -> "The requested resource was not found",
-      ":permission_denied" -> "Permission denied when accessing the resource",
-      ":timeout" -> "The operation timed out",
-      ":network_error" -> "A network error occurred",
-      ":parse_error" -> "Failed to parse the data",
-      _ -> "An unknown error occurred: " ++ code
-    ]
-  ]
+  open_file: !Path * Mode -o> !IO(!Result(!File))
 
   --[[
-    Provides a detailed description of IO operations in a net
+    Closes a file, consuming the handle
   ]]--
-  describe_io_state: Net -> S [n ->
-    n |> unused_agents -> pending
-    n |> Prim.filter B [b -> b |> io_agent and b |> processed] -> completed
-
-    "IO State: " ++
-    pending |> Prim.length |> Prim.to_str ++ " pending operations, " ++
-    completed |> Prim.length |> Prim.to_str ++ " completed operations"
-  ]
+  close_file: !File -o> !IO(!Result(Unit))
 
   --[[
-    Law: IO agents must be linear (used exactly once) to enforce proper resource handling
+    Reads the entire contents of a file
   ]]--
-  law.linear_io_agents: { B |> filter [b -> b |> io_agent] } |> forall [b -> b |> in !B]
+  read_file: !Path -o> !IO(!Result(S))
 
   --[[
-    Creates a data payload net
+    Writes content to a file
   ]]--
-  data: S -> Net
+  write_file: !Path * S -o> !IO(!Result(Unit))
 
   --[[
-    Creates an error response net
+    Appends content to a file
   ]]--
-  err: S -> Net
+  append_file: !Path * S -o> !IO(!Result(Unit))
 
   --[[
-    Creates a success response net
+    Reads a line from a file
   ]]--
-  ok: Net
+  read_line: !File -o> !IO(!Result((S, !File)))
 
   --[[
-    Checks if a net is in normal form (fully reduced)
+    Reads bytes from a file
   ]]--
-  normal: Net -> Bool
+  read_bytes: !File * Z -o> !IO(!Result((!Buffer, !File)))
 
   --[[
-    Returns all IO agents in a net that haven't been processed
+    Writes bytes to a file
   ]]--
-  unused_agents: Net -> {B}
+  write_bytes: !File * !Buffer -o> !IO(!Result(!File))
 
   --[[
-    Law: A fully reduced net should have no unused IO agents
+    Flushes a file's buffers
   ]]--
-  law.io_completeness: Net |> forall [n -> n |> Red.normal -> n |> unused_agents |> seq {}]
+  flush: !File -o> !IO(!Result(!File))
+
+  --[[
+    Seeks to a position in a file
+  ]]--
+  seek: !File * Z -o> !IO(!Result(!File))
+
+  --[[
+    Gets standard input stream
+  ]]--
+  stdin: () -o> !IO(!Stream)
+
+  --[[
+    Gets standard output stream
+  ]]--
+  stdout: () -o> !IO(!Stream)
+
+  --[[
+    Gets standard error stream
+  ]]--
+  stderr: () -o> !IO(!Stream)
+
+  --[[
+    Opens a directory
+  ]]--
+  open_dir: !Path -o> !IO(!Result(!Dir))
+
+  --[[
+    Closes a directory
+  ]]--
+  close_dir: !Dir -o> !IO(!Result(Unit))
+
+  --[[
+    Reads directory entries
+  ]]--
+  read_dir: !Dir -o> !IO(!Result(([!Path], !Dir)))
+
+  --[[
+    Creates a directory
+  ]]--
+  create_dir: !Path -o> !IO(!Result(Unit))
+
+  --[[
+    Removes a directory
+  ]]--
+  remove_dir: !Path -o> !IO(!Result(Unit))
+
+  --[[
+    Creates a path object
+  ]]--
+  path: S -o> !Path
+
+  --[[
+    Joins paths
+  ]]--
+  join_path: !Path * !Path -o> !Path
+
+  --[[
+    Splits a path into components
+  ]]--
+  split_path: !Path -o> [S]
+
+  --[[
+    Gets parent path
+  ]]--
+  parent_path: !Path -o> !Path
+
+  --[[
+    Gets filename from path
+  ]]--
+  filename: !Path -o> S
+
+  --[[
+    Gets file extension
+  ]]--
+  extension: !Path -o> S
+
+  --[[
+    Prints to standard output
+  ]]--
+  print: S -o> !IO(!Result(Unit))
+
+  --[[
+    Prints with newline to standard output
+  ]]--
+  println: S -o> !IO(!Result(Unit))
+
+  --[[
+    Reads a line from standard input
+  ]]--
+  input: () -o> !IO(!Result(S))
+
+  --[[
+    Shows a prompt and reads input
+  ]]--
+  prompt: S -o> !IO(!Result(S))
+
+  --[[
+    Prompts for confirmation
+  ]]--
+  confirm: S -o> !IO(!Result(Bool))
+
+  --[[
+    Connects to a network address
+  ]]--
+  connect: S * Z * {:tcp, :udp} -o> !IO(!Result(!Socket))
+
+  --[[
+    Disconnects a socket
+  ]]--
+  disconnect: !Socket -o> !IO(!Result(Unit))
+
+  --[[
+    Sends data through a socket
+  ]]--
+  send: !Socket * !Buffer -o> !IO(!Result(!Socket))
+
+  --[[
+    Receives data from a socket
+  ]]--
+  receive: !Socket * Z -o> !IO(!Result((!Buffer, !Socket)))
+
+  --[[
+    Listens for connections
+  ]]--
+  listen: Z * {:tcp, :udp} -o> !IO(!Result(!Socket))
+
+  --[[
+    Accepts a connection
+  ]]--
+  accept: !Socket -o> !IO(!Result((!Socket, !Socket)))
+
+  --[[
+    Gets an environment variable
+  ]]--
+  get_env: S -o> !IO(!Result(S))
+
+  --[[
+    Sets an environment variable
+  ]]--
+  set_env: S * S -o> !IO(!Result(Unit))
+
+  --[[
+    Gets all environment variables
+  ]]--
+  all_env: () -o> !IO(!Result(!Env))
+
+  --[[
+    Gets command line arguments
+  ]]--
+  args: () -o> !IO([S])
+
+  --[[
+    Sequences IO operations
+  ]]--
+  sequence: [!IO(a)] -o> !IO([!Result(a)])
+
+  --[[
+    Combines two IO operations
+  ]]--
+  combine: !IO(a) * !IO(b) -o> !IO((!Result(a), !Result(b)))
+
+  --[[
+    Runs IO operations in parallel
+  ]]--
+  parallel: [!IO(a)] -o> !IO([!Result(a)])
+
+  --[[
+    Adds a timeout to an IO operation
+  ]]--
+  timeout: !IO(a) * Z -o> !IO(!Result(a))
+
+  --[[
+    Retries an operation with backoff
+  ]]--
+  retry: !IO(a) * Z -o> !IO(!Result(a))
+
+  --[[
+    Manages resource acquisition and release
+  ]]--
+  with_resource: (!IO(!Result(r))) * (r -o> !IO(a)) * (r -o> !IO(Unit)) -o> !IO(!Result(a))
+
+  --[[
+    Linear pipe operator
+  ]]--
+  |>>: !IO(a) * (a -o> !IO(b)) -o> !IO(b)
+
+  --[[
+    Alternative operator
+  ]]--
+  <|>: !IO(!Result(a)) * !IO(!Result(a)) -o> !IO(!Result(a))
+
+  --[[
+    Append operation
+  ]]--
+  <+>: !Buffer * !Buffer -o> !Buffer
+
+  --[[
+    Converts a value to string
+  ]]--
+  to_string: a -o> S
+
+  --[[
+    Parses a string to a value
+  ]]--
+  from_string: S * Type -o> !Result(a)
+
+  --[[
+    Serializes a value to a buffer
+  ]]--
+  serialize: a -o> !IO(!Result(!Buffer))
+
+  --[[
+    Deserializes a buffer to a value
+  ]]--
+  deserialize: !Buffer * Type -o> !IO(!Result(a))
+
+  --[[
+    Creates a buffer
+  ]]--
+  buffer: Z -o> !Buffer
+  buffer: [Byte] -o> !Buffer
+
+  --[[
+    Creates a buffer of specified size
+  ]]--
+  create_buffer: Z -o> !Buffer
+
+  --[[
+    Gets buffer size
+  ]]--
+  buffer_size: !Buffer -o> (!Buffer * Z)
+
+  --[[
+    Converts buffer to string
+  ]]--
+  buffer_to_string: !Buffer -o> (!Buffer * S)
+
+  --[[
+    Describes IO operation or resource
+  ]]--
+  describe: !File -o> (!File * S)
+  describe: !Socket -o> (!Socket * S)
+  describe: !Dir -o> (!Dir * S)
+  describe: !Path -o> (!Path * S)
+  describe: !Error -o> (!Error * S)
+
+  --[[
+    Formats an error into a human-readable message
+  ]]--
+  format_error: !Error -o> (!Error * S)
+
+  --[[
+    Gets current working directory
+  ]]--
+  current_path: () -o> !IO(!Result(!Path))
+
+  --[[
+    Gets temporary directory
+  ]]--
+  temp_path: () -o> !IO(!Result(!Path))
+
+  --[[
+    File operations example
+  ]]--
+  -- Example implementation of the with_resource pattern
+  -- with_file: !Path * Mode * (File -o> !IO(a)) -o> !IO(!Result(a)) [path mode fn ->
+  --   with_resource
+  --     (path mode |> open_file)
+  --     fn
+  --     (file -> file |> close_file)
+  -- ]
+
+  --[[
+    Safely reads a file with proper resource management
+  ]]--
+  -- safe_read: !Path -o> !IO(!Result(S)) [path ->
+  --   path |> with_file :read [file ->
+  --     let {contents, file} = file |> read_to_string;
+  --     contents |> ok
+  --   ]
+  -- ]
 }
