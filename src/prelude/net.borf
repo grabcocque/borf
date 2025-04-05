@@ -73,6 +73,55 @@
   --------------------------------------------------
   
   --[[
+    Net Category Structure
+    
+    Defines the categorical structure of interaction nets,
+    establishing objects, morphisms, composition, and laws.
+  ]]--
+  structure: {
+    -- Core category structure
+    objects = Net.!Symbol,              -- Objects are agent types (symbols)
+    morphisms = Net.!Agent,             -- Morphisms are agents
+    dom = [a -> a.ports |> filter [p -> p.principal] |> head |> port_type],  -- Domain from principal port
+    cod = [a -> a.ports |> filter [p -> not p.principal] |> map [p -> port_type(p)]],  -- Codomain from auxiliary ports
+    id = [s -> new_agent({name: "Id", arity: 2, symbol: s})],  -- Identity agent
+    compose = [a1 a2 ->                 -- Composition connects agents
+      let {_, aux1} = auxiliary(a1) in
+      let {_, prin2} = principal(a2) in
+      connect(a1, aux1[0], a2, prin2)
+    ],
+    
+    -- Additional structures
+    tensor = Net.parallel,              -- Tensor product is parallel composition
+    unit = new_net({name: "Empty", arity: 0}),  -- Unit is empty net
+    
+    -- Laws
+    law.identity = [a ->               -- Identity law
+      let id_agent = id(a.symbol) in
+      compose(a, id_agent) == a and compose(id_agent, a) == a
+    ],
+    
+    law.associativity = [a b c ->      -- Associativity law
+      compose(compose(a, b), c) == compose(a, compose(b, c))
+    ],
+    
+    -- Reduction structure
+    reduce = Net.reduce_once,           -- Reduction step
+    normalize = Net.normalize,          -- Full reduction
+    
+    -- Reduction laws
+    law.confluence = [n r1 r2 ->       -- Confluence law (Church-Rosser)
+      let n1 = reduce(n, r1) in
+      let n2 = reduce(n, r2) in
+      exists [n3 -> reduce(n1, r2) == n3 and reduce(n2, r1) == n3]
+    ],
+    
+    law.termination = [n ->            -- Termination law
+      exists [n1 -> normalize(n) == n1 and is_normal_form(n1)]
+    ]
+  }
+  
+  --[[
     Net-Graph Structural Mapping
     
     Establishes a direct structural correspondence between interaction nets and graphs,

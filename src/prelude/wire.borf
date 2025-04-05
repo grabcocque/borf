@@ -90,6 +90,50 @@
   --------------------------------------------------
   
   --[[
+    Wire Category Structure
+    
+    Defines the symmetric monoidal category structure of wiring diagrams,
+    establishing objects, morphisms, composition, tensor products, and symmetry.
+  ]]--
+  structure: {
+    -- Core category structure
+    objects = Wire.Box,                -- Objects are boxes
+    morphisms = Wire.Diagram,          -- Morphisms are diagrams
+    dom = Prim.diagram_domain,         -- Domain is the diagram domain
+    cod = Prim.diagram_codomain,       -- Codomain is the diagram codomain
+    id = Wire.id,                      -- Identity is the identity diagram
+    compose = Wire.compose,            -- Composition is diagram composition
+    
+    -- Monoidal structure
+    tensor = Wire.tensor_compose,      -- Tensor product is parallel composition
+    unit = Wire.create,                -- Monoidal unit is the empty diagram
+    
+    -- Symmetric structure
+    swap = Wire.swap,                  -- Braiding is the swap diagram
+    
+    -- Traced structure
+    trace = Wire.trace_compose,        -- Trace operator for feedback
+    
+    -- Core category laws
+    law.identity = Wire.law.identity_unit,
+    law.associativity = Wire.law.composition_associativity,
+    
+    -- Monoidal laws
+    law.tensor_id = [a b -> id(a) `tensor` id(b) == id(a `tensor` b)],
+    law.tensor_assoc = Wire.law.tensor_associativity,
+    law.tensor_compose = Wire.law.tensor_bifunctor,
+    
+    -- Symmetry laws
+    law.symmetry = Wire.law.symmetric_involution,
+    law.naturality = Wire.law.braiding_naturality,
+    
+    -- Traced laws
+    law.trace_sliding = Wire.law.trace_sliding,
+    law.trace_vanishing = Wire.law.trace_vanishing,
+    law.trace_superposing = Wire.law.trace_superposing
+  }
+  
+  --[[
     Wire-Graph Structural Mapping
     
     Establishes a direct structural correspondence between wiring diagrams and graphs,

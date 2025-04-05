@@ -48,6 +48,26 @@
   --------------------------------------------------
   
   --[[
+    Graph Category Structure
+    
+    Defines the core categorical structure of graphs, establishing
+    its objects, morphisms, composition, identity, and laws.
+  ]]--
+  structure: {
+    -- Core category structure
+    objects = Grph.!Node,           -- Objects are nodes
+    morphisms = Grph.!Edge,         -- Morphisms are edges  
+    dom = Grph.src,                 -- Domain is source of edge
+    cod = Grph.tgt,                 -- Codomain is target of edge
+    id = [n -> loop(n, :id)],       -- Identity is a self-loop
+    compose = [e1 e2 -> e1 + e2],   -- Composition is edge composition
+    
+    -- Core category laws
+    law.identity = [e -> id(dom(e)) + e == e],                   -- Left identity
+    law.associativity = [e1 e2 e3 -> (e1 + e2) + e3 == e1 + (e2 + e3)]  -- Associativity
+  }
+  
+  --[[
     Graph-Category Structural Mapping
     
     Establishes a direct structural correspondence between graphs and categories,

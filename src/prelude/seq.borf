@@ -133,13 +133,37 @@
     objects, morphisms, domains, codomains, identity, and composition.
   ]]--
   structure: {
-    -- Mapping to Category
-    Cat.O = Seq.typ,              -- Objects are sequence types
-    Cat.M = Seq.fn,               -- Morphisms are sequence functions
-    Cat.dom = [f -> f.domain],    -- Domain of a sequence function
-    Cat.cod = [f -> f.codomain],  -- Codomain of a sequence function
-    Cat.id = [A -> [x -> x]],     -- Identity is the identity function
-    Cat.compose = [f g -> [x -> x |> g |> f]]  -- Composition is function composition
+    -- Core category structure
+    objects = Seq a,                   -- Objects are sequence types
+    morphisms = a -> b,                -- Morphisms are linear functions
+    dom = [f -> f.domain],             -- Domain of a sequence function
+    cod = [f -> f.codomain],           -- Codomain of a sequence function
+    id = [a -> [x -> x]],              -- Identity is the identity function
+    compose = [f g -> [x -> x |> g |> f]],  -- Composition is function composition
+    
+    -- Monad structure
+    bind = [m f -> m |> fold [acc x -> acc ++ f(x)] empty],
+    return = [x -> cons(x, empty)],
+    
+    -- Functor structure
+    fmap = map,
+    
+    -- Foldable structure
+    fold_l = fold,
+    fold_r = [f z xs -> xs |> reverse |> fold f z],
+    
+    -- Core category laws
+    law.identity = [f -> compose(id, f) == f and compose(f, id) == f],
+    law.associativity = [f g h -> compose(f, compose(g, h)) == compose(compose(f, g), h)],
+    
+    -- Functor laws
+    law.fmap_id = [xs -> map(id, xs) == xs],
+    law.fmap_compose = [f g xs -> map(compose(f, g), xs) == compose(map(f), map(g))(xs)],
+    
+    -- Monad laws
+    law.monad_left_id = [a f -> bind(return(a), f) == f(a)],
+    law.monad_right_id = [m -> bind(m, return) == m],
+    law.monad_assoc = [m f g -> bind(bind(m, f), g) == bind(m, [x -> bind(f(x), g)])]
   }
   
   --[[
