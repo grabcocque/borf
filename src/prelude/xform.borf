@@ -3,88 +3,88 @@
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 @Xform: { -- Transformation and processing pipeline
   -- Core transformation operation
-  xform: a -> b                   -- Generic transformation (interface/signature)
-  
+  a -> b                                                           : xform -- Generic transformation (interface/signature)
+
   -- String to Net transformation (parsing)
-  string_to_net: S -> Net         -- Parse string to net
-  
+  S -> Net                                                         : string_to_net -- Parse string to net
+
   -- Net to String transformation (printing)
-  net_to_string: Net -> S         -- Convert net to string representation
-  
+  Net -> S                                                         : net_to_string -- Convert net to string representation
+
   -- Graph to Wire transformation
-  graph_to_wire: Grph -> Wire     -- Convert graph to wiring diagram
-  
+  Grph -> Wire                                                     : graph_to_wire -- Convert graph to wiring diagram
+
   -- Wire to Net transformation
-  wire_to_net: Wire -> Net        -- Convert wiring diagram to interaction net
-  
+  Wire -> Net                                                      : wire_to_net -- Convert wiring diagram to interaction net
+
   -- Net to Rewrite transformation (rule extraction)
-  net_to_rewrite: Net -> Rewrite  -- Extract rewrite rules from net representation
-  
+  Net -> Rewrite                                                   : net_to_rewrite -- Extract rewrite rules from net representation
+
   -- Rewrite to Red transformation (reduction system)
-  rewrite_to_red: Rewrite -> Red  -- Build reduction system from rewrite rules
-  
+  Rewrite -> Red                                                   : rewrite_to_red -- Build reduction system from rewrite rules
+
   -- Apply transformation to a list of inputs
-  map: (a->b)*[a] -> [b] = \f,xs. Primitives.$map(f, xs)
-  
+  (a -> b) * [a] -> [b] [transform inputs ->
+    inputs |> Primitives.map transform
+  ]                                                                : map
+
   -- Process a list of files with a transformation
-  process_files: [S]*(S->S) -> [S] = \files,transform. map(transform, files)
-  
+  [S] * (S -> S) -> [S] [files transform ->
+    files |> map transform
+  ]                                                                : process_files
+
   -- Safe pipeline implementation using IO category & fallibility
-  safe_pipeline: S -> Net = \s. {
-    let attempt = Primitives.$eval(s) -- Try parsing: returns ?Net
-    let result_net = match FLogic.is_valid(attempt) {
-      true -> FLogic.extract_value(attempt) -- Use the parsed Net
-      false -> IO.err("Failed to parse: " Primitives.$append_string s) -- Create error Net
-    }
-    in result_net
-  }
-  
+  S -> Net [s ->
+    s |> Primitives.eval -> attempt -- Try parsing: returns ?Net
+    attempt |> FLogic.is_valid ?
+      attempt |> FLogic.extract_value : -- Use the parsed Net
+      "Failed to parse: " |> Primitives.append_string s |> IO.err -- Create error Net
+  ]                                                                : safe_pipeline
+
   -- Specific pipeline stages (interfaces/signatures)
-  string_to_wire: S -> Wire       -- Parse string to wire diagram
-  string_to_runnable_net: S -> Net -- Parse string to executable net
-  
+  S -> Wire                                                        : string_to_wire -- Parse string to wire diagram
+  S -> Net                                                         : string_to_runnable_net -- Parse string to executable net
+
   -- Full transformation pipeline
   -- string -> net -> reduced net -> string
-  full_pipeline: S -> S = \s. {
-    let net = string_to_net(s)
-    let reduced = Red.red(net)
-    in net_to_string(reduced)
-  }
+  S -> S [s ->
+    s |> string_to_net -> net
+    net |> Red.red -> reduced
+    reduced |> net_to_string
+  ]                                                                : full_pipeline
 
   -- ~~~ Core Module Pattern (Entities Aggregation) ~~~
   -- Core Types
-  typ = {
+  {
     Xform
-  }
+  } -> typ
 
   -- Core Operators
-  op = {
-    
-  }
+  {
+
+  } -> op
 
   -- Core Functions
-  fn = {
-    xform, string_to_net, net_to_string, graph_to_wire, 
-    wire_to_net, net_to_rewrite, rewrite_to_red, map, 
-    process_files, safe_pipeline, string_to_wire, 
-    string_to_runnable_net, full_pipeline
-  }
+  {
+    xform string_to_net net_to_string graph_to_wire
+    wire_to_net net_to_rewrite rewrite_to_red map
+    process_files safe_pipeline string_to_wire
+    string_to_runnable_net full_pipeline
+  } -> fn
 
   -- Aggregate all entities
-  E = typ $cup op $cup fn
+  typ cup op cup fn -> E
 
   -- Classify entities
-  $tau = \e. {
-    match e: E {
-      _ $in typ -> Mod.TypeSym
-      _ $in op -> Mod.OpSym
-      _ $in fn -> Mod.FnSym
-      _ -> Mod.TypeSym -- Default case
-    }
-  }
+  E |> [e ->
+    e |> in typ ? Mod.TypeSym :
+    e |> in op ? Mod.OpSym :
+    e |> in fn ? Mod.FnSym :
+    Mod.TypeSym -- Default case
+  ] match -> tau
 
   -- Export all entities by default
-  vis = \e. true
+  E |> [e -> true] -> vis
 }
 
--- export Xform; 
+-- export Xform;

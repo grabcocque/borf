@@ -4,75 +4,86 @@
 @Grph: { -- Abstract Graph definition with labels
   N                             -- Set of Nodes
   E                             -- Set of Edges
-  src: E->N                     -- Edge source node function
-  tgt: E->N                     -- Edge target node function
+  E -> N                                                            : src -- Edge source node function
+  E -> N                                                            : tgt -- Edge target node function
   -- X is a placeholder for the label type (could be Any, Sym, specific label type TBD)
-  $lambdaN: N->X                -- Node labeling function
-  $lambdaE: E->X                -- Edge labeling function
+  N -> X                                                            : lambdaN -- Node labeling function
+  E -> X                                                            : lambdaE -- Edge labeling function
 
   -- Structural Compatibility with Category Theory (@Cat)
-  O = N                         -- Objects are nodes
-  M = E                         -- Morphisms are edges
-  dom = src
-  cod = tgt
+  N                                                                 -> O -- Objects are nodes
+  E                                                                 -> M -- Morphisms are edges
+  src                                                               -> dom
+  tgt                                                               -> cod
   -- Note: id and composition are not directly mapped here, but can be defined via paths.
 
   -- Graph Construction Helpers (Interfaces/Signatures)
-  loop: N->E                      -- Creates a loop edge for a node
-  comp: E*E->E | tgt(e) $veq src(f) -- Creates a composite edge representing path e then f
+  N -> E                                                            : loop -- Creates a loop edge for a node
+  E * E -> E [e1 e2 ->
+    e1 |> tgt veq (e2 |> src) |> constrain -> _ -- Ensure composability
+    e1 e2 |> comp
+  ]                                                                 : comp -- Creates a composite edge representing path e then f
 
   -- Identity and Composition (defined via helpers)
-  id = \n. loop(n)               -- Identity morphism corresponds to a loop edge
+  N -> E [n -> n |> loop]                                           : id -- Identity morphism corresponds to a loop edge
   -- Composition '.' corresponds to path composition via 'comp' helper.
 
   -- Graph Laws
-  law.loop_src_tgt = $forall n $in N: src(loop(n)) $veq n $and tgt(loop(n)) $veq n
-  law.comp_src_tgt = $forall e,f $in E | tgt(e) $veq src(f):
-    src(comp(e,f)) $veq src(e) $and tgt(comp(e,f)) $veq tgt(f)
+  N |> forall [n ->
+    n |> loop |> src veq n and
+    n |> loop |> tgt veq n
+  ]                                                                 : law.loop_src_tgt
+
+  E * E |> constrain [e1 e2 -> e1 |> tgt veq (e2 |> src)] |> forall [e1 e2 ->
+    e1 e2 |> comp |> src veq (e1 |> src) and
+    e1 e2 |> comp |> tgt veq (e2 |> tgt)
+  ]                                                                 : law.comp_src_tgt
 
   -- Node Equivalence based on Label Equality
-  node_eq: N*N->Bool = \a,b. $lambdaN(a) $seq $lambdaN(b) -- Nodes are equivalent if their labels are structurally equal
+  N * N -> Bool [n1 n2 -> n1 |> lambdaN seq (n2 |> lambdaN)]       : node_eq -- Nodes are equivalent if their labels are structurally equal
 
   -- Decoration Coherence Laws (Relating node/edge labels)
   -- Assumes 'rel' from @R provides the appropriate relation between labels.
-  law.dec_comp = $forall e,f $in E | tgt(e) $veq src(f):
-    $lambdaE(comp(e,f)) R.rel ($lambdaE(e) * $lambdaE(f)) -- Label of composite edge relates to labels of components
-  law.dec_loop = $forall n $in N: $lambdaE(loop(n)) R.rel $lambdaN(n) -- Label of loop edge relates to label of the node
+  E * E |> constrain [e1 e2 -> e1 |> tgt veq (e2 |> src)] |> forall [e1 e2 ->
+    e1 e2 |> comp |> lambdaE |> R.rel ((e1 |> lambdaE) * (e2 |> lambdaE))
+  ]                                                                 : law.dec_comp -- Label of composite edge relates to labels of components
 
-  -- Example: node_eq(node1, node2, node_equality_function)
+  N |> forall [n ->
+    n |> loop |> lambdaE |> R.rel (n |> lambdaN)
+  ]                                                                 : law.dec_loop -- Label of loop edge relates to label of the node
+
+  -- Example: node1 node2 |> node_eq
 
   -- ~~~ Core Module Pattern (Entities Aggregation) ~~~
   -- Core Types
-  typ = {
+  {
     Grph
-  }
+  } -> typ
 
   -- Core Operators
-  op = {
-    $lambdaN, $lambdaE
-  }
+  {
+    lambdaN lambdaE
+  } -> op
 
   -- Core Functions
-  fn = {
-    src, tgt, loop, comp, id, node_eq,
-    law.loop_src_tgt, law.comp_src_tgt, law.dec_comp, law.dec_loop
-  }
+  {
+    src tgt loop comp id node_eq
+    law.loop_src_tgt law.comp_src_tgt law.dec_comp law.dec_loop
+  } -> fn
 
   -- Aggregate all entities
-  E = typ $cup op $cup fn
+  typ cup op cup fn -> E
 
   -- Classify entities
-  $tau = \e. {
-    match e: E {
-      _ $in typ -> Mod.TypeSym
-      _ $in op -> Mod.OpSym
-      _ $in fn -> Mod.FnSym
-      _ -> Mod.TypeSym -- Default case
-    }
-  }
+  E |> [e ->
+    e |> in typ ? Mod.TypeSym :
+    e |> in op ? Mod.OpSym :
+    e |> in fn ? Mod.FnSym :
+    Mod.TypeSym -- Default case
+  ] match -> tau
 
   -- Export all entities by default
-  vis = \e. true
+  E |> [e -> true] -> vis
 }
 
--- export Grph; 
+-- export Grph;

@@ -1,22 +1,22 @@
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 -- ~~~ Fallible Computation/Result Types/FLP ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 @FLogic: {
   -- Fallible computation result as a linear resource
-  !Result: Type -> Type         -- Linear result type constructor
-  !Success: a -> !Result a      -- Success constructor (linear)
-  !Failure: S -> !Result a      -- Failure constructor with error message (linear)
+  Type -> Type !Result                                            -- Linear result type constructor
+  a -> !Result(a) !Success                                        -- Success constructor (linear)
+  S -> !Result(a) !Failure                                        -- Failure constructor with error message (linear)
 
   -- Helper functions for Optional (?) type
-  is_valid: ?a -> Bool = \x. $not(Primitives.$seq(x, $nothing)) -- Check if optional has a value
-  extract_value: ?a -> a = \x. x.value                            -- Extract value (unsafe, assumes valid)
+  ?a -> Bool [x -> x |> nothing |> seq |> not]                    : is_valid -- Check if optional has a value
+  ?a -> a [x -> x.value]                                          : extract_value -- Extract value (unsafe, assumes valid)
 
   -- Placeholder for a fallible function (Implementation would be elsewhere)
-  parse_int: S -> !Result Z = \s. !Failure("parse_int not implemented")Thes
-  -- Example: let !res = parse_int("123")
+  S -> !Result(Z) [s -> "parse_int not implemented" |> !Failure]  : parse_int
+  -- Example: "123" |> parse_int -> !res
 
   -- Linear handlers that consume the result exactly once
-  handle: !Result a * (a -o> b) * (S -o> b) -> b
+  !Result(a) * (a -o> b) * (S -o> b) -> b handle
   -- Linear handler: requires both success and failure continuations with linear arrows (-o>)
   -- This enforces that both paths are considered, consuming the result exactly once
 
@@ -27,64 +27,62 @@
   -- }
 
   -- Narrowing operation (consumes result, fails or continues)
-  narrow: !Result a -o> a | false  -- Linear narrowing operation
+  !Result(a) -> a|false narrow -o>                                -- Linear narrowing operation
   -- Returns the value if success, fails entirely (backtracking) if failure
-  -- Example: let x = $narrow(parse_int("123")) -- x is Z or computation fails
+  -- Example: "123" |> parse_int |> narrow -> x -- x is Z or computation fails
 
   -- Fallible operation composition (consumes first result linearly)
-  seq: !Result a * (a -o> !Result b) -o> !Result b
+  !Result(a) * (a -o> !Result(b)) -> !Result(b) seq -o>
   -- Sequential composition with guaranteed handling of first result
-  -- Example: $seq(parse_int(s), \n. !Success(n+1))
+  -- Example: s |> parse_int |> seq [n -> n + 1 |> !Success]
 
   -- Fallible operation alternatives (both must be handled)
-  alt: !Result a * !Result a -o> !Result a
+  !Result(a) * !Result(a) -> !Result(a) alt -o>
   -- First success wins, or combined failure
-  -- Example: $alt(parse_int("abc"), parse_int("123"))
+  -- Example: "abc" |> parse_int |> alt ("123" |> parse_int)
 
   -- Logic programming primitives with linear guarantees
-  choice: a * a -o> a           -- Non-deterministic choice (linear)
-  constrain: (a -o> !B) * a -o> a  -- Linear constraint (consumes predicate check)
+  a * a -> a choice -o>                                           -- Non-deterministic choice (linear)
+  (a -o> !B) * a -> a constrain -o>                              -- Linear constraint (consumes predicate check)
 
   -- Forward computation while preserving linearity
-  map: (a -o> b) * !Result a -o> !Result b
+  (a -o> b) * !Result(a) -> !Result(b) map -o>
   -- Transform success value while preserving linearity
-  -- Example: $map((\n. n*2), parse_int("10"))
+  -- Example: [n -> n * 2] |> map ("10" |> parse_int)
 
   -- Default value (consuming the result)
-  default: !Result a * a -o> a
+  !Result(a) * a -> a default -o>
   -- Returns success value or default while consuming the result
-  -- Example: $default(parse_int("abc"), 0) -- Returns 0
+  -- Example: "abc" |> parse_int |> default 0 -- Returns 0
 
   -- ~~~ Core Module Pattern (Entities Aggregation) ~~~
   -- Core Types
-  typ = {
+  {
     !Result
-  }
+  } -> typ
 
   -- Core Operators
-  op = {
+  {
     -o>  -- Linear arrow
-  }
+  } -> op
 
   -- Core Functions
-  fn = {
-    !Success, !Failure, handle, narrow, seq, alt, choice, constrain, 
-    map, default, is_valid, extract_value, parse_int
-  }
+  {
+    !Success !Failure handle narrow seq alt choice constrain
+    map default is_valid extract_value parse_int
+  } -> fn
 
   -- Aggregate all entities
-  E = typ $cup op $cup fn
+  typ cup op cup fn -> E
 
   -- Classify entities
-  $tau = \e. {
-    match e: E {
-      _ $in typ -> Mod.TypeSym
-      _ $in op -> Mod.OpSym
-      _ $in fn -> Mod.FnSym
-      _ -> Mod.TypeSym -- Default case
-    }
-  }
+  E |> [e ->
+    e |> in typ ? Mod.TypeSym :
+    e |> in op ? Mod.OpSym :
+    e |> in fn ? Mod.FnSym :
+    Mod.TypeSym -- Default case
+  ] match -> tau
 
   -- Export all entities by default
-  vis = \e. true
-} 
+  E |> [e -> true] -> vis
+}

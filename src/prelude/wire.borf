@@ -4,68 +4,68 @@
 @Wire: { -- Represents static connectivity (boxes, ports, wires)
   B                             -- Set of Boxes (components)
   P                             -- Set of Ports (connection points on boxes)
-  box: P->B                     -- Assigns each port to its owning box
-  w: P->P                       -- Wiring function (connects ports, must be a bijection)
+  P -> B box                    -- Assigns each port to its owning box
+  P -> P w                      -- Wiring function (connects ports, must be a bijection)
   -- X is a placeholder for the type/label (could be Any, Sym, specific TBD)
-  $tauP: P->X                   -- Port typing/labeling function
-  $tauB: B->X                   -- Box typing/labeling function
+  P -> X tauP                   -- Port typing/labeling function
+  B -> X tauB                   -- Box typing/labeling function
 
   -- Structural Compatibility with Graph Theory (@Grph)
-  N = B $cup P                  -- Nodes are both boxes and ports
-  E = {(p,q) | p $in P $and q $in P $and w(p) $veq q} -- Edges represent wires between ports
-  src = \(p,q). p               -- Source of a wire edge is the first port
-  tgt = \(p,q). q               -- Target of a wire edge is the second port
-  $lambdaN = \n. match n $in B {
-    true -> $tauB(n)
-    false -> $tauP(n)
-  } -- Node label depends on whether it's a box or port
-  $lambdaE = \(p,q). ($tauP(p), $tauP(q))               -- Edge label is the pair of connected port types/labels
+  B cup P                                                           : N -- Nodes are both boxes and ports
+  P |> [p -> (p, p |> w)] |> pairs                                 : E -- Edges represent wires between ports
+  E |> [e -> e.0]                                                  : src -- Source of a wire edge is the first port
+  E |> [e -> e.1]                                                  : tgt -- Target of a wire edge is the second port
+  N |> [n ->
+    n |> in B ? n |> tauB : n |> tauP
+  ]                                                                : lambdaN -- Node label depends on whether it's a box or port
+  E |> [e ->
+    (e |> src |> tauP, e |> tgt |> tauP)
+  ]                                                                : lambdaE -- Edge label is the pair of connected port types/labels
 
   -- Wiring Diagram Laws
-  law.wiring_involution = $forall p $in P: w(w(p)) $veq p -- Wiring is its own inverse (bidirectional)
-  law.port_unique_owner = $forall p $in P: $exists! b $in B: box(p) $veq b -- Each port belongs to exactly one box
-  law.wiring_type_compat = $forall p,q $in P: w(p) $veq q => $tauP(p) R.$omega $tauP(q) -- Connected ports must have compatible types (using $omega from @R)
+  P |> forall [p -> p |> w |> w veq p]                             : law.wiring_involution -- Wiring is its own inverse (bidirectional)
+  P |> forall [p -> B |> exists_unique [b -> p |> box veq b]]      : law.port_unique_owner -- Each port belongs to exactly one box
+  P * P |> forall [p q -> p |> w veq q ->
+                           p |> tauP |> R.omega (q |> tauP)]       : law.wiring_type_compat -- Connected ports must have compatible types (using omega from @R)
 
   -- Box Signatures (Input/Output Ports)
-  sig: B -> {in:{P}, out:{P}}   -- Function mapping a box to its input and output port sets
-  law.ports_in_signature = $forall b $in B, p $in P:
-    box(p) $veq b => (p $in sig(b).in $or p $in sig(b).out) -- All ports of a box must be in its signature
+  B -> {in:{P}, out:{P}} sig    -- Function mapping a box to its input and output port sets
+  B * P |> forall [b p -> p |> box veq b ->
+                  p |> in (b |> sig.in) or p |> in (b |> sig.out)] : law.ports_in_signature -- All ports of a box must be in its signature
 
-  -- Example: sig(my_box)
+  -- Example: my_box |> sig
 
   -- ~~~ Core Module Pattern (Entities Aggregation) ~~~
   -- Core Types
-  typ = {
+  {
     Wire
-  }
+  } -> typ
 
   -- Core Operators
-  op = {
-    $tauP, $tauB
-  }
+  {
+    tauP tauB
+  } -> op
 
   -- Core Functions
-  fn = {
-    box, w, sig, 
-    law.wiring_involution, law.port_unique_owner, 
-    law.wiring_type_compat, law.ports_in_signature
-  }
+  {
+    box w sig
+    law.wiring_involution law.port_unique_owner
+    law.wiring_type_compat law.ports_in_signature
+  } -> fn
 
   -- Aggregate all entities
-  E = typ $cup op $cup fn
+  typ cup op cup fn -> E
 
   -- Classify entities
-  $tau = \e. {
-    match e: E {
-      _ $in typ -> Mod.TypeSym
-      _ $in op -> Mod.OpSym
-      _ $in fn -> Mod.FnSym
-      _ -> Mod.TypeSym -- Default case
-    }
-  }
+  E |> [e ->
+    e |> in typ ? Mod.TypeSym :
+    e |> in op ? Mod.OpSym :
+    e |> in fn ? Mod.FnSym :
+    Mod.TypeSym -- Default case
+  ] match -> tau
 
   -- Export all entities by default
-  vis = \e. true
+  E |> [e -> true] -> vis
 }
 
--- export Wire; 
+-- export Wire;

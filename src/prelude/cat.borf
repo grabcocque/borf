@@ -4,71 +4,71 @@
 @Cat: { -- Abstract Category definition
   O                               -- Set of Objects
   M                               -- Set of Morphisms (Arrows)
-  dom: M->O                       -- Morphism domain (source object)
-  cod: M->O                       -- Morphism codomain (target object)
-  id: O->M                        -- Identity morphism for each object
-  .: M*M->M | cod(g) $veq dom(f)  -- Composition (infix); condition uses value equality ($veq) for object identity
+  M -> O dom                      -- Morphism domain (source object)
+  M -> O cod                      -- Morphism codomain (target object)
+  O -> M id                       -- Identity morphism for each object
+  M * M -> M . [g f -> g |> cod veq f |> dom] |> constrain   -- Composition (infix); condition uses value equality (veq) for object identity
 
   -- Categorical Equivalence (Isomorphism)
-  $ceq: O*O->Bool                 -- Categorical equivalence (objects are isomorphic)
+  O * O -> Bool ceq                 -- Categorical equivalence (objects are isomorphic)
 
   -- Category Axioms
-  law.id_dom_cod = $forall o $in O: dom(id(o)) $veq o $and cod(id(o)) $veq o
-  law.id_right_neutral = $forall f $in M: id(cod(f)) . f $seq f -- Right identity composition; uses structural equality ($seq) for morphisms
-  law.id_left_neutral = $forall f $in M: f . id(dom(f)) $seq f -- Left identity composition; uses structural equality ($seq) for morphisms
-  law.associativity = $forall f,g,h $in M | composable(f,g,h): h.(g.f) $seq (h.g).f -- Composition is associative; uses structural equality
+  O |> forall [o -> o |> id |> dom veq o and o |> id |> cod veq o] : law.id_dom_cod
+  M |> forall [f -> f |> cod |> id |> f . veq f] : law.id_right_neutral -- Right identity composition; uses structural equality (seq) for morphisms
+  M |> forall [f -> f |> f |> dom |> id . veq f] : law.id_left_neutral -- Left identity composition; uses structural equality (seq) for morphisms
+  M * M * M |> [f g h -> (h |> g |> f .) veq (h . g |> f .)] |> constrain |> forall : law.associativity -- Composition is associative; uses structural equality
 
   -- Isomorphism Definition
-  law.ceq_iff_iso = $forall a,b $in O:
-    a $ceq b $iff ($exists f,g $in M:
-      dom(f) $veq a $and cod(f) $veq b $and
-      dom(g) $veq b $and cod(g) $veq a $and
-      g.f $seq id(a) $and f.g $seq id(b)
-    ) -- Two objects are categorically equivalent iff they are isomorphic
+  O * O |> forall [a b ->
+    a ceq b iff
+    (M |> exists [f g ->
+      f |> dom veq a and f |> cod veq b and
+      g |> dom veq b and g |> cod veq a and
+      g . f veq a |> id and f . g veq b |> id
+    ])
+  ] : law.ceq_iff_iso -- Two objects are categorically equivalent iff they are isomorphic
 
   -- Utility Functions
-  composable: M*M->Bool = \f,g. cod(g) $veq dom(f) -- Check if two morphisms are composable
-  composable: M*M*M->Bool = \f,g,h. composable(f,g) $and composable(g,h) -- Check if three are composable
-  hom: O*O->{M} = \a,b. {f $in M | dom(f) $veq a $and cod(f) $veq b} -- Set of morphisms between two objects
+  M * M -> Bool [f g -> g |> cod veq f |> dom] : composable
+  M * M * M -> Bool [f g h -> f composable g and g composable h] : composable
+  O * O -> {M} [a b -> M |> filter [f -> f |> dom veq a and f |> cod veq b]] : hom
 
   -- Example (assuming f, g, h are composable morphisms)
-  example.composition = let comp1 = h . (g . f); comp2 = (h . g) . f in comp1 $seq comp2
+  [comp1 comp2 -> h . (g . f) -> comp1; (h . g) . f -> comp2; comp1 veq comp2] : example.composition
 
   -- Example: Cat.hom(@Types, T.Sym, T.Int)
 
   -- ~~~ Core Module Pattern (Entities Aggregation) ~~~
   -- Core Types
-  typ = {
+  {
     Cat
-  }
+  } -> typ
 
   -- Core Operators
-  op = {
-    ., $ceq
-  }
+  {
+    . ceq
+  } -> op
 
   -- Core Functions
-  fn = {
-    dom, cod, id, composable, hom,
-    law.id_dom_cod, law.id_right_neutral, law.id_left_neutral, 
-    law.associativity, law.ceq_iff_iso, example.composition
-  }
+  {
+    dom cod id composable hom
+    law.id_dom_cod law.id_right_neutral law.id_left_neutral
+    law.associativity law.ceq_iff_iso example.composition
+  } -> fn
 
   -- Aggregate all entities
-  E = typ $cup op $cup fn
+  typ cup op cup fn -> E
 
   -- Classify entities
-  $tau = \e. {
-    match e: E {
-      _ $in typ -> Mod.TypeSym
-      _ $in op -> Mod.OpSym
-      _ $in fn -> Mod.FnSym
-      _ -> Mod.TypeSym -- Default case
-    }
-  }
+  E |> [e ->
+    e |> in typ ? Mod.TypeSym :
+    e |> in op ? Mod.OpSym :
+    e |> in fn ? Mod.FnSym :
+    Mod.TypeSym -- Default case
+  ] match -> tau
 
   -- Export all entities by default
-  vis = \e. true
+  E |> [e -> true] -> vis
 }
 
--- export Cat; 
+-- export Cat;

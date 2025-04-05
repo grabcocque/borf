@@ -2,91 +2,93 @@
 -- ~~~ Standard Library (Basic Data Structures) ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 @StdLib: {
-  -- Requires Primitives: $insert, $lookup, $ceq, $ne, $rho, $cons, $head, $tail, $map, $fold, $concat, $append
+  -- Requires Primitives: insert, lookup, ceq, ne, rho, cons, head, tail, map, fold, concat, append
 
   -- Set/List/Map non-emptiness check
-  ne: Any -> Bool = \coll. Primitives.$rho(coll) > 0 -- Check if collection is not empty
+  Any -> Bool [coll -> coll |> Primitives.rho > 0]             : ne -- Check if collection is not empty
 
-  -- List append (single element) - Requires $concat primitive
-  append: [a]*a -> [a] = \xs,x. Primitives.$concat(xs, [x])
-  
+  -- List append (single element) - Requires concat primitive
+  [a] * a -> [a] [xs x -> xs [x] |> Primitives.concat]         : append
+
   -- Map Operations (k :-> v)
   Map = {
-    empty: k :-> v = {} -- Assuming {} literal creates empty map
-    insert: (k :-> v)*k*v -> (k :-> v) = \m,k,v. Primitives.$insert(m, k, v)
-    lookup: (k :-> v)*k -> ?v = \m,k. Primitives.$lookup(m, k)
-    contains_key: (k :-> v)*k -> Bool = \m,k. Primitives.$is_valid(Primitives.$lookup(m,k))
-    is_empty: (k :-> v) -> Bool = \m. $not(Primitives.$ne(m))
-    size: (k :-> v) -> Z = \m. Primitives.$rho(m)
+    {} -> (k v :->)                                                                 : empty -- Assuming {} literal creates empty map
+    (k v :->) * k * v -> (k v :->) [m k v -> m k v |> Primitives.insert]            : insert
+    (k v :->) * k -> ?v [m k -> m k |> Primitives.lookup]                           : lookup
+    (k v :->) * k -> Bool [m k -> m k |> Primitives.lookup |> Primitives.is_valid]  : contains_key
+    (k v :->) -> Bool [m -> m |> Primitives.ne |> not]                              : is_empty
+    (k v :->) -> Z [m -> m |> Primitives.rho]                                       : size
     -- update, delete, keys, values, etc. could be added
   }
 
   -- Sequence Operations (Seq a) - Conceptual, assumes primitives work as intended
   Seq = {
-    empty: Seq a = <> -- Assuming <> literal creates empty sequence
-    cons: a*(Seq a) -> (Seq a) = \x,xs. Primitives.$cons(x, xs)
-    head: (Seq a) -> ?a = \xs. Primitives.$head(xs)
-    tail: (Seq a) -> ?(Seq a) = \xs. Primitives.$tail(xs)
-    is_empty: (Seq a) -> Bool = \xs. $not(Primitives.$is_valid(Primitives.$head(xs))) -- Or a dedicated primitive
+    <> -> (Seq a)                                                                   : empty -- Assuming <> literal creates empty sequence
+    a * (Seq a) -> (Seq a) [x xs -> x xs |> Primitives.cons]                        : cons
+    (Seq a) -> ?a [xs -> xs |> Primitives.head]                                     : head
+    (Seq a) -> ?(Seq a) [xs -> xs |> Primitives.tail]                               : tail
+    (Seq a) -> Bool [xs -> xs |> Primitives.head |> Primitives.is_valid |> not]     : is_empty -- Or a dedicated primitive
     -- Higher-order functions (map, filter, fold) likely need transducer support or specific primitives
-    -- map: (a->b)*(Seq a) -> (Seq b) = ...
-    -- filter: (a->Bool)*(Seq a) -> (Seq a) = ...
-    -- fold: (b*a->b)*b*(Seq a) -> b = ...
+    -- (a -> b) * (Seq a) -> (Seq b) map = ...
+    -- (a -> Bool) * (Seq a) -> (Seq a) filter = ...
+    -- (b * a -> b) * b * (Seq a) -> b fold = ...
   }
 
   -- List Operations ([a]) - Eager evaluation using primitives
   List = {
-    empty: [a] = [] -- Assuming [] literal creates empty list
-    cons: a*[a] -> [a] = \x,xs. Primitives.$concat([x], xs) -- Less efficient than primitive cons if available
-    append: [a]*a -> [a] = \xs,x. Primitives.$append(xs, x)
-    concat: [a]*[a] -> [a] = \xs,ys. Primitives.$concat(xs, ys)
-    head: [a] -> ?a = \xs. Primitives.$ne(xs) $iff Primitives.$at(xs, 0) $or_else $nothing
-    tail: [a] -> ?[a] = \xs. Primitives.$ne(xs) $iff Primitives.$slice(xs, 1, Primitives.$rho(xs)) $or_else $nothing
-    map: (a->b)*[a] -> [b] = \f,xs. Primitives.$map(f, xs)
-    filter: (a->Bool)*[a] -> [a] = \p,xs. {
-      let indices = Primitives.$where(p, xs)
-      in Primitives.$map(\i. Primitives.$at(xs, i), indices) -- Needs map over indices
-    }
-    fold: (b*a->b)*b*[a] -> b = \f,acc,xs. Primitives.$fold(f, acc, xs)
-    is_empty: [a] -> Bool = \xs. $not(Primitives.$ne(xs))
-    size: [a] -> N              -- Size of the list (Placeholder implementation)
+    [] -> [a]                                                                       : empty -- Assuming [] literal creates empty list
+    a * [a] -> [a] [x xs -> [x] xs |> Primitives.concat]                            : cons -- Less efficient than primitive cons if available
+    [a] * a -> [a] [xs x -> xs x |> StdLib.append]                                  : append
+    [a] * [a] -> [a] [xs ys -> xs ys |> Primitives.concat]                          : concat
+    [a] -> ?a [xs ->
+      xs |> Primitives.ne ? xs[0] : nothing
+    ]                                                                               : head
+    [a] -> ?[a] [xs ->
+      xs |> Primitives.ne ? xs |> Primitives.slice(1, xs |> Primitives.rho) : nothing
+    ]                                                                               : tail
+    (a -> b) * [a] -> [b] [f xs -> xs |> Primitives.map(f)]                         : map
+    (a -> Bool) * [a] -> [a] [pred xs ->
+      xs |> Primitives.where(pred) -> indices
+      indices |> Primitives.map [i -> xs[i]]
+    ]                                                                               : filter
+    (b * a -> b) * b * [a] -> b [f acc xs -> xs |> Primitives.fold(f, acc)]         : fold
+    [a] -> Bool [xs -> xs |> Primitives.ne |> not]                                  : is_empty
+    [a] -> N                                                                        : size -- Size of the list (Placeholder implementation)
   }
 
   -- ~~~ Core Module Pattern (Entities Aggregation) ~~~
   -- Core Types
-  typ = {
-    StdLib, Map, Seq, List
-  }
+  {
+    StdLib Map Seq List
+  } -> typ
 
   -- Core Operators
-  op = {
-    
-  }
+  {
+
+  } -> op
 
   -- Core Functions
-  fn = {
-    ne, append,
-    Map.empty, Map.insert, Map.lookup, Map.contains_key, Map.is_empty, Map.size,
-    Seq.empty, Seq.cons, Seq.head, Seq.tail, Seq.is_empty,
-    List.empty, List.cons, List.append, List.concat, List.head, List.tail,
-    List.map, List.filter, List.fold, List.is_empty, List.size
-  }
+  {
+    ne append
+    Map.empty Map.insert Map.lookup Map.contains_key Map.is_empty Map.size
+    Seq.empty Seq.cons Seq.head Seq.tail Seq.is_empty
+    List.empty List.cons List.append List.concat List.head List.tail
+    List.map List.filter List.fold List.is_empty List.size
+  } -> fn
 
   -- Aggregate all entities
-  E = typ $cup op $cup fn
+  typ cup op cup fn -> E
 
   -- Classify entities
-  $tau = \e. {
-    match e: E {
-      _ $in typ -> Mod.TypeSym
-      _ $in op -> Mod.OpSym
-      _ $in fn -> Mod.FnSym
-      _ -> Mod.TypeSym -- Default case
-    }
-  }
+  E |> [e ->
+    e |> in typ ? Mod.TypeSym :
+    e |> in op ? Mod.OpSym :
+    e |> in fn ? Mod.FnSym :
+    Mod.TypeSym -- Default case
+  ] match -> tau
 
   -- Export all entities by default
-  vis = \e. true
+  E |> [e -> true] -> vis
 }
 
--- export StdLib; 
+-- export StdLib;

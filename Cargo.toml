@@ -9,9 +9,17 @@ edition = "2021"
 name = "borf"
 path = "src/lib.rs"
 
-[[bin]]
-name = "borf"
-path = "src/main.rs"
+# [[bin]]
+# name = "borf"
+# path = "src/main.rs"
+
+# [[bin]]
+# name = "prelude_parser"
+# path = "src/bin/prelude_parser.rs"
+#
+# [[bin]]
+# name = "parse_prelude"
+# path = "src/bin/parse_prelude.rs"
 
 [dependencies]
 pest = "2.7.10"
@@ -21,6 +29,10 @@ lazy_static = "1.4.0"
 # Error handling
 thiserror = "1.0"
 miette = { version = "7.2.0", features = ["fancy"] }
+
+# CLI and formatting
+clap = { version = "4.5.5", features = ["derive"] }
+colored = "2.1.0"
 
 # Dependencies for fuzzing
 libfuzzer-sys = { version = "0.4", optional = true }

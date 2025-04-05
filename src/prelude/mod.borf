@@ -3,13 +3,13 @@
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 @Mod: { -- Defines the abstract structure of modules as a category
   -- Module dependency and export configuration
-  deps = {
+  {
     -- Mod depends on Cat and is exported by Core
     (@Core, @Mod, true),
     (@Mod, @Cat, false),
     -- Depends on Sym type from T module
     (@Mod, T.Sym, false)
-  }
+  } deps =
 
   -- Core Module Entity Types
   ModSym                         -- The type of module symbols
@@ -19,81 +19,78 @@
 
   -- Required Module System declarations (these match @Core's declarations)
   E                              -- The universe of all entities
-  $tau: E->Sym                   -- Entity type function (categorizes entities)
-  $delta: E*E->Bool              -- Dependency relation (tracks entity dependencies)
-  vis: E->Bool                   -- Visibility predicate (determines export status)
+  E Sym -> tau                   -- Entity type function (categorizes entities)
+  E E Bool -> delta              -- Dependency relation (tracks entity dependencies)
+  E Bool -> vis                   -- Visibility predicate (determines export status)
 
   -- Structural Compatibility with Category Theory (@Cat)
-  O = {m | m $in E $and $tau(m) $teq ModSym} -- Objects are modules
-  M = {(a,b) | a,b $in O $and $delta(a,b)}  -- Morphisms are dependencies
-  dom = \(a,b). a                -- Domain of dependency is the dependent module
-  cod = \(a,b). b                -- Codomain is the dependency
+  E [ dup tau ModSym teq ] filter O = -- Objects are modules
+  O O [ dup2 delta ] filter_pairs M =  -- Morphisms are dependencies
+  M [ swap drop ] dom =                -- Domain of dependency is the dependent module
+  M [ drop ] cod =                     -- Codomain is the dependency
 
   -- Categorical Laws for Modules
-  law.acyclic = $not($exists m $in O: $delta(m,m)) -- No self-dependencies
-  law.transitivity = $forall a,b,c $in O: ($delta(a,b) $and $delta(b,c)) => $delta(a,c) -- Dependencies are transitive
+  O [ dup delta not ] forall law.acyclic = -- No self-dependencies
+  O O O [ dup2 delta swap2 delta and -> delta ] forall law.transitivity = -- Dependencies are transitive
 
   -- Module Components
-  components: ModSym -> {E}      -- Function mapping module to its contained entities
-  law.component_completeness = $forall m $in O, e $in components(m): $delta(e,m) -- All components depend on their module
+  ModSym {E} -> components      -- Function mapping module to its contained entities
+  O E [ dup2 components in -> delta ] forall law.component_completeness = -- All components depend on their module
 
   -- Entity Type Classification
-  is_type: E -> Bool = \e. $tau(e) $teq TypeSym -- Check if entity is a type
-  is_op: E -> Bool = \e. $tau(e) $teq OpSym     -- Check if entity is an operator
-  is_fn: E -> Bool = \e. $tau(e) $teq FnSym     -- Check if entity is a function
-  is_mod: E -> Bool = \e. $tau(e) $teq ModSym   -- Check if entity is a module
+  E Bool -> [ tau TypeSym teq ] is_type = -- Check if entity is a type
+  E Bool -> [ tau OpSym teq ] is_op =     -- Check if entity is an operator
+  E Bool -> [ tau FnSym teq ] is_fn =     -- Check if entity is a function
+  E Bool -> [ tau ModSym teq ] is_mod =   -- Check if entity is a module
 
   -- Visibility and Export
-  exported: ModSym*E -> Bool = \m,e. e $in components(m) $and vis(e) -- Entity is exported by its module
+  ModSym E Bool -> [ dup2 components in swap vis and ] exported = -- Entity is exported by its module
 
   -- Module Dependencies
-  imports: ModSym -> {ModSym} = \m. {n | n $in O $and $delta(m,n)} -- Get modules imported by m
+  ModSym {ModSym} -> [ O [ dup2 delta ] filter ] imports = -- Get modules imported by m
 
   -- Module Composition (conceptual)
-  $oplus: ModSym*ModSym -> ModSym -- Compose modules (implementation details TBD)
+  ModSym ModSym ModSym -> oplus -- Compose modules (implementation details TBD)
 
   -- Example: Module structure validation
-  validate_module: ModSym -> Bool = \m. {
-    -- Check that a module's dependency graph is well-formed
-    let deps = imports(m)
-    let all_entities = components(m)
-    let all_types = {e $in all_entities | is_type(e)}
+  ModSym Bool -> [
+    dup imports swap
+    dup components swap
+    [ is_type ] filter_p all_types =
     -- A valid module has appropriately classified components and valid dependencies
-    $forall e $in all_entities: $tau(e) $in {TypeSym, OpSym, FnSym, ModSym} $and
-    $forall d $in deps: is_mod(d)
-  }
+    all_entities [ tau TypeSym OpSym FnSym ModSym in ] forall
+    deps [ is_mod ] forall and
+  ] validate_module =
 
   -- ~~~ Core Module Pattern (Entities Aggregation) ~~~
   -- Core Types
-  typ = {
-    ModSym, TypeSym, OpSym, FnSym
-  }
+  {
+    ModSym TypeSym OpSym FnSym
+  } typ =
 
   -- Core Operators
-  op = {
-    $tau, $delta, $oplus
-  }
+  {
+    tau delta oplus
+  } op =
 
   -- Core Functions
-  fn = {
-    vis, dom, cod, components,
-    is_type, is_op, is_fn, is_mod, exported, imports, validate_module,
-    law.acyclic, law.transitivity, law.component_completeness
-  }
+  {
+    vis dom cod components
+    is_type is_op is_fn is_mod exported imports validate_module
+    law.acyclic law.transitivity law.component_completeness
+  } fn =
 
   -- Aggregate all entities
-  E = typ $cup op $cup fn
+  typ op fn cup cup E =
 
   -- Classify entities
-  $tau = \e. {
-    match e: E {
-      _ $in typ -> Mod.TypeSym
-      _ $in op -> Mod.OpSym
-      _ $in fn -> Mod.FnSym
-      _ -> Mod.TypeSym -- Default case
-    }
-  }
+  E [
+    dup typ in [ drop Mod.TypeSym ]
+    swap dup op in [ drop Mod.OpSym ]
+    swap dup fn in [ drop Mod.FnSym ]
+    swap drop Mod.TypeSym -- Default case
+  ] match tau =
 
   -- Export all entities by default
-  vis = \e. true
+  E [ drop true ] vis =
 }

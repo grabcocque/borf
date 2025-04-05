@@ -1,115 +1,113 @@
 @Primitives: {  -- Core language primitives (Implementation assumed by runtime)
   -- Module dependency and export configuration
-  deps = {
+  {
     -- This module is intended to be exported (Core imports and exports it)
     (@Core, @Primitives, true)
-  }
+  } -> deps
 
   -- Core Collection Operators
-  $rho: Any -> Z                -- Shape/size of a collection (List, Set, Map, Seq)
-  $map: (a->b)*[a] -> [b]       -- Apply function to each element of a list (eager)
-  $fold: (b*a->b)*b*[a] -> b    -- Fold/reduce a list (eager)
-  $concat: [a]*[a] -> [a]       -- Concatenate two lists (eager)
-  $transpose: [a*b] -> [b*a]    -- Transpose (for matrix/graph manipulations)
-  $at: [a]*Z -> a               -- Index/extract from list (0-based)
-  $slice: [a]*Z*Z -> [a]        -- Extract a sublist from start to end index (inclusive)
-  $where: (a->Bool)*[a] -> [Z]  -- Find indices in list matching predicate
+  Any -> Z rho                                            -- Shape/size of a collection (List, Set, Map, Seq)
+  (a -> b) * [a] -> [b] map                               -- Apply function to each element of a list (eager)
+  (b * a -> b) * b * [a] -> b fold                        -- Fold/reduce a list (eager)
+  [a] * [a] -> [a] concat                                 -- Concatenate two lists (eager)
+  [a * b] -> [b * a] transpose                            -- Transpose (for matrix/graph manipulations)
+  [a] * Z -> a at                                         -- Index/extract from list (0-based)
+  [a] * Z * Z -> [a] slice                                -- Extract a sublist from start to end index (inclusive)
+  (a -> Bool) * [a] -> [Z] where                          -- Find indices in list matching predicate
 
   -- Function Composition
-  $compose: (b->c)*(a->b) -> (a->c) -- Function composition (f . g = \x. f(g(x)))
+  (b -> c) * (a -> b) -> (a -> c) compose                 -- Function composition (f . g = \x. f(g(x)))
 
   -- Equality & Type Check
-  $lookup: Map*Any -> ?Any       -- Look up a key in a map
-  $update: Map*Any*Any -> Map    -- Update a key in a map
-  $fold: (a->b->a)*a*Seq(b) -> a -- Fold a function over a sequence
-  $map: (a->b)*Seq(a) -> Seq(b)  -- Map a function over a sequence
-  $where: (a->Bool)*Seq(a) -> Seq(a) -- Filter a sequence
-  $concat: Seq(Seq(a)) -> Seq(a) -- Concatenate a sequence of sequences
-  $veq: Any*Any -> Bool          -- Value equality
-  $teq: Any*Any -> Bool          -- Type equality
-  $ceq: Any*Any -> Bool          -- Isomorphism within a category
-  $seq: Any*Any -> Bool          -- Structural equivalence
-  $typeof: Any -> T             -- Get the type of a value at runtime
+  Map * Any -> ?Any lookup                                -- Look up a key in a map
+  Map * Any * Any -> Map update                           -- Update a key in a map
+  (a * b -> a) * a * Seq(b) -> a fold                     -- Fold a function over a sequence
+  (a -> b) * Seq(a) -> Seq(b) map                         -- Map a function over a sequence
+  (a -> Bool) * Seq(a) -> Seq(a) where                    -- Filter a sequence
+  Seq(Seq(a)) -> Seq(a) concat                            -- Concatenate a sequence of sequences
+  Any * Any -> Bool veq                                   -- Value equality
+  Any * Any -> Bool teq                                   -- Type equality
+  Any * Any -> Bool ceq                                   -- Isomorphism within a category
+  Any * Any -> Bool seq                                   -- Structural equivalence
+  Any -> T typeof                                         -- Get the type of a value at runtime
 
   -- Graph/Net specific operators
-  $oplus: Net*Net -> Net        -- Net composition (connecting interfaces)
-  $ominus: Net*Net -> Net       -- Net difference (removing subnet)
-  $match: Pattern*Net -> {Net}  -- Pattern match (find all matching subnets/bindings)
+  Net * Net -> Net oplus                                  -- Net composition (connecting interfaces)
+  Net * Net -> Net ominus                                 -- Net difference (removing subnet)
+  Pattern * Net -> {Net} match                            -- Pattern match (find all matching subnets/bindings)
 
   -- Fallible operations (return Optional type)
-  $eval: S -> ?Net              -- Parse string to Net (potentially fails)
-  $format: Net -> ?S            -- Format Net to string (potentially fails)
+  S -> ?Net eval                                          -- Parse string to Net (potentially fails)
+  Net -> ?S format                                        -- Format Net to string (potentially fails)
 
   -- State operations
-  $state: B -> Bool             -- State lookup (memoized property check, e.g., for linearity)
-  $io: Op*Src*S -> ?S           -- IO operation (Op/Src from @IO, payload S, returns ?S)
+  B -> Bool state                                         -- State lookup (memoized property check, e.g., for linearity)
+  Op * Src * S -> ?S io                                   -- IO operation (Op/Src from @IO, payload S, returns ?S)
 
   -- Map Primitives
-  $insert: (k :-> v)*k*v -> (k :-> v) -- Insert/update key-value pair in a map
-  $lookup: (k :-> v)*k -> ?v          -- Lookup value by key in a map
+  (k :-> v) * k * v -> (k :-> v) insert                   -- Insert/update key-value pair in a map
+  (k :-> v) * k -> ?v lookup                              -- Lookup value by key in a map
 
   -- Sequence Primitives (Conceptual for lazy evaluation/transducers)
-  $cons: a*(Seq a) -> (Seq a)     -- Prepend element to sequence
-  $head: (Seq a) -> ?a            -- Get first element of sequence
-  $tail: (Seq a) -> ?(Seq a)      -- Get sequence without first element
+  a * (Seq a) -> (Seq a) cons                             -- Prepend element to sequence
+  (Seq a) -> ?a head                                      -- Get first element of sequence
+  (Seq a) -> ?(Seq a) tail                                -- Get sequence without first element
 
   -- String append (requires primitive or definition based on S)
-  $append_string: S*S -> S        -- String append primitive
-  
+  S * S -> S append_string                                -- String append primitive
+
   -- Set Operations
-  $cup: {a}*{a} -> {a}           -- Set union
-  $cap: {a}*{a} -> {a}           -- Set intersection
-  $subseteq: {a}*{a} -> Bool     -- Subset relation check
-  $in: a*{a} -> Bool             -- Element membership check
-  
+  {a} * {a} -> {a} cup                                    -- Set union
+  {a} * {a} -> {a} cap                                    -- Set intersection
+  {a} * {a} -> Bool subseteq                              -- Subset relation check
+  a * {a} -> Bool in                                      -- Element membership check
+
   -- Logical Operations
-  $forall: (a -> Bool)*{a} -> Bool  -- Universal quantifier
-  $exists: (a -> Bool)*{a} -> Bool  -- Existential quantifier
-  $and: Bool*Bool -> Bool        -- Logical AND
-  $or: Bool*Bool -> Bool         -- Logical OR
-  $not: Bool -> Bool             -- Logical negation
-  $implies: Bool*Bool -> Bool    -- Logical implication (often written =>, adding as primitive)
-  $iff: Bool*Bool -> Bool        -- Logical equivalence/biconditional
-  
+  (a -> Bool) * {a} -> Bool forall                        -- Universal quantifier
+  (a -> Bool) * {a} -> Bool exists                        -- Existential quantifier
+  Bool * Bool -> Bool and                                  -- Logical AND
+  Bool * Bool -> Bool or                                   -- Logical OR
+  Bool -> Bool not                                         -- Logical negation
+  Bool * Bool -> Bool implies                              -- Logical implication (often written =>, adding as primitive)
+  Bool * Bool -> Bool iff                                  -- Logical equivalence/biconditional
+
   -- Pipeline Operations
-  $pipe: a*(a -> b) -> b         -- Forward pipe (often written |>)
-  $fcomp: (a -> b)*(b -> c) -> (a -> c) -- Forward composition (often written >>)
+  a * (a -> b) -> b pipe                                  -- Forward pipe (often written |>)
+  (a -> b) * (b -> c) -> (a -> c) fcomp                   -- Forward composition (often written >>)
 
   -- ~~~ Core Module Pattern (Entities Aggregation) ~~~
   -- Core Types
-  typ = {
+  {
     Primitives
-  }
+  } -> typ
 
   -- Core Operators
-  op = {
-    $rho, $map, $fold, $concat, $transpose, $at, $slice, $where,
-    $compose, $lookup, $update, $veq, $teq, $ceq, $seq, $typeof,
-    $oplus, $ominus, $match, $eval, $format, $state, $io,
-    $insert, $cons, $head, $tail, $append_string,
-    $cup, $cap, $subseteq, $in,
-    $forall, $exists, $and, $or, $not, $implies, $iff,
-    $pipe, $fcomp
-  }
+  {
+    rho map fold concat transpose at slice where
+    compose lookup update veq teq ceq seq typeof
+    oplus ominus match eval format state io
+    insert cons head tail append_string
+    cup cap subseteq in
+    forall exists and or not implies iff
+    pipe fcomp
+  } -> op
 
   -- Core Functions
-  fn = {
-    
-  }
+  {
+
+  } -> fn
 
   -- Aggregate all entities
-  E = typ $cup op $cup fn
+  typ cup op cup fn -> E
 
   -- Classify entities
-  $tau = \e. {
-    match e: E {
-      _ $in typ -> Mod.TypeSym
-      _ $in op -> Mod.OpSym
-      _ $in fn -> Mod.FnSym
-      _ -> Mod.TypeSym -- Default case
-    }
-  }
+  E |> [e ->
+    e |> in typ ? Mod.TypeSym :
+    e |> in op ? Mod.OpSym :
+    e |> in fn ? Mod.FnSym :
+    Mod.TypeSym -- Default case
+  ] match -> tau
 
   -- Export all entities by default
-  vis = \e. true
-} 
+  E |> [e -> true] -> vis
+}
