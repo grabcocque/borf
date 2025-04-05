@@ -1,70 +1,70 @@
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
--- ~~~ Relations Module ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-@R: {  -- Relations between values and types
-  -- Module dependency and export configuration
-  {
-    -- R depends on T and is exported by Core
-    (@Core, @R, true),
-    (@R, T, false)
-  } -> deps
-
-  -- Core Relations
-  Any * Any -> Bool veq            -- Value equality (identity, vs. structural equality)
-  Any * Any -> Bool seq            -- Structural equality (deep comparison)
-  Any * Any -> Bool omega          -- Type compatibility relation (used for port connections)
-  Any * Any -> Bool rel            -- General relation (for edge/node connections)
-
-  -- Laws for Relations
-  Any |> forall [x -> x seq x]                                 : law.seq_reflexive
-  Any * Any |> forall [x y -> x seq y -> y seq x]              : law.seq_symmetric
-  Any * Any * Any |> forall [x y z -> x seq y and y seq z -> x seq z] : law.seq_transitive
-
-  Any |> forall [x -> x veq x]                                 : law.veq_reflexive
-  Any * Any |> forall [x y -> x veq y -> y veq x]              : law.veq_symmetric
-  Any * Any * Any |> forall [x y z -> x veq y and y veq z -> x veq z] : law.veq_transitive
-
-  -- Relation between structure and value equality
-  Any * Any |> forall [x y -> x veq y -> x seq y]              : law.veq_implies_seq
-
-  -- Type compatibility is reflexive and symmetric
-  Any |> forall [x -> x omega x]                               : law.omega_reflexive
-  Any * Any |> forall [x y -> x omega y -> y omega x]          : law.omega_symmetric
-
-  -- Example: omega(int_compare) where int_compare is a function (Z*Z -> Bool)
-
-  -- ~~~ Core Module Pattern (Entities Aggregation) ~~~
-  -- Core Types
-  {
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~ Relations Module ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+@R: {  ~~ Relations between values and types
+  ~~~~~~ Core Module Pattern (Entities Aggregation) ~~~
+  ~~ Core Types
+  typ: {
     R
-  } -> typ
+  }
 
-  -- Core Operators
-  {
+  ~~ Core Operators
+  op: {
     veq seq omega
-  } -> op
+  }
 
-  -- Core Functions
-  {
+  ~~ Core Functions
+  fn: {
     rel
     law.seq_reflexive law.seq_symmetric law.seq_transitive
     law.veq_reflexive law.veq_symmetric law.veq_transitive
     law.veq_implies_seq law.omega_reflexive law.omega_symmetric
-  } -> fn
+  }
 
-  -- Aggregate all entities
-  typ cup op cup fn -> E
+  ~~ Aggregate all entities
+  E: typ cup op cup fn
 
-  -- Classify entities
-  E |> [e ->
-    e |> in typ ? Mod.TypeSym :
-    e |> in op ? Mod.OpSym :
-    e |> in fn ? Mod.FnSym :
-    Mod.TypeSym -- Default case
-  ] match -> tau
+  ~~ Classify entities
+  tau: E |> [e ->
+    e |> in typ ? Mod.TypeSym:
+    e |> in op ? Mod.OpSym:
+    e |> in fn ? Mod.FnSym:
+    Mod.TypeSym ~~ Default case
+  ] match
 
-  -- Export all entities by default
-  E |> [e -> true] -> vis
+  ~~ Export all entities by default
+  vis: E |> [e -> true]
+
+  ~~ Module dependency and export configuration
+  deps: {
+    ~~ R depends on T and is exported by Core
+    (@Core, @R, true),
+    (@R, T, false)
+  }
+
+  ~~ Core Relations
+  veq: Any * Any -> Bool            ~~ Value equality (identity, vs. structural equality)
+  seq: Any * Any -> Bool            ~~ Structural equality (deep comparison)
+  omega: Any * Any -> Bool          ~~ Type compatibility relation (used for port connections)
+  rel: Any * Any -> Bool            ~~ General relation (for edge/node connections)
+
+  ~~ Laws for Relations
+  law.seq_reflexive: Any |> forall [x -> x seq x]
+  law.seq_symmetric: Any * Any |> forall [x y -> x seq y -> y seq x]
+  law.seq_transitive: Any * Any * Any |> forall [x y z -> x seq y and y seq z -> x seq z]
+
+  law.veq_reflexive: Any |> forall [x -> x veq x]
+  law.veq_symmetric: Any * Any |> forall [x y -> x veq y -> y veq x]
+  law.veq_transitive: Any * Any * Any |> forall [x y z -> x veq y and y veq z -> x veq z]
+
+  ~~ Relation between structure and value equality
+  law.veq_implies_seq: Any * Any |> forall [x y -> x veq y -> x seq y]
+
+  ~~ Type compatibility is reflexive and symmetric
+  law.omega_reflexive: Any |> forall [x -> x omega x]
+  law.omega_symmetric: Any * Any |> forall [x y -> x omega y -> y omega x]
+
+  ~~ Example: omega(int_compare) where int_compare is a function (Z*Z -> Bool)
 }
 
--- export R;
+~~ export R;

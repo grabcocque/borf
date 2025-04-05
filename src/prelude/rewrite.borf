@@ -1,87 +1,88 @@
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
--- ~~~ Transformation Rules (Patterns and Replacements) ~~~~~~~~~~~~~~~~~~~~~~~~
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-@Rewrite: { -- Defines the structure of rewrite rules for Nets
-  -- Context: Assumes definitions for Boxes (B), Ports (P), Wiring (w), Principal Ports (pi) from @Net
-  B; P; P -> P w; P -> Bool pi
-
-  -- Rule Components (Types/Structures from @Net)
-  Type                                                          : alpha -- Type representing an active pair structure (e.g., a pair of Port types)
-  Type                                                          : rho -- Type representing a replacement graph structure (from @Net.ReplacementGraph)
-  {alpha * rho}                                                 : R -- The set of rewrite rules (specific pairs)
-  -- Alternative: (Type * Type) -> ((alpha * Net) -> rho)       : R -- Rule lookup by type
-
-  -- Core Rewriting Interfaces (Signatures)
-  -- Primitive match likely handles the core matching logic.
-  Pattern * Net -> Bool match                                    -- Checks if a pattern exists in a net
-  alpha -> rho rewrite                                          -- Function mapping a matched active pair *instance* to its replacement instance
-
-  -- Pattern Definition
-  alpha                                                         : Pattern -- A pattern is defined by the active pair structure (e.g., types of boxes involved)
-
-  -- Rule Construction (Alternative: If R maps types to functions)
-  -- { (pattern_type, gen_replacement_func) | ... }            : rules
-
-  -- Pattern Analysis Utilities (Interfaces/Signatures - Conceptual)
-  -- These would operate on the *structure* of rules, not instances.
-  alpha -> ReplacementGraph neighborhood                        -- Extracts the local graph structure around an active pair type
-  alpha -> Pattern [a -> a |> neighborhood]                     : pattern_graph -- The pattern considered as a graph
-
-  -- Rule Property Checks (Interfaces/Signatures - Applied to rule definitions)
-  rho -> Bool consistent                                        -- Checks if a replacement graph structure is well-formed
-  Pattern -> Bool connected                                     -- Checks if a pattern graph structure is connected
-  rho -> Bool connected                                         -- Checks if a replacement graph structure is connected
-
-  -- Rewrite System Laws (Should hold for the rule definitions)
-  R |> forall [rule ->
-    rule.1 |> dummy_instance |> apply rule |> consistent
-  ]                                                             : law.replacement_consistency -- All replacement structures must be valid
-  R |> forall [rule ->
-    rule.0 |> pattern_graph |> connected ->
-    rule.1 |> dummy_instance |> apply rule |> connected
-  ]                                                             : law.connectivity_preservation -- Connectivity preserved
-
-  -- IO-Specific Rewriting (Interface/Signature)
-  alpha -> rho io_rule                                          -- Defines rewrite rules specific to IO agents
-  -- Law relating general rewrite to IO rules (Uses Primitive)
-  alpha * {B |> filter [b -> b |> IO.io_agent]} |> forall [a boxSet ->
-    a |> Net.a_uses boxSet ->
-    a |> io_rule seq (a |> rewrite)
-  ]                                                             : law.io_rule_specificity -- If active pair involves IO agent, io_rule applies and matches general rewrite
-
-  -- Example: read_rule |> io_rule |> is_valid
-
-  -- ~~~ Core Module Pattern (Entities Aggregation) ~~~
-  -- Core Types
-  {
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~ Transformation Rules (Patterns and Replacements) ~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+@Rewrite: { ~~ Defines the structure of rewrite rules for Nets
+  ~~~~~~ Core Module Pattern (Entities Aggregation) ~~~
+  ~~ Core Types
+  typ: {
     Pattern
-  } -> typ
+  }
 
-  -- Core Operators
-  {
+  ~~ Core Operators
+  op: {
     alpha rho
-  } -> op
+  }
 
-  -- Core Functions
-  {
+  ~~ Core Functions
+  fn: {
     match rewrite neighborhood pattern_graph consistent connected
     io_rule law.replacement_consistency law.connectivity_preservation
     law.io_rule_specificity
-  } -> fn
+  }
 
-  -- Aggregate all entities
-  typ cup op cup fn -> E
+  ~~ Aggregate all entities
+  E: typ cup op cup fn
 
-  -- Classify entities
-  E |> [e ->
-    e |> in typ ? Mod.TypeSym :
-    e |> in op ? Mod.OpSym :
-    e |> in fn ? Mod.FnSym :
-    Mod.TypeSym -- Default case
-  ] match -> tau
+  ~~ Classify entities
+  tau: E |> [e ->
+    e |> in typ ? Mod.TypeSym:
+    e |> in op ? Mod.OpSym:
+    e |> in fn ? Mod.FnSym:
+    Mod.TypeSym ~~ Default case
+  ] match
 
-  -- Export all entities by default
-  E |> [e -> true] -> vis
+  ~~ Export all entities by default
+  vis: E |> [e -> true]
+
+  ~~ Context: Assumes definitions for Boxes (B), Ports (P), Wiring (w), Principal Ports (pi) from @Net
+  B; P; P -> P w; P -> Bool pi
+
+  ~~ Rule Components (Types/Structures from @Net)
+  alpha: Type ~~ Type representing an active pair structure (e.g., a pair of Port types)
+  rho: Type ~~ Type representing a replacement graph structure (from @Net.ReplacementGraph)
+  R: {alpha * rho} ~~ The set of rewrite rules (specific pairs)
+  ~~ Alternative: (Type * Type) -> ((alpha * Net) -> rho)      : R ~~ Rule lookup by type
+
+  ~~ Core Rewriting Interfaces (Signatures)
+  ~~ Primitive match likely handles the core matching logic.
+  match: Pattern * Net -> Bool ~~ Checks if a pattern exists in a net
+  rewrite: alpha -> rho ~~ Function mapping a matched active pair *instance* to its replacement instance
+
+  ~~ Pattern Definition
+  Pattern: alpha ~~ A pattern is defined by the active pair structure (e.g., types of boxes involved)
+
+  ~~ Rule Construction (Alternative: If R maps types to functions)
+  ~~ { (pattern_type, gen_replacement_func) | ... }           : rules
+
+  ~~ Pattern Analysis Utilities (Interfaces/Signatures - Conceptual)
+  ~~ These would operate on the *structure* of rules, not instances.
+  neighborhood: alpha -> ReplacementGraph ~~ Extracts the local graph structure around an active pair type
+  pattern_graph: alpha -> Pattern [a -> a |> neighborhood] ~~ The pattern considered as a graph
+
+  ~~ Rule Property Checks (Interfaces/Signatures - Applied to rule definitions)
+  consistent: rho -> Bool ~~ Checks if a replacement graph structure is well-formed
+  connected: Pattern -> Bool ~~ Checks if a pattern graph structure is connected
+  connected: rho -> Bool ~~ Checks if a replacement graph structure is connected
+
+  ~~ Rewrite System Laws (Should hold for the rule definitions)
+  law.replacement_consistency: R |> forall [rule ->
+    rule.1 |> dummy_instance |> apply rule |> consistent
+  ] ~~ All replacement structures must be valid
+  
+  law.connectivity_preservation: R |> forall [rule ->
+    rule.0 |> pattern_graph |> connected ->
+    rule.1 |> dummy_instance |> apply rule |> connected
+  ] ~~ Connectivity preserved
+
+  ~~ IO-Specific Rewriting (Interface/Signature)
+  io_rule: alpha -> rho ~~ Defines rewrite rules specific to IO agents
+  ~~ Law relating general rewrite to IO rules (Uses Primitive)
+  law.io_rule_specificity: alpha * {B |> filter [b -> b |> IO.io_agent]} |> forall [a boxSet ->
+    a |> Net.a_uses boxSet ->
+    a |> io_rule seq (a |> rewrite)
+  ] ~~ If active pair involves IO agent, io_rule applies and matches general rewrite
+
+  ~~ Example: read_rule |> io_rule |> is_valid
 }
 
--- export Rewrite;
+~~ export Rewrite;

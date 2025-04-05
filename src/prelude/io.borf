@@ -1,86 +1,85 @@
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
--- ~~~ IO System (Interaction Nets for Input/Output) ~~~~~~~~~~~~~~~~~~~~~~~~~~~
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-@IO: { -- Defines IO operations within the Net framework
-  -- Inherits structure from @Net: B, P, box, w, pi
-  B; P; P -> B box; P -> P w; P -> Bool pi
-
-  -- IO Operation and Source Tags (Using Symbols)
-  {:rd, :wr, :ok, :err}                                              -> Op -- Read, Write, Success, Error operations/responses
-  {:file, :cons, :net}                                               -> Src -- File, Console, Network sources/targets
-
-  -- IO Agent Identification
-  B -> Bool                                                         : io_agent -- Predicate identifying boxes that perform IO
-
-  -- IO agent completion check (using state primitive)
-  B -> Bool [b -> b |> Primitives.state]                            : processed -- Check if IO agent 'b' has completed
-
-  -- Unified IO Net Constructor (Interface/Signature)
-  -- Creates a Net fragment representing an IO request.
-  -- The primitive io performs the actual operation. This constructs the request Net.
-  Op * Src * S -> Net                                               : io -- Constructs an IO request net (e.g., read 'S' from 'Src')
-
-  -- Derived IO Operation Constructors
-  Src * S -> Net [src s -> :rd src s |> io]                         : read -- Constructs a read request net
-  Src * S -> Net [src s -> :wr src s |> io]                         : write -- Constructs a write request net
-
-  -- Specific IO Constructors
-  S -> Net [s -> :file s |> read]                                   : read_file
-  -- For write_file, the string argument should contain necessary info (e.g., "filename:data")
-  -- Alternatively, define write_file: S*S -> Net and adjust 'write' and 'io' or use a structured type.
-  S -> Net [s -> :file s |> write]                                  : write_file
-  S -> Net [s -> :cons s |> read]                                   : read_cons
-  S -> Net [s -> :cons s |> write]                                  : write_cons
-
-  -- Linearity of IO Agents (Ensures IO actions are not duplicated/lost)
-  { B |> filter [b -> b |> io_agent] } |> forall [b -> b |> in !B] : law.linear_io_agents -- IO agents are linear resources
-
-  -- IO Response Net Constructors (Interfaces/Signatures)
-  -- Create Nets representing results of IO operations. Typically used by runtime environment.
-  S -> Net                                                          : data -- Constructs a net carrying data 'S' (e.g., from a read)
-  S -> Net                                                          : err -- Constructs a net representing an error 'S' (e.g., file not found)
-  Net                                                               : ok -- Constructs a net representing success (e.g., after write)
-
-  -- IO Safety Properties (Relate to Reduction and Termination)
-  Net -> Bool                                                       : normal -- Predicate for normal form (no active pairs, from @Red)
-  -- Function identifying IO agents not yet processed.
-  -- Needs implementation based on net traversal and state checking (using Primitives.state or similar).
-  Net -> {B}                                                        : unused_agents -- Interface signature only.
-  Net |> forall [n -> n |> Red.normal -> n |> unused_agents |> seq {}]
-                                                                    : law.io_completeness -- In normal form, all IO agents must have been processed
-
-  -- ~~~ Core Module Pattern (Entities Aggregation) ~~~
-  -- Core Types
-  {
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~ IO System (Interaction Nets for Input/Output) ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+@IO: { ~~ Defines IO operations within the Net framework
+  ~~~~~~ Core Module Pattern (Entities Aggregation) ~~~
+  ~~ Core Types
+  typ: {
     IO Op Src
-  } -> typ
+  }
 
-  -- Core Operators
-  {
+  ~~ Core Operators
+  op: {
 
-  } -> op
+  }
 
-  -- Core Functions
-  {
+  ~~ Core Functions
+  fn: {
     io_agent processed io read write
     read_file write_file read_cons write_cons
     data err ok unused_agents
     law.linear_io_agents law.io_completeness
-  } -> fn
+  }
 
-  -- Aggregate all entities
-  typ cup op cup fn -> E
+  ~~ Aggregate all entities
+  E: typ cup op cup fn
 
-  -- Classify entities
-  E |> [e ->
-    e |> in typ ? Mod.TypeSym :
-    e |> in op ? Mod.OpSym :
-    e |> in fn ? Mod.FnSym :
-    Mod.TypeSym -- Default case
-  ] match -> tau
+  ~~ Classify entities
+  tau: E |> [e ->
+    e |> in typ ? Mod.TypeSym:
+    e |> in op ? Mod.OpSym:
+    e |> in fn ? Mod.FnSym:
+    Mod.TypeSym ~~ Default case
+  ] match
 
-  -- Export all entities by default
-  E |> [e -> true] -> vis
+  ~~ Export all entities by default
+  vis: E |> [e -> true]
+
+  ~~ Inherits structure from @Net: B, P, box, w, pi
+  B; P; P -> B box; P -> P w; P -> Bool pi
+
+  ~~ IO Operation and Source Tags (Using Symbols)
+  Op: {:rd,:wr,:ok,:err} ~~ Read, Write, Success, Error operations/responses
+  Src: {:file,:cons,:net} ~~ File, Console, Network sources/targets
+
+  ~~ IO Agent Identification
+  io_agent: B -> Bool ~~ Predicate identifying boxes that perform IO
+
+  ~~ IO agent completion check (using state primitive)
+  processed: B -> Bool [b -> b |> Primitives.state] ~~ Check if IO agent 'b' has completed
+
+  ~~ Unified IO Net Constructor (Interface/Signature)
+  ~~ Creates a Net fragment representing an IO request.
+  ~~ The primitive io performs the actual operation. This constructs the request Net.
+  io: Op * Src * S -> Net ~~ Constructs an IO request net (e.g., read 'S' from 'Src')
+
+  ~~ Derived IO Operation Constructors
+  read: Src * S -> Net [src s ->:rd src s |> io] ~~ Constructs a read request net
+  write: Src * S -> Net [src s ->:wr src s |> io] ~~ Constructs a write request net
+
+  ~~ Specific IO Constructors
+  read_file: S -> Net [s ->:file s |> read]
+  ~~ For write_file, the string argument should contain necessary info (e.g., "filename:data")
+  ~~ Alternatively, define write_file: S*S -> Net and adjust 'write' and 'io' or use a structured type.
+  write_file: S -> Net [s ->:file s |> write]
+  read_cons: S -> Net [s ->:cons s |> read]
+  write_cons: S -> Net [s ->:cons s |> write]
+
+  ~~ Linearity of IO Agents (Ensures IO actions are not duplicated/lost)
+  law.linear_io_agents: { B |> filter [b -> b |> io_agent] } |> forall [b -> b |> in !B] ~~ IO agents are linear resources
+
+  ~~ IO Response Net Constructors (Interfaces/Signatures)
+  ~~ Create Nets representing results of IO operations. Typically used by runtime environment.
+  data: S -> Net ~~ Constructs a net carrying data 'S' (e.g., from a read)
+  err: S -> Net ~~ Constructs a net representing an error 'S' (e.g., file not found)
+  ok: Net ~~ Constructs a net representing success (e.g., after write)
+
+  ~~ IO Safety Properties (Relate to Reduction and Termination)
+  normal: Net -> Bool ~~ Predicate for normal form (no active pairs, from @Red)
+  ~~ Function identifying IO agents not yet processed.
+  ~~ Needs implementation based on net traversal and state checking (using Primitives.state or similar).
+  unused_agents: Net -> {B} ~~ Interface signature only.
+  law.io_completeness: Net |> forall [n -> n |> Red.normal -> n |> unused_agents |> seq {}] ~~ In normal form, all IO agents must have been processed
 }
 
--- export IO;
+~~ export IO;

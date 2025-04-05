@@ -1,96 +1,96 @@
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
--- ~~~ Module System Foundation ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-@Mod: { -- Defines the abstract structure of modules as a category
-  -- Module dependency and export configuration
-  {
-    -- Mod depends on Cat and is exported by Core
-    (@Core, @Mod, true),
-    (@Mod, @Cat, false),
-    -- Depends on Sym type from T module
-    (@Mod, T.Sym, false)
-  } deps =
-
-  -- Core Module Entity Types
-  ModSym                         -- The type of module symbols
-  TypeSym                        -- The type of type symbols
-  OpSym                          -- The type of operator symbols
-  FnSym                          -- The type of function symbols
-
-  -- Required Module System declarations (these match @Core's declarations)
-  E                              -- The universe of all entities
-  E Sym -> tau                   -- Entity type function (categorizes entities)
-  E E Bool -> delta              -- Dependency relation (tracks entity dependencies)
-  E Bool -> vis                   -- Visibility predicate (determines export status)
-
-  -- Structural Compatibility with Category Theory (@Cat)
-  E [ dup tau ModSym teq ] filter O = -- Objects are modules
-  O O [ dup2 delta ] filter_pairs M =  -- Morphisms are dependencies
-  M [ swap drop ] dom =                -- Domain of dependency is the dependent module
-  M [ drop ] cod =                     -- Codomain is the dependency
-
-  -- Categorical Laws for Modules
-  O [ dup delta not ] forall law.acyclic = -- No self-dependencies
-  O O O [ dup2 delta swap2 delta and -> delta ] forall law.transitivity = -- Dependencies are transitive
-
-  -- Module Components
-  ModSym {E} -> components      -- Function mapping module to its contained entities
-  O E [ dup2 components in -> delta ] forall law.component_completeness = -- All components depend on their module
-
-  -- Entity Type Classification
-  E Bool -> [ tau TypeSym teq ] is_type = -- Check if entity is a type
-  E Bool -> [ tau OpSym teq ] is_op =     -- Check if entity is an operator
-  E Bool -> [ tau FnSym teq ] is_fn =     -- Check if entity is a function
-  E Bool -> [ tau ModSym teq ] is_mod =   -- Check if entity is a module
-
-  -- Visibility and Export
-  ModSym E Bool -> [ dup2 components in swap vis and ] exported = -- Entity is exported by its module
-
-  -- Module Dependencies
-  ModSym {ModSym} -> [ O [ dup2 delta ] filter ] imports = -- Get modules imported by m
-
-  -- Module Composition (conceptual)
-  ModSym ModSym ModSym -> oplus -- Compose modules (implementation details TBD)
-
-  -- Example: Module structure validation
-  ModSym Bool -> [
-    dup imports swap
-    dup components swap
-    [ is_type ] filter_p all_types =
-    -- A valid module has appropriately classified components and valid dependencies
-    all_entities [ tau TypeSym OpSym FnSym ModSym in ] forall
-    deps [ is_mod ] forall and
-  ] validate_module =
-
-  -- ~~~ Core Module Pattern (Entities Aggregation) ~~~
-  -- Core Types
-  {
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~ Module System Foundation ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+@Mod: { ~~ Defines the abstract structure of modules as a category
+  ~~~~~~ Core Module Pattern (Entities Aggregation) ~~~
+  ~~ Core Types
+  typ: {
     ModSym TypeSym OpSym FnSym
-  } typ =
+  }
 
-  -- Core Operators
-  {
+  ~~ Core Operators
+  op: {
     tau delta oplus
-  } op =
+  }
 
-  -- Core Functions
-  {
+  ~~ Core Functions
+  fn: {
     vis dom cod components
     is_type is_op is_fn is_mod exported imports validate_module
     law.acyclic law.transitivity law.component_completeness
-  } fn =
+  }
 
-  -- Aggregate all entities
-  typ op fn cup cup E =
+  ~~ Aggregate all entities
+  E: typ cup op cup fn
 
-  -- Classify entities
-  E [
-    dup typ in [ drop Mod.TypeSym ]
-    swap dup op in [ drop Mod.OpSym ]
-    swap dup fn in [ drop Mod.FnSym ]
-    swap drop Mod.TypeSym -- Default case
-  ] match tau =
+  ~~ Classify entities
+  tau: E |> [e ->
+    e |> in typ ? Mod.TypeSym:
+    e |> in op ? Mod.OpSym:
+    e |> in fn ? Mod.FnSym:
+    Mod.TypeSym ~~ Default case
+  ] match
 
-  -- Export all entities by default
-  E [ drop true ] vis =
+  ~~ Export all entities by default
+  vis: E |> [e -> true]
+
+  ~~ Module dependency and export configuration
+  deps: {
+    ~~ Mod depends on Cat and is exported by Core
+    (@Core, @Mod, true),
+    (@Mod, @Cat, false),
+    ~~ Depends on Sym type from T module
+    (@Mod, T.Sym, false)
+  }
+
+  ~~ Core Module Entity Types
+  ModSym                         ~~ The type of module symbols
+  TypeSym                        ~~ The type of type symbols
+  OpSym                          ~~ The type of operator symbols
+  FnSym                          ~~ The type of function symbols
+
+  ~~ Required Module System declarations (these match @Core's declarations)
+  E                              ~~ The universe of all entities
+  E Sym -> tau                   ~~ Entity type function (categorizes entities)
+  E E Bool -> delta              ~~ Dependency relation (tracks entity dependencies)
+  E Bool -> vis                   ~~ Visibility predicate (determines export status)
+
+  ~~ Structural Compatibility with Category Theory (@Cat)
+  O: E |> [ dup tau ModSym teq ] filter ~~ Objects are modules
+  M: O O |> [ dup2 delta ] filter_pairs  ~~ Morphisms are dependencies
+  dom: M |> [ swap drop ]                ~~ Domain of dependency is the dependent module
+  cod: M |> [ drop ]                     ~~ Codomain is the dependency
+
+  ~~ Categorical Laws for Modules
+  law.acyclic: O |> [ dup delta not ] forall ~~ No self-dependencies
+  law.transitivity: O O O |> [ dup2 delta swap2 delta and -> delta ] forall ~~ Dependencies are transitive
+
+  ~~ Module Components
+  components: ModSym {E}      ~~ Function mapping module to its contained entities
+  law.component_completeness: O E |> [ dup2 components in -> delta ] forall ~~ All components depend on their module
+
+  ~~ Entity Type Classification
+  is_type: E Bool -> [ tau TypeSym teq ] ~~ Check if entity is a type
+  is_op: E Bool -> [ tau OpSym teq ]     ~~ Check if entity is an operator
+  is_fn: E Bool -> [ tau FnSym teq ]     ~~ Check if entity is a function
+  is_mod: E Bool -> [ tau ModSym teq ]   ~~ Check if entity is a module
+
+  ~~ Visibility and Export
+  exported: ModSym E Bool -> [ dup2 components in swap vis and ] ~~ Entity is exported by its module
+
+  ~~ Module Dependencies
+  imports: ModSym {ModSym} -> [ O |> [ dup2 delta ] filter ] ~~ Get modules imported by m
+
+  ~~ Module Composition (conceptual)
+  oplus: ModSym ModSym ModSym ~~ Compose modules (implementation details TBD)
+
+  ~~ Example: Module structure validation
+  validate_module: ModSym Bool -> [
+    dup imports swap
+    dup components swap
+    [ is_type ] filter_p all_types =
+    ~~ A valid module has appropriately classified components and valid dependencies
+    all_entities [ tau TypeSym OpSym FnSym ModSym in ] forall
+    deps [ is_mod ] forall and
+  ]
 }

@@ -1,99 +1,99 @@
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
--- ~~~ Termination Analysis ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-@Term: { -- Analyzes whether reduction terminates
-  -- Context: Assumes Net structure and Reduction components/interfaces
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~ Termination Analysis ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+@Term: { ~~ Analyzes whether reduction terminates
+  ~~ Context: Assumes Net structure and Reduction components/interfaces
   B; P; P -> P w; P -> Bool pi; Net -> Net step; Net -> Net red; Net -> Bool normal; Net -> [Net] history
 
-  -- Termination Predicate (Interface/Signature)
-  Net -> Bool                                                       : terminates -- Predicate: Does reduction of this net terminate?
+  ~~~~~~ Core Module Pattern (Entities Aggregation) ~~~
+  ~~ Core Types
+  typ: {
 
-  -- Cycle Detection (Interface/Signature)
-  -- Finds pairs of indices (i, j) where i < j and net[i] is structurally equal (seq) to net[j]
-  [Net] -> {(Z * Z)}                                                : detect_cycles
+  }
 
-  -- Apply k reduction steps (Interface/Signature)
+  ~~ Core Operators
+  op: {
+
+  }
+
+  ~~ Core Functions
+  fn: {
+    terminates detect_cycles apply_k reaches_normal_form has_cycle
+    io_processed io_agents_processed io_terminates
+  }
+
+  ~~ Aggregate all entities
+  E: typ cup op cup fn
+
+  ~~ Classify entities
+  tau: E |> [e ->
+    e |> in typ ? Mod.TypeSym:
+    e |> in op ? Mod.OpSym:
+    e |> in fn ? Mod.FnSym:
+    Mod.TypeSym ~~ Default case
+  ] match
+
+  ~~ Export all entities by default
+  vis: E |> [e -> true]
+
+  ~~ Termination Predicate (Interface/Signature)
+  Net -> Bool                                                      : terminates ~~ Predicate: Does reduction of this net terminate?
+
+  ~~ Cycle Detection (Interface/Signature)
+  ~~ Finds pairs of indices (i, j) where i < j and net[i] is structurally equal (seq) to net[j]
+  [Net] -> {(Z * Z)}                                               : detect_cycles
+
+  ~~ Apply k reduction steps (Interface/Signature)
   Z * Net -> Net [k n ->
-    k <= 0 ? n : n |> Red.step |> apply_k (k - 1)
-  ]                                                                 : apply_k
+    k <= 0 ? n: n |> Red.step |> apply_k (k - 1)
+  ]                                                                : apply_k
 
-  -- Default Termination Definition
-  -- Terminates if it reaches normal form OR enters a cycle detected in its history.
-  -- Note: For infinite non-cyclic reductions, this definition might be insufficient.
+  ~~ Default Termination Definition
+  ~~ Terminates if it reaches normal form OR enters a cycle detected in its history.
+  ~~ Note: For infinite non-cyclic reductions, this definition might be insufficient.
   Net [n ->
     n |> reaches_normal_form or
     n |> Red.history |> has_cycle
-  ]                                                                 : terminates
+  ]                                                                : terminates
 
-  -- Helper: Check if normal form is reachable within a bounded number of steps (practical check)
-  -- A full check requires more advanced techniques (e.g., well-founded orderings).
+  ~~ Helper: Check if normal form is reachable within a bounded number of steps (practical check)
+  ~~ A full check requires more advanced techniques (e.g., well-founded orderings).
   Net -> Bool [n ->
     Z+ |> exists_p [k -> n |> apply_k k |> Red.normal]
-  ]                                                                 : reaches_normal_form -- Checks if some future state is normal
+  ]                                                                : reaches_normal_form ~~ Checks if some future state is normal
 
-  -- Helper: Check for cycles in history (Uses Primitive and Interface)
+  ~~ Helper: Check for cycles in history (Uses Primitive and Interface)
   [Net] -> Bool [history ->
     history |> detect_cycles |> StdLib.ne
-  ]                                                                 : has_cycle -- Checks if the cycle detection found any cycles
+  ]                                                                : has_cycle ~~ Checks if the cycle detection found any cycles
 
-  -- Default cycle detection implementation (potentially expensive)
+  ~~ Default cycle detection implementation (potentially expensive)
   [Net] [nets ->
     nets |> Primitives.rho -> t_size
     {
       0 |> range (t_size - 2) |> map [i ->
         (i + 1) |> range (t_size - 1) |> map [j ->
-          nets[i] |> Primitives.seq nets[j] ? (i, j) : []
+          nets[i] |> Primitives.seq nets[j] ? (i, j): []
         ] |> concat
       ] |> concat
     }
-  ]                                                                 : detect_cycles -- Use seq for structural cycle detection
+  ]                                                                : detect_cycles ~~ Use seq for structural cycle detection
 
-  -- IO Termination Properties (Uses Primitive)
-  B -> Bool [b -> b |> IO.processed]                               : io_processed -- Use IO.processed instead of Primitive.processed
+  ~~ IO Termination Properties (Uses Primitive)
+  B -> Bool [b -> b |> IO.processed]                              : io_processed ~~ Use IO.processed instead of Primitive.processed
 
-  -- Checks if all IO agents in the final (normal form) net have been processed.
+  ~~ Checks if all IO agents in the final (normal form) net have been processed.
   Net -> Bool [n ->
     B |> filter [b -> b |> IO.io_agent] |> filter [b -> b |> in n] |> forall [b -> b |> io_processed]
-  ]                                                                 : io_agents_processed
+  ]                                                                : io_agents_processed
 
-  -- IO termination means standard termination AND all IO agents completed.
+  ~~ IO termination means standard termination AND all IO agents completed.
   Net -> Bool [n ->
     n |> Red.red -> n_final
     n |> terminates and
     n_final |> Red.normal and
     n_final |> io_agents_processed
-  ]                                                                 : io_terminates
-
-  -- ~~~ Core Module Pattern (Entities Aggregation) ~~~
-  -- Core Types
-  {
-
-  } -> typ
-
-  -- Core Operators
-  {
-
-  } -> op
-
-  -- Core Functions
-  {
-    terminates detect_cycles apply_k reaches_normal_form has_cycle
-    io_processed io_agents_processed io_terminates
-  } -> fn
-
-  -- Aggregate all entities
-  typ cup op cup fn -> E
-
-  -- Classify entities
-  E |> [e ->
-    e |> in typ ? Mod.TypeSym :
-    e |> in op ? Mod.OpSym :
-    e |> in fn ? Mod.FnSym :
-    Mod.TypeSym -- Default case
-  ] match -> tau
-
-  -- Export all entities by default
-  E |> [e -> true] -> vis
+  ]                                                                : io_terminates
 }
 
--- export Term;
+~~ export Term;

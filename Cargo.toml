@@ -21,6 +21,10 @@ path = "src/lib.rs"
 # name = "parse_prelude"
 # path = "src/bin/parse_prelude.rs"
 
+[[bin]]
+name = "borf_formatter"
+path = "src/formatter.rs"
+
 [dependencies]
 pest = "2.7.10"
 pest_derive = "2.7.10"
@@ -33,6 +37,7 @@ miette = { version = "7.2.0", features = ["fancy"] }
 # CLI and formatting
 clap = { version = "4.5.5", features = ["derive"] }
 colored = "2.1.0"
+regex = "1.10.4"  # Added for the formatter
 
 # Dependencies for fuzzing
 libfuzzer-sys = { version = "0.4", optional = true }

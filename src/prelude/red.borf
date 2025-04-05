@@ -1,64 +1,94 @@
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
--- ~~~ Reduction Semantics ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-@Red: {  -- Defines reduction operations on Nets
-  -- Context: Assumes Net structure with active pairs (alpha), rules (R), etc.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~ Reduction Semantics ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+@Red: {  ~~ Defines reduction operations on Nets
+  ~~~~~~ Core Module Pattern (Entities Aggregation) ~~~
+  ~~ Core Types
+  typ: {
 
-  -- Core Reduction Operations
-  Net -> Net                                                        : step -- Performs a single reduction step if possible
-  Net -> Net                                                        : red -- Reduces to normal form
-  Net -> Bool                                                       : normal -- Checks if a net is in normal form (no active pairs)
+  }
 
-  -- Reduction Strategy
-  (Net -> [AgentId * AgentId]) * ([AgentId * AgentId] -> AgentId * AgentId) -> (Net -> Net)
-                                                                    : strategy
-  -- Higher-order function defining reduction strategy:
-  -- Takes a function to find redexes and a function to choose among them
+  ~~ Core Operators
+  op: {
 
-  -- Extract string data from net (assuming format succeeds)
-  Net -> S [n ->
-    n |> normal ? n : n |> red -> final_net
+  }
+
+  ~~ Core Functions
+  fn: {
+    step red normal strategy extract_data apply apply_rule
+    prioritize_io io_strategy history
+  }
+
+  ~~ Aggregate all entities
+  E: typ cup op cup fn
+
+  ~~ Classify entities
+  tau: E |> [e ->
+    e |> in typ ? Mod.TypeSym:
+    e |> in op ? Mod.OpSym:
+    e |> in fn ? Mod.FnSym:
+    Mod.TypeSym ~~ Default case
+  ] match
+
+  ~~ Export all entities by default
+  vis: E |> [e -> true]
+
+  ~~ Context: Assumes Net structure with active pairs (alpha), rules (R), etc.
+
+  ~~ Core Reduction Operations
+  step: Net -> Net ~~ Performs a single reduction step if possible
+  red: Net -> Net ~~ Reduces to normal form
+  normal: Net -> Bool ~~ Checks if a net is in normal form (no active pairs)
+
+  ~~ Reduction Strategy
+  strategy: (Net -> [AgentId * AgentId]) * ([AgentId * AgentId] -> AgentId * AgentId) -> (Net -> Net)
+  ~~ Higher-order function defining reduction strategy:
+  ~~ Takes a function to find redexes and a function to choose among them
+
+  ~~ Extract string data from net (assuming format succeeds)
+  extract_data: Net -> S [n ->
+    n |> normal ? n: n |> red -> final_net
     final_net |> Primitives.format -> result
-    result |> FLogic.is_valid ? result |> FLogic.extract_value : "<Format Error>"
-  ]                                                                 : extract_data
+    result |> FLogic.is_valid ? result |> FLogic.extract_value: "<Format Error>"
+  ]
 
-  -- Apply replacement rule (rho) to net (n)
-  rho * Net -> Net [rule n ->
+  ~~ Apply replacement rule (rho) to net (n)
+  apply: rho * Net -> Net [rule n ->
     rule[0] |> Primitives.match n -> matches
     matches |> Primitives.rho > 0 ?
-      (n |> Primitives.ominus matches[0][0] |> Primitives.oplus rule[1]) :
+      (n |> Primitives.ominus matches[0][0] |> Primitives.oplus rule[1]):
       n
-  ]                                                                 : apply
+  ]
 
-  -- Default implementation using Net.find_redexes
-  Net [n ->
+  ~~ Default implementation using Net.find_redexes
+  step: Net [n ->
     n |> Net.find_redexes -> redexes
     redexes |> Primitives.rho > 0 ?
-      (n redexes[0] |> apply_rule) :
+      (n redexes[0] |> apply_rule):
       n
-  ]                                                                 : step
+  ]
 
-  -- Apply a single reduction rule to a redex
-  Net * (AgentId * AgentId) -> Net [n redex ->
+  ~~ Apply a single reduction rule to a redex
+  apply_rule: Net * (AgentId * AgentId) -> Net [n redex ->
     Net.R[redex] n |> apply
-  ]                                                                 : apply_rule
+  ]
 
-  -- Reduce to normal form
-  Net [n ->
-    n |> normal ? n : n |> step |> red
-  ]                                                                 : red
+  ~~ Reduce to normal form
+  red: Net [n ->
+    n |> normal ? n: n |> step |> red
+  ]
 
-  -- Check if in normal form (no active pairs)
-  Net [n ->
+  ~~ Check if in normal form (no active pairs)
+  normal: Net [n ->
     n |> Net.find_redexes |> Primitives.rho veq 0
-  ]                                                                 : normal
+  ]
 
-  -- IO-specific operations
-  [AgentId * AgentId] -> [AgentId * AgentId]                       : prioritize_io -- Prioritizes IO redexes
-  Net -> Net                                                        : io_strategy -- IO-focused reduction strategy
+  ~~ IO-specific operations
+  prioritize_io: [AgentId * AgentId] -> [AgentId * AgentId] ~~ Prioritizes IO redexes
+  io_strategy: Net -> Net ~~ IO-focused reduction strategy
 
-  -- Track reduction history
-  Net -> [Net] [n ->
+  ~~ Track reduction history
+  history: Net -> [Net] [n ->
     [] -> steps
     n -> current
     [current |> normal |> not] [
@@ -66,38 +96,7 @@
       current |> step -> current
     ] |> while
     steps current |> StdLib.List.append
-  ]                                                                 : history
-
-  -- ~~~ Core Module Pattern (Entities Aggregation) ~~~
-  -- Core Types
-  {
-
-  } -> typ
-
-  -- Core Operators
-  {
-
-  } -> op
-
-  -- Core Functions
-  {
-    step red normal strategy extract_data apply apply_rule
-    prioritize_io io_strategy history
-  } -> fn
-
-  -- Aggregate all entities
-  typ cup op cup fn -> E
-
-  -- Classify entities
-  E |> [e ->
-    e |> in typ ? Mod.TypeSym :
-    e |> in op ? Mod.OpSym :
-    e |> in fn ? Mod.FnSym :
-    Mod.TypeSym -- Default case
-  ] match -> tau
-
-  -- Export all entities by default
-  E |> [e -> true] -> vis
+  ]
 }
 
--- export Red;
+~~ export Red;
