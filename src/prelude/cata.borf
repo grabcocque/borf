@@ -14,10 +14,14 @@
     Cata Functor NaturalTransformation Isomorphism Adjunction
 
     -- Domain-specific transformations
-    StringRep GraphRep WireRep NetRep SyntaxRep RewriteRep ReduceRep
+    StringRep GraphRep WireRep NetRep SyntaxRep RewriteRep ReduceRep SeqRep
 
     -- Transformation categories
     Category Monoidal Cartesian Bicartesian Closed
+    
+    -- Structural mappings
+    StructuralMapping ObjectMap MorphismMap LawMap
+    LinearMap ConsumingMap PreservingMap
 
     -- Transformation properties
     Structure Preserving Reflecting Creating
@@ -35,6 +39,11 @@
 
     -- Composition operators
     >>> <<< ||| &&&
+    
+    -- Structural operators
+    =>: -- Structural mapping
+    -o: -- Linear mapping
+    <:  -- Subtyping
 
     -- Categorical operators
     * tensor product unit counit
@@ -52,6 +61,17 @@
     string_to_net net_to_string graph_to_wire wire_to_graph
     wire_to_net net_to_wire net_to_rewrite rewrite_to_red
     string_to_wire wire_to_string
+
+    -- Sequence transformations
+    seq_to_list list_to_seq string_to_seq seq_to_string
+    
+    -- Structural mapping operations
+    structural_map object_map morphism_map law_map
+    linear_map consuming_map preserving_map
+    with_laws map_preserving laws_between
+    
+    -- Linear structure operations
+    linearly linear_transform linear_compose
 
     -- Homoiconicity integration (enhanced)
     string_to_syntax syntax_to_string syntax_to_net net_to_syntax
@@ -84,10 +104,584 @@
   vis: E |> [e -> true]
 
   deps: {
-    (@Cata, @Hom, true)   -- Add dependency on Hom module
-    (@Cata, @T, true)     -- Add dependency on Type system
-    (@Cata, @Wire, true)  -- Add dependency on Wire module
-    (@Cata, @Grph, true)  -- Add dependency on Graph module
+    (@Cata, @Hom, true),   -- Add dependency on Hom module
+    (@Cata, @T, true),     -- Add dependency on Type system
+    (@Cata, @Wire, true),  -- Add dependency on Wire module
+    (@Cata, @Grph, true),  -- Add dependency on Graph module
+    (@Cata, @Seq, true)    -- Add dependency on Seq module
+  }
+
+  --------------------------------------------------
+  -- Direct Categorical Structural Mappings
+  --------------------------------------------------
+  
+  --[[
+    Core Category Structure
+    
+    Defines the fundamental structure of a category with objects,
+    morphisms, domains, codomains, identity, and composition.
+  ]]--
+  category_structure: {
+    Category.O = T.Type_0,                -- Objects are types
+    Category.M = (a -> b | a, b: T.Type_0), -- Morphisms are functions
+    Category.dom = [f -> f.domain],       -- Domain of a function
+    Category.cod = [f -> f.codomain],     -- Codomain of a function 
+    Category.id = [A -> [x -> x]],        -- Identity is the identity function
+    Category.compose = [f g -> [x -> g(x) |> f]]  -- Composition is function composition
+  }
+  
+  --[[
+    Graph-Category Structural Mapping
+    
+    Maps graphs to categories, establishing a direct structural
+    correspondence between graph theory and category theory.
+  ]]--
+  graph_cat_mapping: {
+    Grph.Node = Cat.O,             -- Nodes in a graph are objects in a category
+    Grph.Edge = Cat.M,             -- Edges in a graph are morphisms in a category
+    Grph.source = Cat.dom,         -- Source of an edge is the domain of a morphism
+    Grph.target = Cat.cod,         -- Target of an edge is the codomain of a morphism
+    Grph.path = Cat.compose,       -- Path in a graph is composition in a category
+    Grph.loop = [n -> Cat.id(n)]   -- Loop in a graph is identity in a category
+  }
+  
+  --[[
+    Wire-Graph Structural Mapping
+    
+    Maps wiring diagrams to graphs, establishing a direct structural
+    correspondence between circuit diagrams and graph structures.
+  ]]--
+  wire_graph_mapping: {
+    Wire.Box = Grph.Node,          -- Boxes in a wiring diagram are nodes in a graph  
+    Wire.Wire = Grph.Edge,         -- Wires are edges in a graph
+    Wire.source = Grph.source,     -- Source of a wire is source of an edge
+    Wire.target = Grph.target,     -- Target of a wire is target of an edge
+    Wire.connect = Grph.add_edge,  -- Connecting wires is adding edges
+    Wire.compose = Grph.merge      -- Composing wiring diagrams is merging graphs
+  }
+  
+  --[[
+    Net-Wire Structural Mapping
+    
+    Maps interaction nets to wiring diagrams, establishing a direct structural
+    correspondence between agent-based nets and circuit diagrams.
+  ]]--
+  net_wire_mapping: {
+    Net.Agent = Wire.Box,           -- Agents in a net are boxes in a wiring diagram
+    Net.Port = Wire.Port,           -- Ports in a net are ports in a wiring diagram
+    Net.Connection = Wire.Wire,     -- Connections in a net are wires in a wiring diagram
+    Net.connect = Wire.connect,     -- Connecting ports is connecting wires
+    Net.compose = Wire.compose      -- Composing nets is composing wiring diagrams
+  }
+  
+  --[[
+    Rewrite-Net Structural Mapping
+    
+    Maps rewrite systems to interaction nets, establishing a direct structural
+    correspondence between rewrite rules and net transformations.
+  ]]--
+  rewrite_net_mapping: {
+    RW.Rule = (Net -> Net),        -- Rewrite rules are net transformations
+    RW.Pattern = Net,              -- Patterns are nets
+    RW.match = Net.match,          -- Matching is matching in nets
+    RW.rewrite = Net.transform,    -- Rewriting is transforming nets
+    RW.apply = [r n -> r.lhs |> Net.match(n) |> [m -> m |> Net.substitute(r.rhs)]]
+  }
+  
+  --[[
+    Functor Structural Definition
+    
+    Defines a functor as a structure-preserving mapping between categories,
+    with direct correspondences to object and morphism mappings.
+  ]]--
+  functor_structure: {
+    Functor.source = Category,        -- Source of a functor is a category
+    Functor.target = Category,        -- Target of a functor is a category
+    Functor.object_map = (O -> O),    -- Object map maps objects to objects
+    Functor.morphism_map = (M -> M),  -- Morphism map maps morphisms to morphisms
+    
+    -- Laws
+    Functor.law.identity = [F -> 
+      forall [A -> F(id(A)) == id(F(A))]
+    ],
+    Functor.law.composition = [F -> 
+      forall [f g -> F(g >>> f) == F(g) >>> F(f)]
+    ]
+  }
+  
+  --[[
+    Natural Transformation Structural Definition
+    
+    Defines a natural transformation as a family of morphisms between functors,
+    with direct correspondences to component mappings.
+  ]]--
+  natural_transformation_structure: {
+    NaturalTransformation.source = Functor,      -- Source of a natural transformation is a functor
+    NaturalTransformation.target = Functor,      -- Target of a natural transformation is a functor
+    NaturalTransformation.components = [A -> (source(A) -> target(A))],  -- Components are morphisms
+    
+    -- Laws
+    NaturalTransformation.law.coherence = [alpha ->
+      forall [A B f -> 
+        (source(f) >>> alpha(B)) == (alpha(A) >>> target(f))
+      ]
+    ]
+  }
+  
+  --[[
+    Seq-Category Structural Mapping
+    
+    Maps sequences to a category, establishing a direct structural
+    correspondence between sequence operations and categorical structure.
+  ]]--
+  seq_cat_mapping: {
+    Seq.typ = Cat.O,                   -- Sequence types are objects in a category
+    Seq.fn = Cat.M,                    -- Sequence functions are morphisms in a category
+    Seq.linear_map = Cat.compose,      -- Linear mapping is composition in a category
+    Seq.empty = Cat.initial,           -- Empty sequence is initial object
+    Seq.concat = Cat.product,          -- Concatenation is product in category
+    
+    -- Functorial structure
+    Seq.map = Functor.morphism_map,    -- Map is functor's morphism map
+    Seq.law.map_identity = Functor.law.identity,        -- Map identity law
+    Seq.law.map_composition = Functor.law.composition,  -- Map composition law
+    
+    -- Seq-specific categorical structure
+    Seq.TransducerCategory = Category {
+      O = {(a -o> a) | a: T.Type_0},    -- Objects are reducing functions
+      M = Seq.Transducer,               -- Morphisms are transducers
+      id = [_ -> [rf -> rf]],           -- Identity transducer
+      compose = [t1 t2 -> t1 >== t2]    -- Composition is transducer composition
+    }
+  }
+  
+  --[[
+    String-Seq Structural Mapping
+    
+    Maps strings to sequences, establishing a direct structural
+    correspondence between string operations and sequence operations.
+  ]]--
+  string_seq_mapping: {
+    S.char = Seq.a,                    -- Characters in a string are elements in a sequence
+    S.concat = Seq.concat,             -- String concatenation is sequence concatenation
+    S.substring = Seq.slice,           -- Substring is slice of a sequence
+    S.length = Seq.length,             -- String length is sequence length
+    S.chars = [s -> s |> string_to_seq],  -- String to sequence of characters
+    S.from_chars = [cs -> cs |> seq_to_string]  -- Sequence of characters to string
+  }
+  
+  --[[
+    Rewrite-Category Structural Mapping
+    
+    Maps rewrite systems to a category, establishing a direct structural
+    correspondence between rewrite operations and categorical structure.
+  ]]--
+  rewrite_cat_mapping: {
+    RW.Rule = Cat.M,                   -- Rewrite rules are morphisms
+    RW.System = Cat,                   -- Rewrite system is a category
+    RW.apply = Cat.compose,            -- Applying a rule is composition
+    RW.match = [p n -> Cat.hom(p, n)], -- Matching is finding morphisms
+    RW.fixed_point = Cat.terminal,     -- Fixed point is terminal object
+    
+    -- Category of rewrites
+    RW.Category = Category {
+      O = {Net},                         -- Objects are nets
+      M = {RW.Rule},                     -- Morphisms are rewrite rules
+      id = [n -> [n -> n]],              -- Identity is the identity rule
+      compose = [r1 r2 -> [n -> n |> r2 |> r1]]  -- Composition is rule composition
+    }
+  }
+
+  --------------------------------------------------
+  -- Structural Mapping Definitions
+  --------------------------------------------------
+
+  --[[
+    StructuralMapping maps between categorical structures
+    preserving selected laws and properties
+  ]]--
+  StructuralMapping: {
+    objects: ObjectMap,
+    morphisms: MorphismMap,
+    laws: LawMap
+  }
+  
+  --[[
+    ObjectMap defines how objects are mapped between structures
+  ]]--
+  ObjectMap: {
+    source_cat: Category,
+    target_cat: Category,
+    map: source_cat.O -> target_cat.O
+  }
+  
+  --[[
+    MorphismMap defines how morphisms are mapped between structures
+  ]]--
+  MorphismMap: {
+    source_cat: Category,
+    target_cat: Category,
+    map: source_cat.M -> target_cat.M
+  }
+  
+  --[[
+    LawMap defines how laws are preserved between structures
+  ]]--
+  LawMap: {
+    source_laws: [Law],
+    target_laws: [Law],
+    map: source_laws -> target_laws
+  }
+  
+  --[[
+    LinearMap is a mapping that consumes the input structure
+  ]]--
+  LinearMap: StructuralMapping & {
+    linear_objects: !source_cat.O -o> target_cat.O,
+    linear_morphisms: !source_cat.M -o> target_cat.M
+  }
+  
+  --[[
+    ConsumingMap guarantees that the source structure is fully consumed
+  ]]--
+  ConsumingMap: LinearMap & {
+    consuming: !source_cat.O -o> (),
+    verify_consumed: !source_cat.O -> Bool
+  }
+  
+  --[[
+    PreservingMap guarantees that structure is preserved in the mapping
+  ]]--
+  PreservingMap: StructuralMapping & {
+    preserves: (P: source_cat.O -> Bool) -> (target_cat.O -> Bool),
+    invariant: source_cat.O -> target_cat.O -> Bool
+  }
+  
+  --[[
+    Creates a structural mapping between two categories
+  ]]--
+  structural_map: Category * Category -> (O -> O) -> (M -> M) -> StructuralMapping [
+    source_cat target_cat object_mapper morphism_mapper ->
+    {
+      objects: {
+        source_cat: source_cat,
+        target_cat: target_cat,
+        map: object_mapper
+      },
+      morphisms: {
+        source_cat: source_cat,
+        target_cat: target_cat,
+        map: morphism_mapper
+      },
+      laws: {
+        source_laws: source_cat.laws,
+        target_laws: target_cat.laws,
+        map: [sl -> 
+          -- Default law mapping transfers each law if possible
+          sl |> [l -> 
+            target_cat.laws |> filter [tl -> 
+              tl.name == l.name
+            ] |> head |> default l
+          ]
+        ]
+      }
+    }
+  ]
+  
+  --[[
+    Creates a linear mapping between two categories
+  ]]--
+  linear_map: Category * Category -> (!O -o> O) -> (!M -o> M) -> LinearMap [
+    source_cat target_cat object_mapper morphism_mapper ->
+    {
+      objects: {
+        source_cat: source_cat,
+        target_cat: target_cat,
+        map: [o -> object_mapper(o)]
+      },
+      morphisms: {
+        source_cat: source_cat,
+        target_cat: target_cat,
+        map: [m -> morphism_mapper(m)]
+      },
+      laws: {
+        source_laws: source_cat.laws,
+        target_laws: target_cat.laws,
+        map: [laws -> laws] -- Identity law mapping
+      },
+      linear_objects: object_mapper,
+      linear_morphisms: morphism_mapper
+    }
+  ]
+  
+  --[[
+    Creates a consuming map between two categories
+  ]]--
+  consuming_map: Category * Category -> (!O -o> O) -> (!M -o> M) -> ConsumingMap [
+    source_cat target_cat object_mapper morphism_mapper ->
+    {
+      objects: {
+        source_cat: source_cat,
+        target_cat: target_cat,
+        map: [o -> object_mapper(o)]
+      },
+      morphisms: {
+        source_cat: source_cat,
+        target_cat: target_cat,
+        map: [m -> morphism_mapper(m)]
+      },
+      laws: {
+        source_laws: source_cat.laws,
+        target_laws: target_cat.laws,
+        map: [laws -> laws] -- Identity law mapping
+      },
+      linear_objects: object_mapper,
+      linear_morphisms: morphism_mapper,
+      consuming: [o -> o |> object_mapper |> [_ -> ()]],
+      verify_consumed: [o -> true] -- Default implementation always returns true
+    }
+  ]
+  
+  --[[
+    Creates a preserving map between two categories
+  ]]--
+  preserving_map: Category * Category -> (O -> O) -> (M -> M) -> PreservingMap [
+    source_cat target_cat object_mapper morphism_mapper ->
+    {
+      objects: {
+        source_cat: source_cat,
+        target_cat: target_cat,
+        map: object_mapper
+      },
+      morphisms: {
+        source_cat: source_cat,
+        target_cat: target_cat,
+        map: morphism_mapper
+      },
+      laws: {
+        source_laws: source_cat.laws,
+        target_laws: target_cat.laws,
+        map: [laws -> laws] -- Identity law mapping
+      },
+      preserves: [p -> [o -> p(object_mapper(o))]],
+      invariant: [so to -> 
+        -- Default invariant checks basic structure is preserved
+        source_cat.structure(so) == target_cat.structure(to)
+      ]
+    }
+  ]
+  
+  --[[
+    Adds law mapping to a structural mapping
+  ]]--
+  with_laws: StructuralMapping -> (Law -> Law) -> StructuralMapping [
+    mapping law_mapper ->
+    {
+      objects: mapping.objects,
+      morphisms: mapping.morphisms,
+      laws: {
+        source_laws: mapping.laws.source_laws,
+        target_laws: mapping.laws.target_laws,
+        map: law_mapper
+      }
+    }
+  ]
+  
+  --[[
+    Creates a law-preserving mapping function
+  ]]--
+  map_preserving: (source: a -> Bool) -> (target: b -> Bool) -> (a -> b) -> (a -> b) [
+    source_pred target_pred f ->
+    [x -> 
+      let result = f(x) in
+      -- Check and possibly assert that the mapping preserves the property
+      assert(source_pred(x) -> target_pred(result))
+      result
+    ]
+  ]
+  
+  --[[
+    Maps laws between two categories
+  ]]--
+  laws_between: Category -> Category -> [Law] -> [Law] -> (Law -> Law) [
+    source_cat target_cat source_laws target_laws ->
+    [law -> 
+      -- Find a matching law by name in the target category
+      target_laws |> filter [l -> l.name == law.name] |> head |> default law
+    ]
+  ]
+  
+  --[[
+    Applies a function in a linear context, ensuring the input is consumed
+  ]]--
+  linearly: (!a -o> b) -> (!a -o> b) [f ->
+    [x -> f(x)]
+  ]
+  
+  --[[
+    Transforms linearly between structures
+  ]]--
+  linear_transform: (!a -o> b) -> (!c -o> d) -> (!a -o> d) [f g ->
+    [x -> x |> f |> g]
+  ]
+  
+  --[[
+    Composes linear functions
+  ]]--
+  linear_compose: (!a -o> b) -> (!b -o> c) -> (!a -o> c) [f g ->
+    [x -> x |> f |> g]
+  ]
+
+  --------------------------------------------------
+  -- Sequence Transformations
+  --------------------------------------------------
+
+  --[[
+    SeqRep: Structural representation of sequences
+    
+    This provides a structural mapping interface for sequence operations,
+    allowing sequences to participate in structural subtyping relationships.
+  ]]--
+  SeqRep: T.Type_0 -> T.Type_0
+  
+  --[[
+    Seq Category: Defines sequences as a category with objects and morphisms
+  ]]--
+  SeqCategory: Category {
+    O: {Seq a | a: T.Type_0},
+    M: {(Seq a -o> Seq b) | a, b: T.Type_0},
+    dom: [f -> f.domain],
+    cod: [f -> f.codomain],
+    id: [A -> [x -> x]],
+    compose: [f g -> [x -> x |> g |> f]]
+  }
+  
+  --[[
+    List Category: Defines lists as a category with objects and morphisms
+  ]]--
+  ListCategory: Category {
+    O: {[a] | a: T.Type_0},
+    M: {([a] -o> [b]) | a, b: T.Type_0},
+    dom: [f -> f.domain],
+    cod: [f -> f.codomain],
+    id: [A -> [x -> x]],
+    compose: [f g -> [x -> x |> g |> f]]
+  }
+
+  --[[
+    Transform a sequence to a list, preserving order
+  ]]--
+  seq_to_list: !(Seq a) -o> [a] [seq ->
+    seq |> Seq.to_list
+  ]
+
+  --[[
+    Transform a list to a sequence, preserving order
+  ]]--
+  list_to_seq: ![a] -o> (Seq a) [list ->
+    list |> Seq.from_list
+  ]
+
+  --[[
+    Transform a string to a sequence of characters
+  ]]--
+  string_to_seq: !S -o> (Seq Char) [s ->
+    s |> Prim.string_to_chars |> list_to_seq
+  ]
+
+  --[[
+    Transform a sequence of characters to a string
+  ]]--
+  seq_to_string: !(Seq Char) -o> S [seq ->
+    seq |> seq_to_list |> Prim.chars_to_string
+  ]
+  
+  --[[
+    Structural mapping from Seq to List category
+  ]]--
+  seq_list_mapping: StructuralMapping {
+    objects: {
+      source_cat: SeqCategory,
+      target_cat: ListCategory,
+      map: [seq -> seq |> seq_to_list]
+    },
+    morphisms: {
+      source_cat: SeqCategory,
+      target_cat: ListCategory,
+      map: [f -> [xs -> xs |> list_to_seq |> f |> seq_to_list]]
+    },
+    laws: {
+      source_laws: Seq.laws,
+      target_laws: List.laws,
+      map: [law -> 
+        law.name == "map_identity" -> List.law.map_identity or_else
+        law.name == "map_composition" -> List.law.map_composition or_else
+        law
+      ]
+    }
+  }
+  
+  --[[
+    Linear mapping from Seq to List category
+  ]]--
+  seq_list_linear: LinearMap {
+    objects: {
+      source_cat: SeqCategory,
+      target_cat: ListCategory,
+      map: [seq -> seq |> seq_to_list]
+    },
+    morphisms: {
+      source_cat: SeqCategory,
+      target_cat: ListCategory,
+      map: [f -> [xs -> xs |> list_to_seq |> f |> seq_to_list]]
+    },
+    laws: {
+      source_laws: Seq.laws,
+      target_laws: List.laws,
+      map: [law -> 
+        law.name == "map_identity" -> List.law.map_identity or_else
+        law.name == "map_composition" -> List.law.map_composition or_else
+        law
+      ]
+    },
+    linear_objects: seq_to_list,
+    linear_morphisms: [f -> [xs -> xs |> list_to_seq |> f |> seq_to_list]]
+  }
+  
+  --[[
+    Structure-preserving mapping from Seq to List
+  ]]--
+  seq_list_preserving: PreservingMap {
+    objects: {
+      source_cat: SeqCategory,
+      target_cat: ListCategory,
+      map: [seq -> seq |> seq_to_list]
+    },
+    morphisms: {
+      source_cat: SeqCategory,
+      target_cat: ListCategory,
+      map: [f -> [xs -> xs |> list_to_seq |> f |> seq_to_list]]
+    },
+    laws: {
+      source_laws: Seq.laws,
+      target_laws: List.laws,
+      map: [law -> 
+        law.name == "map_identity" -> List.law.map_identity or_else
+        law.name == "map_composition" -> List.law.map_composition or_else
+        law
+      ]
+    },
+    preserves: [p -> [xs -> 
+      -- Converts seq predicate to list predicate
+      let seq_pred = p in
+      let list_pred = [ys -> ys |> list_to_seq |> seq_pred] in
+      list_pred(xs)
+    ]],
+    invariant: [seq list -> 
+      -- Check that the mapping preserves length and ordering
+      (seq |> Seq.length) == (list |> length) and
+      (seq |> seq_to_list |> list_to_seq) == seq
+    ]
   }
 
   --------------------------------------------------

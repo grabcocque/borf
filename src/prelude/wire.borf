@@ -68,6 +68,9 @@
 
     -- Verification
     verify_acyclic verify_connected verify_well_typed verify_well_formed
+    
+    -- Structural mapping functions
+    to_graph from_graph to_net from_net to_category from_category
   }
 
   E: typ cup op cup fn
@@ -75,6 +78,343 @@
   tau: T.tau
 
   vis: E |> [e -> true]
+  
+  deps: {
+    (@Wire, @Grph, true),  -- Add dependency on Graph module
+    (@Wire, @Cat, true),   -- Add dependency on Cat module
+    (@Wire, @Net, true)    -- Add dependency on Net module
+  }
+  
+  --------------------------------------------------
+  -- Direct Structural Mappings
+  --------------------------------------------------
+  
+  --[[
+    Wire-Graph Structural Mapping
+    
+    Establishes a direct structural correspondence between wiring diagrams and graphs,
+    showing how a wiring diagram can be represented as a graph structure.
+  ]]--
+  wire_graph_mapping: {
+    -- Object mappings
+    Wire.Box = Grph.!Node,             -- Boxes are graph nodes
+    Wire.Port = Grph.!Node,            -- Ports are also graph nodes 
+    Wire.Diagram = Grph.!Grph,         -- A wiring diagram is a bipartite graph
+    
+    -- Structural mappings
+    Wire.connect = Grph.add_edge,      -- Connecting ports is adding an edge
+    Wire.sig = Grph.neighbors,         -- Signature is the neighbors of a node
+    
+    -- Linear transformation functions
+    to_graph = [!d -o>
+      let g = Grph.new_graph() in
+      
+      -- First add all boxes as nodes
+      let boxes = Prim.get_boxes(d) in
+      let g_with_boxes = boxes |> fold [g box ->
+        let label = Prim.get_box_label(box) in
+        Grph.add_node(g, {:box, label}).0
+      ] g in
+      
+      -- Then add all ports as nodes
+      let g_with_ports = boxes |> fold [g box ->
+        let ports_in = Wire.in_ports(box) in
+        let ports_out = Wire.out_ports(box) in
+        let box_node = Grph.get_node_by_label(g, {:box, Prim.get_box_label(box)}).1 in
+        
+        -- Add input ports as nodes and connect to box
+        let g1 = ports_in |> fold [g port ->
+          let {g1, port_node} = Grph.add_node(g, {:port, :in, port.id}) in
+          Grph.add_edge(g1, port_node, box_node, :in_port).0
+        ] g in
+        
+        -- Add output ports as nodes and connect to box
+        ports_out |> fold [g port ->
+          let {g1, port_node} = Grph.add_node(g, {:port, :out, port.id}) in
+          Grph.add_edge(g1, box_node, port_node, :out_port).0
+        ] g1
+      ] g_with_boxes in
+      
+      -- Finally add edges between connected ports
+      let connections = Prim.get_connections(d) in
+      connections |> fold [g conn ->
+        let port1 = conn.0 in
+        let port2 = conn.1 in
+        let port1_node = Grph.get_node_by_label(g, {:port, port1.direction, port1.id}).1 in
+        let port2_node = Grph.get_node_by_label(g, {:port, port2.direction, port2.id}).1 in
+        
+        -- Connect the ports
+        Grph.add_edge(g, port1_node, port2_node, :connection).0
+      ] g_with_ports
+    ],
+    
+    from_graph = [!g -o>
+      -- Initialize empty diagram
+      let d = Wire.id() in
+      
+      -- First extract all box nodes
+      let {g1, nodes} = Prim.get_graph_nodes(g) in
+      let box_nodes = nodes |> filter [n -> 
+        match (Grph.get_node_label(g1, n).1,
+          {:box, _} -> true,
+          _ -> false
+        )
+      ] in
+      
+      -- Create boxes for each box node
+      let d_with_boxes = box_nodes |> fold [d node ->
+        let {:box, label} = Grph.get_node_label(g1, node).1 in
+        let box = Prim.create_box(label) in
+        Prim.add_box_to_diagram(d, box)
+      ] d in
+      
+      -- Extract port nodes
+      let port_nodes = nodes |> filter [n -> 
+        match (Grph.get_node_label(g1, n).1,
+          {:port, _, _} -> true,
+          _ -> false
+        )
+      ] in
+      
+      -- Create ports for each port node and find their boxes
+      let d_with_ports = port_nodes |> fold [d node ->
+        let {:port, direction, id} = Grph.get_node_label(g1, node).1 in
+        
+        -- Find which box this port connects to
+        let box_edges = if direction == :in {
+          -- Input ports have incoming edges from boxes
+          Grph.incoming(g1, node).1 |> filter [e -> 
+            let source = Grph.src(g1, e).1 in
+            match (Grph.get_node_label(g1, source).1,
+              {:box, _} -> true,
+              _ -> false
+            )
+          ]
+        } else {
+          -- Output ports have outgoing edges to boxes
+          Grph.outgoing(g1, node).1 |> filter [e -> 
+            let target = Grph.tgt(g1, e).1 in
+            match (Grph.get_node_label(g1, target).1,
+              {:box, _} -> true,
+              _ -> false
+            )
+          ]
+        } in
+        
+        -- Create port on the appropriate box
+        let box_edge = box_edges |> head in
+        let box_node = if direction == :in {
+          Grph.src(g1, box_edge).1
+        } else {
+          Grph.tgt(g1, box_edge).1
+        } in
+        
+        let {:box, box_label} = Grph.get_node_label(g1, box_node).1 in
+        let box = Prim.find_box_by_label(d, box_label) in
+        
+        -- Create port on the box
+        let port = Prim.create_port(box, direction, id) in
+        Prim.add_port_to_box(d, box, port)
+      ] d_with_boxes in
+      
+      -- Connect ports
+      let connection_edges = Prim.get_graph_edges(g1) |> filter [e ->
+        Grph.get_edge_label(g1, e).1 == :connection
+      ] in
+      
+      connection_edges |> fold [d edge ->
+        let src_node = Grph.src(g1, edge).1 in
+        let tgt_node = Grph.tgt(g1, edge).1 in
+        let {:port, src_dir, src_id} = Grph.get_node_label(g1, src_node).1 in
+        let {:port, tgt_dir, tgt_id} = Grph.get_node_label(g1, tgt_node).1 in
+        
+        -- Find ports
+        let src_port = Prim.find_port(d, src_id) in
+        let tgt_port = Prim.find_port(d, tgt_id) in
+        
+        -- Connect ports
+        Wire.connect(d, src_port, tgt_port)
+      ] d_with_ports
+    ]
+  }
+  
+  --[[
+    Wire-Net Structural Mapping
+    
+    Establishes a direct structural correspondence between wiring diagrams and interaction nets,
+    showing how a wiring diagram can be represented as an interaction net.
+  ]]--
+  wire_net_mapping: {
+    -- Object mappings
+    Wire.Box = Net.!Agent,             -- Boxes are agents
+    Wire.Port = Net.!Port,             -- Ports are agent ports
+    Wire.Diagram = Net.!Net,           -- A wiring diagram is an interaction net
+    
+    -- Linear transformation functions
+    to_net = [!d -o>
+      let n = Net.empty_net() in
+      
+      -- First add all boxes as agents
+      let boxes = Prim.get_boxes(d) in
+      let n_with_agents = boxes |> fold [n box ->
+        let label = Prim.get_box_label(box) in
+        let ports_in = Wire.in_ports(box) in
+        let ports_out = Wire.out_ports(box) in
+        let arity = (ports_in |> length) + (ports_out |> length) in
+        
+        -- Create agent
+        let agent = Net.new_agent({name: "Box", arity: arity}) in
+        Prim.label_agent(Net.add_agent(n, agent).0, agent, {:box, label})
+      ] n in
+      
+      -- Connect ports according to the wiring
+      let connections = Prim.get_connections(d) in
+      connections |> fold [n conn ->
+        let port1 = conn.0 in
+        let port2 = conn.1 in
+        let box1 = Wire.owner(port1) in
+        let box2 = Wire.owner(port2) in
+        
+        -- Find corresponding agents
+        let {n1, agents} = Net.get_agents(n) in
+        let agent1 = agents |> find [a -> 
+          match (Prim.get_agent_label(a),
+            {:box, box_label} -> box_label == Prim.get_box_label(box1),
+            _ -> false
+          )
+        ] in
+        let agent2 = agents |> find [a -> 
+          match (Prim.get_agent_label(a),
+            {:box, box_label} -> box_label == Prim.get_box_label(box2),
+            _ -> false
+          )
+        ] in
+        
+        -- Determine port indices
+        let port1_idx = Prim.get_port_index(box1, port1) in
+        let port2_idx = Prim.get_port_index(box2, port2) in
+        
+        -- Connect the ports
+        Net.connect(n1, agent1.ports[port1_idx], agent2.ports[port2_idx])
+      ] n_with_agents
+    ],
+    
+    from_net = [!n -o>
+      let d = Wire.id() in
+      
+      -- First add all agents as boxes
+      let {n1, agents} = Net.get_agents(n) in
+      let d_with_boxes = agents |> fold [d agent ->
+        let label = Prim.get_agent_label(agent) in
+        let box = match (label,
+          {:box, box_label} -> Prim.create_box(box_label),
+          _ -> Prim.create_box(label)
+        ) in
+        
+        -- Add ports based on agent arity
+        let box_with_ports = (0..agent.arity) |> fold [box i ->
+          let is_principal = (i == 0) in
+          let port_dir = if is_principal { :in } else { :out } in
+          let port = Prim.create_port(box, port_dir, Prim.fresh_id()) in
+          Prim.add_port_to_box(box, port)
+        ] box in
+        
+        Prim.add_box_to_diagram(d, box_with_ports)
+      ] d in
+      
+      -- Connect wires based on agent connections
+      let {n2, connections} = Net.get_connections(n1) in
+      connections |> fold [d conn ->
+        let port1 = Prim.get_port(n2, conn.port1) in
+        let port2 = Prim.get_port(n2, conn.port2) in
+        let agent1 = Prim.get_agent(n2, conn.agent1) in
+        let agent2 = Prim.get_agent(n2, conn.agent2) in
+        
+        -- Find corresponding boxes
+        let box1 = Prim.find_box_by_label(d, match (Prim.get_agent_label(agent1),
+          {:box, box_label} -> box_label,
+          label -> label
+        )) in
+        
+        let box2 = Prim.find_box_by_label(d, match (Prim.get_agent_label(agent2),
+          {:box, box_label} -> box_label,
+          label -> label
+        )) in
+        
+        -- Find corresponding ports
+        let port1_idx = Prim.index_of(agent1.ports, port1) in
+        let port2_idx = Prim.index_of(agent2.ports, port2) in
+        let wire_port1 = Wire.ports(box1)[port1_idx] in
+        let wire_port2 = Wire.ports(box2)[port2_idx] in
+        
+        -- Connect the ports
+        Wire.connect(d, wire_port1, wire_port2)
+      ] d_with_boxes
+    ]
+  }
+  
+  --[[
+    Wire-Category Structural Mapping
+    
+    Establishes a direct structural correspondence between wiring diagrams and categories,
+    showing how wiring diagrams form a symmetric monoidal category.
+  ]]--
+  wire_category_mapping: {
+    -- Object mappings
+    Wire.Box = Cat.O,                  -- Boxes are objects
+    Wire.Diagram = Cat.M,              -- Diagrams are morphisms
+    
+    -- Structural mappings
+    Wire.compose = Cat.,               -- Sequential composition is morphism composition
+    Wire.tensor_compose = Cat.tensor,  -- Parallel composition is tensor product
+    Wire.id = Cat.id,                  -- Identity wiring is identity morphism
+    
+    -- Law mappings
+    Wire.law.composition_associativity = Cat.law.associativity,
+    Wire.law.identity_unit = Cat.law.id_right_neutral,
+    Wire.law.tensor_associativity = Cat.law.tensor_associativity,
+    
+    -- Linear transformation functions
+    to_category = [!d -o>
+      -- Create a symmetric monoidal category
+      let cat = Cat.new({}, {}) in
+      
+      -- Add all box types as objects
+      let boxes = Prim.get_boxes(d) in
+      let box_types = boxes |> map [b -> Wire.box_type(b)] |> unique in
+      
+      let cat_with_objs = box_types |> fold [c t ->
+        Cat.add_object(c, t)
+      ] cat in
+      
+      -- Add all diagrams as morphisms
+      let subdiagrams = Prim.get_subdiagrams(d) in
+      subdiagrams |> fold [c sd ->
+        let dom = Prim.diagram_domain(sd) in
+        let cod = Prim.diagram_codomain(sd) in
+        Cat.add_morphism(c, {
+          diagram: sd,
+          domain: dom,
+          codomain: cod
+        })
+      ] cat_with_objs
+    ],
+    
+    from_category = [!c -o>
+      -- Only works for categories that are symmetric monoidal
+      -- and have the appropriate structure
+      let morphisms = Cat.get_morphisms(c) |> filter [m -> m.diagram |> Prim.is_valid] in
+      
+      if morphisms |> is_empty {
+        -- Create a default empty diagram
+        Wire.id()
+      } else {
+        -- Return the first valid diagram
+        let m = morphisms |> head in
+        m.diagram
+      }
+    ]
+  }
 
   --[[
     Box represents a component in the wiring diagram (agent/node)
@@ -491,4 +831,34 @@
     Loop wiring pattern (feedback)
   ]]--
   loop: Diagram [-> Prim.loop_diagram]
+  
+  --[[
+    Converts a wiring diagram to a graph
+  ]]--
+  to_graph: !Diagram -o> Grph.!Grph
+  
+  --[[
+    Creates a wiring diagram from a graph
+  ]]--
+  from_graph: Grph.!Grph -o> !Diagram
+  
+  --[[
+    Converts a wiring diagram to an interaction net
+  ]]--
+  to_net: !Diagram -o> Net.!Net
+  
+  --[[
+    Creates a wiring diagram from an interaction net
+  ]]--
+  from_net: Net.!Net -o> !Diagram
+  
+  --[[
+    Converts a wiring diagram to a category
+  ]]--
+  to_category: !Diagram -o> Cat.Cat
+  
+  --[[
+    Creates a wiring diagram from a category
+  ]]--
+  from_category: Cat.Cat -o> !Diagram
 }

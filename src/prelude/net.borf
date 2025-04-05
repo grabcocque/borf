@@ -50,7 +50,7 @@
     interface free_ports restrict_interface extend_interface
 
     -- structural mapping, projection and inspection
-    to_graph from_graph visualize
+    to_graph from_graph to_wire from_wire to_category from_category visualize
 
     -- Laws and verification
     verify verify_deterministic verify_confluence is_normal_form
@@ -61,6 +61,323 @@
   tau: T.tau
 
   vis: E |> [e -> true]
+  
+  deps: {
+    (@Net, @Grph, true),  -- Add dependency on Graph module
+    (@Net, @Cat, true),   -- Add dependency on Cat module
+    (@Net, @Wire, true)   -- Add dependency on Wire module
+  }
+  
+  --------------------------------------------------
+  -- Direct Structural Mappings
+  --------------------------------------------------
+  
+  --[[
+    Net-Graph Structural Mapping
+    
+    Establishes a direct structural correspondence between interaction nets and graphs,
+    showing how an interaction net can be represented as a graph structure.
+  ]]--
+  net_graph_mapping: {
+    -- Object mappings
+    Net.!Agent = Grph.!Node,            -- Agents are graph nodes
+    Net.!Port = Grph.!Node,             -- Ports are also graph nodes (auxiliary nodes)
+    Net.!Connection = Grph.!Edge,       -- Connections are graph edges
+    Net.!Net = Grph.!Grph,              -- A net is a graph
+    
+    -- Structural mappings
+    Net.connect = Grph.connect,         -- Connecting ports creates an edge
+    Net.agent_of = Grph.get_node,       -- Getting an agent by ID gets a node
+    
+    -- Linear transformation functions
+    to_graph = [!n -o>
+      let g = Grph.new_graph() in
+      
+      -- First add all agents as nodes
+      let {n1, agents} = Net.get_agents(n) in
+      let g_with_agents = agents |> fold [g agent ->
+        let label = {:agent, agent.symbol, agent.id} in
+        Grph.add_node(g, label).0
+      ] g in
+      
+      -- Then add all ports as nodes and connect them to their agents
+      let g_with_ports = agents |> fold [g agent ->
+        let agent_node = Grph.get_node_by_label(g, {:agent, agent.symbol, agent.id}).1 in
+        
+        -- Add ports for this agent and connect them
+        agent.ports |> fold [g port ->
+          let port_label = {:port, port.id, port.principal} in
+          let {g1, port_node} = Grph.add_node(g, port_label) in
+          
+          -- Connect port to its agent (direction based on principal status)
+          if port.principal {
+            Grph.add_edge(g1, agent_node, port_node, :principal_port).0
+          } else {
+            Grph.add_edge(g1, port_node, agent_node, :auxiliary_port).0
+          }
+        ] g
+      ] g_with_agents in
+      
+      -- Finally add edges between connected ports
+      let {n2, connections} = Net.get_connections(n1) in
+      connections |> fold [g conn ->
+        let port1_node = Grph.get_node_by_label(g, {:port, conn.port1, false}).1 in
+        let port2_node = Grph.get_node_by_label(g, {:port, conn.port2, false}).1 in
+        
+        -- Connect the ports bidirectionally
+        Grph.add_edge(g, port1_node, port2_node, :connection).0
+      ] g_with_ports
+    ],
+    
+    from_graph = [!g -o>
+      let n = Net.empty_net() in
+      
+      -- First identify and extract agent nodes
+      let {g1, nodes} = Prim.get_graph_nodes(g) in
+      let agent_nodes = nodes |> filter [n ->
+        match (Grph.get_node_label(g1, n).1,
+          {:agent, _, _} -> true,
+          _ -> false
+        )
+      ] in
+      
+      -- Create agents for each agent node
+      let n_with_agents = agent_nodes |> fold [n node ->
+        let {:agent, symbol, id} = Grph.get_node_label(g1, node).1 in
+        let agent = Net.new_agent(symbol) in
+        
+        -- Agent created with default ports, set the ID
+        agent.id = id in
+        Net.add_agent(n, agent).0
+      ] n in
+      
+      -- Connect ports based on graph connections
+      let connection_edges = Prim.get_graph_edges(g1) |> filter [e ->
+        Grph.get_edge_label(g1, e).1 == :connection
+      ] in
+      
+      connection_edges |> fold [n edge ->
+        let src_node = Grph.src(g1, edge).1 in
+        let tgt_node = Grph.tgt(g1, edge).1 in
+        
+        let {:port, port1_id, _} = Grph.get_node_label(g1, src_node).1 in
+        let {:port, port2_id, _} = Grph.get_node_label(g1, tgt_node).1 in
+        
+        -- Find the agents these ports belong to
+        let port1_agent_id = Prim.find_agent_with_port(n, port1_id) in
+        let port2_agent_id = Prim.find_agent_with_port(n, port2_id) in
+        
+        -- Connect the ports
+        Net.connect(n, {id: port1_id, agent: port1_agent_id}, {id: port2_id, agent: port2_agent_id})
+      ] n_with_agents
+    ]
+  }
+  
+  --[[
+    Net-Wire Structural Mapping
+    
+    Establishes a direct structural correspondence between interaction nets and wiring diagrams,
+    showing how an interaction net can be represented as a wiring diagram.
+  ]]--
+  net_wire_mapping: {
+    -- Object mappings
+    Net.!Agent = Wire.Box,               -- Agents are boxes
+    Net.!Port = Wire.Port,               -- Ports are wiring ports
+    Net.!Connection = Wire.Connection,   -- Connections are wiring connections
+    Net.!Net = Wire.Diagram,             -- A net is a wiring diagram
+    
+    -- Structural mappings
+    Net.connect = Wire.connect,          -- Connecting ports creates a wire
+    Net.principal = Wire.in_ports,       -- Principal port is an input port
+    Net.auxiliary = Wire.out_ports,      -- Auxiliary ports are output ports
+    
+    -- Linear transformation functions
+    to_wire = [!n -o>
+      let d = Wire.id() in
+      
+      -- First add all agents as boxes
+      let {n1, agents} = Net.get_agents(n) in
+      let d_with_boxes = agents |> fold [d agent ->
+        -- Create a box for this agent
+        let box = Prim.create_box({symbol: agent.symbol, id: agent.id}) in
+        
+        -- Add ports to the box based on agent ports
+        let box_with_ports = agent.ports |> fold [box port ->
+          let dir = if port.principal { :in } else { :out } in
+          let wire_port = Prim.create_port(box, dir, port.id) in
+          Prim.add_port_to_box(box, wire_port)
+        ] box in
+        
+        Prim.add_box_to_diagram(d, box_with_ports)
+      ] d in
+      
+      -- Connect ports based on net connections
+      let {n2, connections} = Net.get_connections(n1) in
+      connections |> fold [d conn ->
+        -- Find the boxes these ports belong to
+        let box1 = Prim.find_box_by_port(d, conn.port1) in
+        let box2 = Prim.find_box_by_port(d, conn.port2) in
+        
+        -- Find the actual ports
+        let port1 = Wire.ports(box1) |> find [p -> p.id == conn.port1] in
+        let port2 = Wire.ports(box2) |> find [p -> p.id == conn.port2] in
+        
+        -- Connect the ports
+        Wire.connect(d, port1, port2)
+      ] d_with_boxes
+    ],
+    
+    from_wire = [!d -o>
+      let n = Net.empty_net() in
+      
+      -- First add all boxes as agents
+      let boxes = Prim.get_boxes(d) in
+      let n_with_agents = boxes |> fold [n box ->
+        let box_label = Prim.get_box_label(box) in
+        let symbol = match (box_label,
+          {symbol: s, id: _} -> s,
+          _ -> {name: "Box", arity: Wire.ports(box) |> length}
+        ) in
+        
+        -- Create agent
+        let agent = Net.new_agent(symbol) in
+        
+        -- Get box ports
+        let in_ports = Wire.in_ports(box) in
+        let out_ports = Wire.out_ports(box) in
+        
+        -- Update agent's ports to match box ports
+        let updated_agent = 
+          agent.ports = (in_ports |> map [p -> {id: p.id, principal: true, connected: false}]) ++
+                        (out_ports |> map [p -> {id: p.id, principal: false, connected: false}])
+        in
+        
+        Net.add_agent(n, updated_agent).0
+      ] n in
+      
+      -- Connect ports based on wiring connections
+      let connections = Prim.get_connections(d) in
+      connections |> fold [n conn ->
+        let port1 = conn.0 in
+        let port2 = conn.1 in
+        let box1 = Wire.owner(port1) in 
+        let box2 = Wire.owner(port2) in
+        
+        -- Find the agents these boxes correspond to
+        let {n1, agents} = Net.get_agents(n) in
+        let agent1 = agents |> find [a -> a.id == Prim.get_box_id(box1)] in
+        let agent2 = agents |> find [a -> a.id == Prim.get_box_id(box2)] in
+        
+        -- Connect the ports
+        Net.connect(n1, 
+          {id: port1.id, agent: agent1.id}, 
+          {id: port2.id, agent: agent2.id})
+      ] n_with_agents
+    ]
+  }
+  
+  --[[
+    Net-Category Structural Mapping
+    
+    Establishes a direct structural correspondence between interaction nets and categories,
+    showing how interaction nets can be viewed through a categorical lens.
+  ]]--
+  net_category_mapping: {
+    -- Object mappings
+    Net.!Symbol = Cat.O,                 -- Symbols (agent types) are objects
+    Net.!Agent = Cat.M,                  -- Agents are morphisms
+    Net.!Rule = Cat.Natural,             -- Rules are natural transformations
+    
+    -- Structural mappings
+    Net.empty_net = Cat.initial,         -- Empty net is the initial object
+    Net.parallel = Cat.product,          -- Parallel composition is the categorical product
+    Net.compose = Cat.,                  -- Sequential composition is morphism composition
+    
+    -- Linear transformation functions
+    to_category = [!n -o>
+      let cat = Cat.new({}, {}) in
+      
+      -- First add all symbols as objects
+      let {n1, agents} = Net.get_agents(n) in
+      let symbols = agents |> map [a -> a.symbol] |> unique in
+      
+      let cat_with_objs = symbols |> fold [c sym ->
+        Cat.add_object(c, sym)
+      ] cat in
+      
+      -- Then add all agents as morphisms
+      let cat_with_morphs = agents |> fold [c agent ->
+        -- Calculate domain and codomain based on ports
+        let domain_ports = agent.ports |> filter [p -> p.principal] in
+        let codomain_ports = agent.ports |> filter [p -> not p.principal] in
+        
+        let domain = domain_ports |> map [p -> agent.symbol] in
+        let codomain = codomain_ports |> map [p -> agent.symbol] in
+        
+        Cat.add_morphism(c, {
+          id: agent.id,
+          domain: domain,
+          codomain: codomain,
+          agent: agent
+        })
+      ] cat_with_objs in
+      
+      -- Finally add all rules as natural transformations
+      let rules = Prim.get_rules(n) in
+      rules |> fold [c rule ->
+        Cat.add_natural_transformation(c, {
+          id: Prim.fresh_id(),
+          components: {},  -- Simplified, actual components would be based on rule LHS/RHS
+          rule: rule
+        })
+      ] cat_with_morphs
+    ],
+    
+    from_category = [!c -o>
+      -- Only works for categories that are interaction net categories
+      let n = Net.empty_net() in
+      
+      -- First find all objects that can be interpreted as symbols
+      let objects = Cat.get_objects(c) in
+      
+      -- Then add all morphisms as agents
+      let morphisms = Cat.get_morphisms(c) in
+      let n_with_agents = morphisms |> fold [n m ->
+        -- Check if morphism has agent data
+        if m.agent |> Prim.is_valid {
+          Net.add_agent(n, m.agent).0
+        } else {
+          -- Create a synthetic agent based on morphism structure
+          let arity = (m.domain |> length) + (m.codomain |> length) in
+          let symbol = {name: "Morphism", arity: arity} in
+          let agent = Net.new_agent(symbol) in
+          Net.add_agent(n, agent).0
+        }
+      ] n in
+      
+      -- Add connections based on category structure
+      let compositions = Cat.get_compositions(c) in
+      compositions |> fold [n comp ->
+        let m1 = comp.0 in
+        let m2 = comp.1 in
+        
+        -- Find corresponding agents
+        let {n1, agents} = Net.get_agents(n) in
+        let agent1 = agents |> find [a -> a.id == m1.id] in
+        let agent2 = agents |> find [a -> a.id == m2.id] in
+        
+        -- Connect output ports of agent1 to input ports of agent2
+        let connections = Prim.zip(agent1.ports |> filter [p -> not p.principal],
+                                  agent2.ports |> filter [p -> p.principal]) in
+        
+        connections |> fold [n [p1, p2] ->
+          Net.connect(n, 
+            {id: p1.id, agent: agent1.id}, 
+            {id: p2.id, agent: agent2.id})
+        ] n1
+      ] n_with_agents
+    ]
+  }
 
   --[[
     !Symbol represents an agent type/symbol

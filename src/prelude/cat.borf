@@ -10,6 +10,7 @@
   typ: {
     Cat
     Functor
+    Natural
   }
 
   op: {
@@ -22,9 +23,12 @@
     law.associativity law.ceq_iff_iso example.composition
     new add_object add_morphism constrain
     product terminal initial is_terminal is_initial
-    to_graph is_valid_category find_law_violations
+    to_graph from_graph is_valid_category find_law_violations
     isomorphic get_isomorphism
     example.Set example.Grp example.Top
+    
+    -- Structural mapping functions
+    to_graph from_graph to_wire from_wire to_net from_net
   }
 
   E: typ cup op cup fn
@@ -32,6 +36,292 @@
   tau: T.tau
 
   vis: E |> [e -> true]
+  
+  deps: {
+    (@Cat, @Grph, true),  -- Add dependency on Graph module
+    (@Cat, @Wire, true),  -- Add dependency on Wire module
+    (@Cat, @Net, true)    -- Add dependency on Net module
+  }
+  
+  --------------------------------------------------
+  -- Direct Structural Mappings
+  --------------------------------------------------
+  
+  --[[
+    Cat-Graph Structural Mapping
+    
+    Establishes a direct structural correspondence between categories and graphs,
+    showing how a category can be represented as a graph structure.
+  ]]--
+  cat_graph_mapping: {
+    -- Object mappings
+    Cat.O = Grph.!Node,                -- Objects are graph nodes
+    Cat.M = Grph.!Edge,                -- Morphisms are graph edges
+    Cat.Cat = Grph.!Grph,              -- A category is a graph
+    
+    -- Structural mappings
+    Cat.dom = Grph.src,                -- Domain of morphism is source of edge
+    Cat.cod = Grph.tgt,                -- Codomain of morphism is target of edge
+    Cat. = Grph.+,                    -- Composition is edge composition
+    
+    -- Linear transformation functions
+    to_graph = [!c -o>
+      let g = Grph.new_graph() in
+      
+      -- First add all objects as nodes
+      let objects = Cat.get_objects(c) in
+      let g_with_objects = objects |> fold [g obj ->
+        Grph.add_node(g, {:object, obj.id, obj.label}).0
+      ] g in
+      
+      -- Then add all morphisms as edges
+      let morphisms = Cat.get_morphisms(c) in
+      morphisms |> fold [g morph ->
+        -- Find nodes corresponding to domain and codomain
+        let src_obj = Cat.get_object(c, morph.domain) in
+        let tgt_obj = Cat.get_object(c, morph.codomain) in
+        
+        let src_node = Grph.get_node_by_label(g, {:object, src_obj.id, src_obj.label}).1 in
+        let tgt_node = Grph.get_node_by_label(g, {:object, tgt_obj.id, tgt_obj.label}).1 in
+        
+        -- Add edge for the morphism
+        Grph.add_edge(g, src_node, tgt_node, {:morphism, morph.id, morph.label}).0
+      ] g_with_objects
+    ],
+    
+    from_graph = [!g -o>
+      let c = Cat.new([], []) in
+      
+      -- First add all nodes as objects
+      let {g1, nodes} = Prim.get_graph_nodes(g) in
+      let c_with_objects = nodes |> fold [c node ->
+        let obj_id = node.id in
+        let obj_label = match (Grph.get_node_label(g1, node).1,
+          {:object, _, label} -> label,
+          label -> label
+        ) in
+        
+        Cat.add_object(c, {id: obj_id, label: obj_label})
+      ] c in
+      
+      -- Then add all edges as morphisms
+      let {g2, edges} = Prim.get_graph_edges(g1) in
+      edges |> fold [c edge ->
+        let src_node = Grph.src(g2, edge).1 in
+        let tgt_node = Grph.tgt(g2, edge).1 in
+        
+        let morph_id = edge.id in
+        let morph_label = match (Grph.get_edge_label(g2, edge).1, 
+          {:morphism, _, label} -> label,
+          label -> label
+        ) in
+        
+        Cat.add_morphism(c, {
+          id: morph_id,
+          label: morph_label,
+          domain: src_node.id,
+          codomain: tgt_node.id
+        })
+      ] c_with_objects
+    ]
+  }
+  
+  --[[
+    Cat-Wire Structural Mapping
+    
+    Establishes a direct structural correspondence between categories and wiring diagrams,
+    showing how a category can be represented as a wiring diagram.
+  ]]--
+  cat_wire_mapping: {
+    -- Object mappings
+    Cat.O = Wire.Box,                  -- Objects are boxes
+    Cat.M = Wire.Diagram,              -- Morphisms are diagrams
+    Cat. = Wire.compose,              -- Composition is sequential composition
+    
+    -- Structural mappings
+    Cat.id = Wire.id,                  -- Identity morphism is identity diagram
+    
+    -- Linear transformation functions
+    to_wire = [!c -o>
+      let d = Wire.id() in
+      
+      -- First add all objects as boxes
+      let objects = Cat.get_objects(c) in
+      let d_with_boxes = objects |> fold [d obj ->
+        -- Create a box for this object
+        let box = Prim.create_box(obj.label) in
+        
+        -- Add standard in/out ports
+        let in_port = Prim.create_port(box, :in, Prim.fresh_id()) in
+        let out_port = Prim.create_port(box, :out, Prim.fresh_id()) in
+        
+        let box_with_ports = Prim.add_port_to_box(box, in_port) in
+        let box_with_all_ports = Prim.add_port_to_box(box_with_ports, out_port) in
+        
+        Prim.add_box_to_diagram(d, box_with_all_ports)
+      ] d in
+      
+      -- Connect boxes according to morphisms
+      let morphisms = Cat.get_morphisms(c) in
+      morphisms |> fold [d morph ->
+        -- Find boxes corresponding to domain and codomain
+        let dom_box = Prim.find_box_by_label(d, Cat.get_object(c, morph.domain).label) in
+        let cod_box = Prim.find_box_by_label(d, Cat.get_object(c, morph.codomain).label) in
+        
+        -- Get output port of domain box and input port of codomain box
+        let dom_out = Wire.out_ports(dom_box) |> head in
+        let cod_in = Wire.in_ports(cod_box) |> head in
+        
+        -- Connect them
+        Wire.connect(d, dom_out, cod_in)
+      ] d_with_boxes
+    ],
+    
+    from_wire = [!d -o>
+      let c = Cat.new([], []) in
+      
+      -- First add all boxes as objects
+      let boxes = Prim.get_boxes(d) in
+      let c_with_objects = boxes |> fold [c box ->
+        let obj_label = Prim.get_box_label(box) in
+        Cat.add_object(c, {
+          id: Prim.get_box_id(box),
+          label: obj_label
+        })
+      ] c in
+      
+      -- Then add connections as morphisms
+      let connections = Prim.get_connections(d) in
+      connections |> fold [c conn ->
+        let src_port = conn.0 in
+        let tgt_port = conn.1 in
+        
+        let src_box = Wire.owner(src_port) in
+        let tgt_box = Wire.owner(tgt_port) in
+        
+        Cat.add_morphism(c, {
+          id: Prim.fresh_id(),
+          label: {:connection, src_port.id, tgt_port.id},
+          domain: Prim.get_box_id(src_box),
+          codomain: Prim.get_box_id(tgt_box)
+        })
+      ] c_with_objects
+    ]
+  }
+  
+  --[[
+    Cat-Net Structural Mapping
+    
+    Establishes a direct structural correspondence between categories and interaction nets,
+    showing how a category can be represented as an interaction net.
+  ]]--
+  cat_net_mapping: {
+    -- Object mappings
+    Cat.O = Net.!Symbol,               -- Objects are symbols (agent types)
+    Cat.M = Net.!Agent,                -- Morphisms are agents
+    Cat. = Net.connect,               -- Composition is connection
+    
+    -- Linear transformation functions
+    to_net = [!c -o>
+      let n = Net.empty_net() in
+      
+      -- For each morphism, create an agent
+      let morphisms = Cat.get_morphisms(c) in
+      let n_with_agents = morphisms |> fold [n morph ->
+        -- Get domain and codomain objects
+        let dom_obj = Cat.get_object(c, morph.domain) in
+        let cod_obj = Cat.get_object(c, morph.codomain) in
+        
+        -- Create a symbol based on the morphism
+        let symbol = {
+          name: morph.label |> to_string,
+          arity: 2  -- One for domain, one for codomain
+        } in
+        
+        -- Create the agent
+        let agent = Net.new_agent(symbol) in
+        
+        -- Store morphism data with the agent
+        let agent_with_data = agent {
+          id: morph.id,
+          morphism: morph
+        } in
+        
+        Net.add_agent(n, agent_with_data).0
+      ] n in
+      
+      -- Connect agents according to composition relationships
+      let compositions = Cat.get_compositions(c) in
+      compositions |> fold [n comp ->
+        let morph1 = comp.0 in
+        let morph2 = comp.1 in
+        
+        -- Find corresponding agents
+        let {n1, agents} = Net.get_agents(n) in
+        let agent1 = agents |> find [a -> a.id == morph1.id] in
+        let agent2 = agents |> find [a -> a.id == morph2.id] in
+        
+        -- Connect codomain port of agent1 to domain port of agent2
+        Net.connect(n1, 
+          {id: agent1.ports[1].id, agent: agent1.id}, 
+          {id: agent2.ports[0].id, agent: agent2.id})
+      ] n_with_agents
+    ],
+    
+    from_net = [!n -o>
+      let c = Cat.new([], []) in
+      
+      -- First collect all unique symbols as objects
+      let {n1, agents} = Net.get_agents(n) in
+      let symbols = agents |> map [a -> a.symbol] |> unique in
+      
+      let c_with_objects = symbols |> fold [c sym ->
+        Cat.add_object(c, {
+          id: Prim.fresh_id(),
+          label: sym.name,
+          symbol: sym
+        })
+      ] c in
+      
+      -- Then add all agents as morphisms
+      let c_with_morphisms = agents |> fold [c agent ->
+        -- Determine domain and codomain based on principal/auxiliary ports
+        let principal_ports = agent.ports |> filter [p -> p.principal] in
+        let auxiliary_ports = agent.ports |> filter [p -> not p.principal] in
+        
+        -- Simplifying assumption: first object for domain, second for codomain
+        let domain_id = Cat.get_object_by_label(c, agent.symbol.name).id in
+        let codomain_id = domain_id  -- Default to self-morphism if can't determine
+                                      -- In a real implementation, would use connections
+        
+        -- Add the morphism
+        Cat.add_morphism(c, {
+          id: agent.id,
+          label: {:agent, agent.symbol.name, agent.id},
+          domain: domain_id,
+          codomain: codomain_id,
+          agent: agent
+        })
+      ] c_with_objects in
+      
+      -- Add compositions based on connections
+      let {n2, connections} = Net.get_connections(n1) in
+      let c_with_compositions = connections |> fold [c conn ->
+        -- Find the agents involved
+        let agent1_id = conn.agent1 in
+        let agent2_id = conn.agent2 in
+        
+        -- Find corresponding morphisms
+        let morph1 = Cat.get_morphism_by_id(c, agent1_id) in
+        let morph2 = Cat.get_morphism_by_id(c, agent2_id) in
+        
+        -- Record the composition
+        Cat.add_composition(c, morph1, morph2)
+      ] c_with_morphisms in
+      
+      c_with_compositions
+    ]
+  }
 
   --[[
     O represents the objects (nodes) in a category
@@ -42,6 +332,11 @@
     M represents the morphisms (arrows) between objects
   ]]--
   M
+  
+  --[[
+    Natural represents natural transformations between functors
+  ]]--
+  Natural
 
   --[[
     Returns the domain (source) of a morphism
@@ -145,6 +440,46 @@
     Adds a morphism to a category
   ]]--
   add_morphism: Cat -> M -> O -> O -> Cat
+  
+  --[[
+    Records a composition between two morphisms
+  ]]--
+  add_composition: Cat -> M -> M -> Cat
+  
+  --[[
+    Adds a natural transformation to a category
+  ]]--
+  add_natural_transformation: Cat -> Natural -> Cat
+  
+  --[[
+    Retrieves an object by its ID
+  ]]--
+  get_object: Cat -> Z -> O
+  
+  --[[
+    Retrieves a morphism by its ID
+  ]]--
+  get_morphism_by_id: Cat -> Z -> M
+  
+  --[[
+    Retrieves all objects in a category
+  ]]--
+  get_objects: Cat -> [O]
+  
+  --[[
+    Retrieves all morphisms in a category
+  ]]--
+  get_morphisms: Cat -> [M]
+  
+  --[[
+    Retrieves all compositions in a category
+  ]]--
+  get_compositions: Cat -> [(M, M)]
+  
+  --[[
+    Retrieves an object by its label
+  ]]--
+  get_object_by_label: Cat -> Any -> O
 
   --[[
     Common category examples
@@ -192,11 +527,38 @@
   is_initial: Cat -> O -> Bool
 
   --[[
+    Converts a category to a graph
+  ]]--
+  to_graph: !Cat -o> Grph.!Grph
+
+  --[[
+    Creates a category from a graph
+  ]]--
+  from_graph: Grph.!Grph -o> !Cat
+  
+  --[[
+    Converts a category to a wiring diagram
+  ]]--
+  to_wire: !Cat -o> Wire.Diagram
+  
+  --[[
+    Creates a category from a wiring diagram
+  ]]--
+  from_wire: Wire.Diagram -o> !Cat
+  
+  --[[
+    Converts a category to an interaction net
+  ]]--
+  to_net: !Cat -o> Net.!Net
+  
+  --[[
+    Creates a category from an interaction net
+  ]]--
+  from_net: Net.!Net -o> !Cat
+
+  --[[
     Visualization and Debugging
   ]]--
-
-  -- Convert a category to a visualization format
-  to_graph: Cat -> Graph
 
   -- Check if a structure satisfies all category laws
   is_valid_category: Cat -> Bool
