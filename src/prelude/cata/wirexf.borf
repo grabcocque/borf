@@ -1,0 +1,232 @@
+--[[
+  Wiring Diagram Transformations
+
+  This module defines transformations between wiring diagrams and other
+  categorical structures, implementing functors and natural transformations
+  for wiring diagrams.
+]]--
+
+@WireXf: {
+  typ: {
+    WireRep
+  }
+
+  op: {
+  }
+
+  fn: {
+    -- Wire transformations
+    string_to_wire wire_to_string
+    graph_to_wire wire_to_graph 
+    wire_to_category category_to_wire
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@WireXf, @T, true),      -- Add dependency on Type system
+    (@WireXf, @Wire, true),   -- Add dependency on Wire module
+    (@WireXf, @Graph, true),   -- Add dependency on Graph module
+    (@WireXf, @Cata.Theory, true),    -- Add dependency on Category theory module
+    (@WireXf, @Cata.Linear, true)  -- Add dependency on linear transformations
+  }
+
+  --------------------------------------------------
+  -- Wire Transformation Types
+  --------------------------------------------------
+
+  --[[
+    WireRep: Structural representation of wiring diagrams
+  ]]--
+  WireRep: {
+    boxes: [Box],
+    ports: [Port],
+    connections: [Connection],
+    owners: (Port -> Box)
+  }
+
+  --------------------------------------------------
+  -- Wire-Graph Structural Mapping
+  --------------------------------------------------
+
+  --[[
+    Wire-Graph Structural Mapping
+    
+    Maps wiring diagrams to graphs, establishing a direct structural
+    correspondence between circuit diagrams and graph structures.
+  ]]--
+  wire_graph_mapping: {
+    Wire.Box = Grph.Node,          -- Boxes in a wiring diagram are nodes in a graph  
+    Wire.Wire = Grph.Edge,         -- Wires are edges in a graph
+    Wire.source = Grph.source,     -- Source of a wire is source of an edge
+    Wire.target = Grph.target,     -- Target of a wire is target of an edge
+    Wire.connect = Grph.add_edge,  -- Connecting wires is adding edges
+    Wire.compose = Grph.merge      -- Composing wiring diagrams is merging graphs
+  }
+
+  --[[
+    Convert a string to a wiring diagram
+  ]]--
+  string_to_wire: S -> Wire.Diagram [s ->
+    -- Parse string directly to wiring diagram
+    s |> Prim.parse_to_wire
+  ]
+
+  --[[
+    Convert a wiring diagram to a string
+  ]]--
+  wire_to_string: Wire.Diagram -> S [w ->
+    -- Convert wiring diagram to string representation
+    w |> Prim.wire_to_string
+  ]
+
+  --[[
+    Convert a graph to a wiring diagram
+    
+    This transformation creates a wiring diagram where:
+    - Graph nodes become boxes
+    - Graph edges become wires
+    - Edge directions determine port connections
+  ]]--
+  graph_to_wire: !Grph.Grph -o> Wire.Diagram [g ->
+    let d = Wire.id() in
+    
+    -- First add all nodes as boxes
+    let {g1, nodes} = Prim.get_graph_nodes(g) in
+    let d_with_boxes = nodes |> fold [d n ->
+      let label = Grph.get_node_label(g1, n) in
+      let box = Prim.create_box(label) in
+      Wire.subdiagram(d, box)
+    ] d in
+    
+    -- Then add all edges as connections
+    let {g2, edges} = Prim.get_graph_edges(g1) in
+    edges |> fold [d e ->
+      let src_node = Grph.src(g2, e) in
+      let tgt_node = Grph.tgt(g2, e) in
+      let src_box = Prim.find_box(d, src_node.id) in
+      let tgt_box = Prim.find_box(d, tgt_node.id) in
+      
+      -- Create connection between output port of source and input port of target
+      let src_port = Wire.out_ports(src_box) |> head in
+      let tgt_port = Wire.in_ports(tgt_box) |> head in
+      Wire.connect(d, src_port, tgt_port)
+    ] d_with_boxes
+  ]
+
+  --[[
+    Convert a wiring diagram to a graph
+    
+    This transformation creates a graph where:
+    - Boxes become nodes
+    - Wires become edges
+    - Port connections determine edge directions
+  ]]--
+  wire_to_graph: !Wire.Diagram -o> Grph.Grph [d ->
+    let g = Grph.new_graph() in
+    
+    -- First add all boxes as nodes
+    let boxes = Prim.get_boxes(d) in
+    let g_with_nodes = boxes |> fold [g b ->
+      let label = Prim.get_box_label(b) in
+      Grph.add_node(g, label).0
+    ] g in
+    
+    -- Then add all connections as edges
+    let connections = Prim.get_connections(d) in
+    connections |> fold [g c ->
+      let src_port = c.0 in
+      let tgt_port = c.1 in
+      let src_box = Wire.owner(src_port) in
+      let tgt_box = Wire.owner(tgt_port) in
+      let src_node = Grph.get_node(g, src_box.id) in
+      let tgt_node = Grph.get_node(g, tgt_box.id) in
+      Grph.add_edge(g, src_node, tgt_node, c).0
+    ] g_with_nodes
+  ]
+
+  --------------------------------------------------
+  -- Wire-Category Structural Mapping
+  --------------------------------------------------
+
+  --[[
+    Wire-Category Structural Mapping
+    
+    Maps wiring diagrams to categories, establishing a direct structural
+    correspondence between circuit diagrams and categorical structure.
+  ]]--
+  wire_category_mapping: {
+    Wire.Box = Cat.O,                  -- Boxes are objects
+    Wire.Diagram = Cat.M,              -- Diagrams are morphisms
+    Wire.compose = Cat.compose,        -- Sequential composition is morphism composition
+    Wire.tensor_compose = Cat.tensor,  -- Parallel composition is tensor product
+    Wire.id = Cat.id,                  -- Identity wiring is identity morphism
+    
+    -- Law mappings
+    Wire.law.composition_associativity = Cat.law.associativity,
+    Wire.law.identity_unit = Cat.law.id_right_neutral,
+    Wire.law.tensor_associativity = Cat.law.tensor_associativity
+  }
+
+  --[[
+    Convert a wiring diagram to a category
+    
+    This transformation creates a symmetric monoidal category where:
+    - Box types are objects
+    - Diagrams are morphisms
+    - Sequential composition is morphism composition
+    - Tensor product is parallel composition
+  ]]--
+  wire_to_category: !Wire.Diagram -o> Cat.Cat [d ->
+    -- Create a symmetric monoidal category
+    let cat = Cat.new({}, {}) in
+    
+    -- Add all box types as objects
+    let boxes = Prim.get_boxes(d) in
+    let box_types = boxes |> map [b -> Wire.box_type(b)] |> unique in
+    
+    let cat_with_objs = box_types |> fold [c t ->
+      Cat.add_object(c, t)
+    ] cat in
+    
+    -- Add all diagrams as morphisms
+    let subdiagrams = Prim.get_subdiagrams(d) in
+    subdiagrams |> fold [c sd ->
+      let dom = Prim.diagram_domain(sd) in
+      let cod = Prim.diagram_codomain(sd) in
+      Cat.add_morphism(c, {
+        diagram: sd,
+        domain: dom,
+        codomain: cod
+      })
+    ] cat_with_objs
+  ]
+
+  --[[
+    Convert a category to a wiring diagram
+    
+    This transformation creates a wiring diagram from a symmetric monoidal category:
+    - Objects become box types
+    - Morphisms become box connections
+    - Composition becomes sequential composition
+    - Tensor product becomes parallel composition
+  ]]--
+  category_to_wire: !Cat.Cat -o> Wire.Diagram [c ->
+    -- Only works for categories that are symmetric monoidal
+    -- and have the appropriate structure
+    let morphisms = Cat.get_morphisms(c) |> filter [m -> m.diagram |> Prim.is_valid] in
+    
+    if morphisms |> is_empty {
+      -- Create a default empty diagram
+      Wire.id()
+    } else {
+      -- Return the first valid diagram
+      let m = morphisms |> head in
+      m.diagram
+    }
+  ]
+} 

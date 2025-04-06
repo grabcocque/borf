@@ -1,0 +1,146 @@
+--[[
+  Graph Transformations
+
+  This module defines transformations between graph structures and other
+  categorical structures, implementing the graph category and its mappings.
+]]--
+
+@GraphXf: {
+  typ: {
+    GraphRep
+  }
+
+  op: {
+  }
+
+  fn: {
+    -- Graph transformations
+    string_to_graph graph_to_string
+    graph_to_category category_to_graph 
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@GraphXf, @T, true),     -- Add dependency on Type system
+    (@GraphXf, @Graph, true),  -- Add dependency on Graph module
+    (@GraphXf, @Cata.Theory, true),   -- Add dependency on Category theory module
+    (@GraphXf, @Cata.Linear, true) -- Add dependency on linear transformations
+  }
+
+  --------------------------------------------------
+  -- Graph Transformation Types
+  --------------------------------------------------
+
+  --[[
+    GraphRep: Structural representation of graphs
+  ]]--
+  GraphRep: {
+    nodes: [Node],
+    edges: [Edge],
+    source: (Edge -> Node),
+    target: (Edge -> Node),
+    path: (Node * Node -> Path?)
+  }
+
+  --------------------------------------------------
+  -- Graph-Category Structural Mapping
+  --------------------------------------------------
+
+  --[[
+    Graph-Category Structural Mapping
+    
+    Maps graphs to categories, establishing a direct structural
+    correspondence between graph theory and category theory.
+  ]]--
+  graph_cat_mapping: {
+    Grph.Node = Cat.O,             -- Nodes in a graph are objects in a category
+    Grph.Edge = Cat.M,             -- Edges in a graph are morphisms in a category
+    Grph.source = Cat.dom,         -- Source of an edge is the domain of a morphism
+    Grph.target = Cat.cod,         -- Target of an edge is the codomain of a morphism
+    Grph.path = Cat.compose,       -- Path in a graph is composition in a category
+    Grph.loop = [n -> Cat.id(n)]   -- Loop in a graph is identity in a category
+  }
+
+  --[[
+    Convert a string to a graph representation
+  ]]--
+  string_to_graph: S -> Grph.Grph [s ->
+    -- Parses a string into a graph structure
+    s |> Prim.parse_to_graph
+  ]
+
+  --[[
+    Convert a graph to a string representation
+  ]]--
+  graph_to_string: Grph.Grph -> S [g ->
+    -- Serializes a graph to a string representation
+    g |> Prim.graph_to_string
+  ]
+
+  --[[
+    Convert a graph to a category
+    
+    This transformation creates a category where:
+    - Objects are the graph nodes
+    - Morphisms are the graph edges
+    - Composition is path concatenation
+    - Identity is a self-loop
+  ]]--
+  graph_to_category: !Grph.Grph -o> Cat.Cat [g ->
+    let cat = Cat.new({}, {}) in
+    
+    -- First add all nodes as objects
+    let {g1, nodes} = Prim.get_graph_nodes(g) in
+    let cat_with_objs = nodes |> fold [c n ->
+      let label = Grph.get_node_label(g1, n) in
+      Cat.add_object(c, {id: n.id, label: label})
+    ] cat in
+    
+    -- Then add all edges as morphisms
+    let {g2, edges} = Prim.get_graph_edges(g1) in
+    edges |> fold [c e ->
+      let source = Grph.src(g2, e) in
+      let target = Grph.tgt(g2, e) in
+      let label = Grph.get_edge_label(g2, e) in
+      Cat.add_morphism(c, {
+        id: e.id,
+        label: label,
+        domain: source.id,
+        codomain: target.id
+      })
+    ] cat_with_objs
+  ]
+
+  --[[
+    Convert a category to a graph
+    
+    This transformation creates a graph where:
+    - Nodes are the category objects
+    - Edges are the category morphisms
+    - Source/target functions reflect domain/codomain
+  ]]--
+  category_to_graph: !Cat.Cat -o> Grph.Grph [c ->
+    let g = Grph.new_graph() in
+    
+    -- First add all objects as nodes
+    let objs = Cat.get_objects(c) in
+    let g_with_nodes = objs |> fold [g obj ->
+      Grph.add_node(g, obj.label).0
+    ] g in
+    
+    -- Then add all morphisms as edges
+    let morphs = Cat.get_morphisms(c) in
+    morphs |> fold [g m ->
+      let src_obj = Cat.get_object(c, m.domain) in
+      let tgt_obj = Cat.get_object(c, m.codomain) in
+      let src_node = Grph.get_node(g, src_obj.id) in
+      let tgt_node = Grph.get_node(g, tgt_obj.id) in
+      Grph.add_edge(g, src_node, tgt_node, m.label).0
+    ] g_with_nodes
+  ]
+} 

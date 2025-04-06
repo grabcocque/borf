@@ -22,18 +22,18 @@
   vis: E |> [e -> true]
 
   deps: {
-    (@Examples, @Hom, true),
+    (@Examples, @Syntax, true),
     (@Examples, @Prim, true)
   }
 
   --[[
     Simple example of quoting code - prevents evaluation
   ]]--
-  quoted_example: () -> Hom.Expr [_ ->
+  quoted_example: () -> Syntax.Expr [_ ->
     -- Quote an expression using the ' operator (or quote function)
     '(1 + 2 * 3) -> quoted_expr
 
-    IO.write("Quoted expression: " |> Prim.append_string (quoted_expr |> Hom.to_string))
+    IO.write("Quoted expression: " |> Prim.append_string (quoted_expr |> Syntax.to_string))
 
     -- The expression is represented as data, not evaluated
     quoted_expr
@@ -53,17 +53,17 @@
     -- Use quasiquote with unquote to evaluate parts
     `(~x + ~y) -> substituted
 
-    IO.write("Original: " |> Prim.append_string (expr |> Hom.to_string))
-    IO.write("Substituted: " |> Prim.append_string (substituted |> Hom.to_string))
+    IO.write("Original: " |> Prim.append_string (expr |> Syntax.to_string))
+    IO.write("Substituted: " |> Prim.append_string (substituted |> Syntax.to_string))
 
     -- Evaluate the expression
-    substituted |> Hom.eval
+    substituted |> Syntax.eval
   ]
 
   --[[
     Example of quasiquoting - template with selective evaluation
   ]]--
-  quasiquoted_example: () -> Hom.Expr [_ ->
+  quasiquoted_example: () -> Syntax.Expr [_ ->
     -- Create variables to be inserted into code
     let name = 'user in
     let value = 42 in
@@ -74,14 +74,14 @@
       ~name * 2
     ) -> template
 
-    IO.write("Template result: " |> Prim.append_string (template |> Hom.to_string))
+    IO.write("Template result: " |> Prim.append_string (template |> Syntax.to_string))
     template
   ]
 
   --[[
     Example of unquote-splice - inserts multiple elements into a template
   ]]--
-  splice_example: () -> Hom.Expr [_ ->
+  splice_example: () -> Syntax.Expr [_ ->
     -- Create a list of items to splice into code
     let items = [1, 2, 3, 4, 5] in
 
@@ -91,29 +91,29 @@
       sum
     ) -> template
 
-    IO.write("Spliced template: " |> Prim.append_string (template |> Hom.to_string))
+    IO.write("Spliced template: " |> Prim.append_string (template |> Syntax.to_string))
     template
   ]
 
   --[[
     Example of traversing and transforming syntax
   ]]--
-  syntax_traversal: () -> Hom.Expr [_ ->
+  syntax_traversal: () -> Syntax.Expr [_ ->
     -- Define a simple expression
     '(let x = 1 + 2 in x * 3) -> expr
 
     -- Define a transformer that increments all numeric literals
     let increment_numbers = [node ->
-      node : Hom.Literal and node.value : Prim.Int ->
-        Hom.literal(node.value + 1, node.type)
+      node : Syntax.Literal and node.value : Prim.Int ->
+        Syntax.literal(node.value + 1, node.type)
       or_else node
     ] in
 
     -- Apply the transformer to the expression
-    expr |> Hom.traverse increment_numbers -> transformed
+    expr |> Syntax.traverse increment_numbers -> transformed
 
-    IO.write("Original: " |> Prim.append_string (expr |> Hom.to_string))
-    IO.write("Transformed: " |> Prim.append_string (transformed |> Hom.to_string))
+    IO.write("Original: " |> Prim.append_string (expr |> Syntax.to_string))
+    IO.write("Transformed: " |> Prim.append_string (transformed |> Syntax.to_string))
 
     transformed
   ]
@@ -123,18 +123,18 @@
   ]]--
   macro_example: () -> Any [_ ->
     -- Define a simple "unless" macro (execute if condition is false)
-    let unless_pattern = Hom.pattern("application", '(unless condition body)) in
+    let unless_pattern = Syntax.pattern("application", '(unless condition body)) in
     let unless_template = '(if (not condition) then body else ()) in
-    let unless_rule = Hom.macro_rule(unless_pattern, unless_template, null) in
+    let unless_rule = Syntax.macro_rule(unless_pattern, unless_template, null) in
 
     -- Example usage of the macro
     '(unless (x > 10) (print "x is not greater than 10")) -> example
 
     -- Expand the macro
-    example |> Hom.hygienic_expand unless_rule -> expanded
+    example |> Syntax.hygienic_expand unless_rule -> expanded
 
-    IO.write("Macro example: " |> Prim.append_string (example |> Hom.to_string))
-    IO.write("Expanded: " |> Prim.append_string (expanded |> Hom.to_string))
+    IO.write("Macro example: " |> Prim.append_string (example |> Syntax.to_string))
+    IO.write("Expanded: " |> Prim.append_string (expanded |> Syntax.to_string))
 
     expanded
   ]
@@ -142,10 +142,10 @@
   --[[
     Example of code generation
   ]]--
-  code_generation: () -> Hom.Expr [_ ->
+  code_generation: () -> Syntax.Expr [_ ->
     -- Programmatically generate code for a factorial function
-    let name = Hom.symbol("factorial") in
-    let param = Hom.pattern("variable", Hom.symbol("n")) in
+    let name = Syntax.symbol("factorial") in
+    let param = Syntax.pattern("variable", Syntax.symbol("n")) in
     let body = '(
       if (n == 0)
       then 1
@@ -153,19 +153,19 @@
     ) in
 
     -- Construct the function
-    Hom.lambda([param], body, null) -> factorial_fn
+    Syntax.lambda([param], body, null) -> factorial_fn
 
     -- Wrap in module declaration
-    Hom.module(
-      Hom.symbol("FactorialMod"),
+    Syntax.module(
+      Syntax.symbol("FactorialMod"),
       [],
       [],
-      [Hom.decl(name, T.Z -> T.Z, factorial_fn)],
+      [Syntax.decl(name, T.Z -> T.Z, factorial_fn)],
       []
     ) -> module_expr
 
     IO.write("Generated factorial function: " |>
-      Prim.append_string (factorial_fn |> Hom.to_string))
+      Prim.append_string (factorial_fn |> Syntax.to_string))
 
     module_expr
   ]
@@ -176,9 +176,9 @@
   meta_programming: () -> Any [_ ->
     -- Generate a list of functions that return n, n+1, n+2, etc.
     let generate_adder = [n ->
-      let param = Hom.pattern("variable", Hom.symbol("x")) in
+      let param = Syntax.pattern("variable", Syntax.symbol("x")) in
       let body = `(x + ~n) in
-      Hom.lambda([param], body, null)
+      Syntax.lambda([param], body, null)
     ] in
 
     -- Generate 5 adder functions
@@ -186,12 +186,12 @@
 
     -- Show the generated functions
     adders |> Prim.map [fn ->
-      fn |> Hom.to_string |> IO.write
+      fn |> Syntax.to_string |> IO.write
       fn
     ]
 
     -- Test one of the generated functions
-    adders[2] |> Hom.eval -> add2_fn
+    adders[2] |> Syntax.eval -> add2_fn
     10 |> add2_fn -- Should return 12
   ]
 
@@ -203,8 +203,8 @@
     "let x = 10 in let y = 20 in x * y" -> code_str
 
     -- Parse and evaluate
-    code_str |> Hom.parse -> code_expr
-    code_expr |> Hom.eval -> result
+    code_str |> Syntax.parse -> code_expr
+    code_expr |> Syntax.eval -> result
 
     IO.write("Code: " |> Prim.append_string code_str)
     IO.write("Result: " |> Prim.append_string (result |> Prim.to_string))
@@ -215,7 +215,7 @@
   --[[
     Run all examples and show their results
   ]]--
-  run: () -> {Hom.Expr} [_ ->
+  run: () -> {Syntax.Expr} [_ ->
     IO.write("\n=== HOMOICONICITY EXAMPLES ===\n")
 
     IO.write("\n== Quoted Example ==")

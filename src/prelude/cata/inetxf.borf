@@ -1,0 +1,417 @@
+--[[
+  Interaction Net Transformations
+
+  This module defines transformations between interaction nets and other
+  categorical structures, implementing functors and natural transformations
+  for interaction nets.
+]]--
+
+@INetXf: {
+  typ: {
+    NetRep
+  }
+
+  op: {
+  }
+
+  fn: {
+    -- Net transformations
+    string_to_net net_to_string
+    wire_to_net net_to_wire
+    graph_to_net net_to_graph
+    net_to_category category_to_net
+    net_to_rewrite rewrite_to_red
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@INetXf, @T, true),       -- Add dependency on Type system
+    (@INetXf, @INet, true),     -- Add dependency on INet module
+    (@INetXf, @Wire, true),    -- Add dependency on Wire module
+    (@INetXf, @Graph, true),    -- Add dependency on Graph module
+    (@INetXf, @Cata.Theory, true),     -- Add dependency on Category theory module
+    (@INetXf, @Cata.Linear, true)   -- Add dependency on linear transformations
+  }
+
+  --------------------------------------------------
+  -- Net Transformation Types
+  --------------------------------------------------
+
+  --[[
+    NetRep: Structural representation of interaction nets
+  ]]--
+  NetRep: {
+    agents: [Agent],
+    ports: [Port],
+    connections: [Connection],
+    principal: (Agent -> Port),
+    auxiliary: (Agent -> [Port])
+  }
+
+  --------------------------------------------------
+  -- Net-Wire Structural Mapping
+  --------------------------------------------------
+
+  --[[
+    Net-Wire Structural Mapping
+    
+    Maps interaction nets to wiring diagrams, establishing a direct structural
+    correspondence between agent-based nets and circuit diagrams.
+  ]]--
+  net_wire_mapping: {
+    INet.Agent = Wire.Box,           -- Agents in a net are boxes in a wiring diagram
+    INet.Port = Wire.Port,           -- Ports in a net are ports in a wiring diagram
+    INet.Connection = Wire.Wire,     -- Connections in a net are wires in a wiring diagram
+    INet.connect = Wire.connect,     -- Connecting ports is connecting wires
+    INet.compose = Wire.compose      -- Composing nets is composing wiring diagrams
+  }
+
+  --[[
+    Convert a string to an interaction net
+  ]]--
+  string_to_net: S -> INet.Net [s ->
+    -- Enhanced with error reporting and diagnostics
+    s |> Prim.parse_to_net
+  ]
+
+  --[[
+    Convert an interaction net to a string
+  ]]--
+  net_to_string: INet.Net -> S [net ->
+    -- Enhanced with formatting options
+    net |> Prim.net_to_string
+  ]
+
+  --[[
+    Convert a wiring diagram to an interaction net
+    
+    This transformation creates an interaction net where:
+    - Boxes become agents
+    - Ports become net ports
+    - Connections become port connections
+    - Input ports become principal ports
+    - Output ports become auxiliary ports
+  ]]--
+  wire_to_net: !Wire.Diagram -o> INet.Net [w ->
+    let n = INet.empty_net() in
+    
+    -- First add all boxes as agents
+    let boxes = Prim.get_boxes(w) in
+    let n_with_agents = boxes |> fold [n box ->
+      let label = Prim.get_box_label(box) in
+      let arity = Wire.ports(box) |> length in
+      let agent = INet.new_agent({name: "Box", arity: arity}) in
+      Prim.label_agent(INet.add_agent(n, agent).0, agent, label)
+    ] n in
+    
+    -- Then add all connections as net connections
+    let connections = Prim.get_connections(w) in
+    connections |> fold [n conn ->
+      let port1 = conn.0 in
+      let port2 = conn.1 in
+      let box1 = Wire.owner(port1) in
+      let box2 = Wire.owner(port2) in
+      
+      -- Find corresponding agents
+      let {n1, agents} = INet.get_agents(n) in
+      let agent1 = agents |> find [a -> Prim.get_agent_label(a) == Prim.get_box_label(box1)] in
+      let agent2 = agents |> find [a -> Prim.get_agent_label(a) == Prim.get_box_label(box2)] in
+      
+      -- Connect corresponding ports
+      let port1_idx = Prim.get_port_index(box1, port1) in
+      let port2_idx = Prim.get_port_index(box2, port2) in
+      INet.connect(n1, agent1.ports[port1_idx], agent2.ports[port2_idx])
+    ] n_with_agents
+  ]
+
+  --[[
+    Convert an interaction net to a wiring diagram
+    
+    This transformation creates a wiring diagram where:
+    - Agents become boxes
+    - Net ports become wiring ports
+    - Port connections become wires
+    - Principal ports become input ports
+    - Auxiliary ports become output ports
+  ]]--
+  net_to_wire: !INet.Net -o> Wire.Diagram [net ->
+    let d = Wire.id() in
+    
+    -- First add all agents as boxes
+    let {net1, agents} = INet.get_agents(net) in
+    let d_with_boxes = agents |> fold [d agent ->
+      let label = Prim.get_agent_label(agent) in
+      
+      -- Create box for this agent
+      let box = Prim.create_box(label) in
+      
+      -- Add ports to the box based on agent ports
+      let box_with_ports = agent.ports |> fold [box port ->
+        let dir = if port.principal { :in } else { :out } in
+        let wire_port = Prim.create_port(box, dir, port.id) in
+        Prim.add_port_to_box(box, wire_port)
+      ] box in
+      
+      Prim.add_box_to_diagram(d, box_with_ports)
+    ] d in
+    
+    -- Connect ports based on net connections
+    let {net2, connections} = INet.get_connections(net1) in
+    connections |> fold [d conn ->
+      -- Find the boxes these ports belong to
+      let box1 = Prim.find_box_by_port(d, conn.port1) in
+      let box2 = Prim.find_box_by_port(d, conn.port2) in
+      
+      -- Find the actual ports
+      let port1 = Wire.ports(box1) |> find [p -> p.id == conn.port1] in
+      let port2 = Wire.ports(box2) |> find [p -> p.id == conn.port2] in
+      
+      -- Connect the ports
+      Wire.connect(d, port1, port2)
+    ] d_with_boxes
+  ]
+
+  --------------------------------------------------
+  -- Net-Graph Structural Mapping
+  --------------------------------------------------
+
+  --[[
+    Net-Graph Structural Mapping
+    
+    Maps interaction nets to graphs, establishing a direct structural
+    correspondence between agent-based nets and graph structures.
+  ]]--
+  net_graph_mapping: {
+    INet.Agent = Grph.Node,          -- Agents are graph nodes
+    INet.Port = Grph.Node,           -- Ports are also graph nodes (auxiliary nodes)
+    INet.Connection = Grph.Edge,     -- Connections are graph edges
+    INet.Net = Grph.Grph,            -- A net is a graph
+  }
+
+  --[[
+    Convert a graph to an interaction net
+    
+    This transformation creates an interaction net where:
+    - Nodes become agents
+    - Edges define port connections between agents
+  ]]--
+  graph_to_net: !Grph.Grph -o> INet.Net [g ->
+    let n = INet.empty_net() in
+    
+    -- First add all nodes as agents
+    let {g1, nodes} = Prim.get_graph_nodes(g) in
+    let n_with_agents = nodes |> fold [n node ->
+      let label = Grph.get_node_label(g1, node) in
+      let arity = Prim.outgoing_edge_count(g1, node) + Prim.incoming_edge_count(g1, node) in
+      let agent = Net.new_agent({name: "Node", arity: arity}) in
+      Prim.label_agent(Net.add_agent(n, agent).0, agent, label)
+    ] n in
+    
+    -- Then add all edges as connections
+    let {g2, edges} = Prim.get_graph_edges(g1) in
+    edges |> fold [n edge ->
+      let src_node = Grph.src(g2, edge) in
+      let tgt_node = Grph.tgt(g2, edge) in
+      
+      -- Find corresponding agents
+      let {n1, agents} = Net.get_agents(n) in
+      let src_agent = agents |> find [a -> Prim.get_agent_label(a) == Grph.get_node_label(g2, src_node)] in
+      let tgt_agent = agents |> find [a -> Prim.get_agent_label(a) == Grph.get_node_label(g2, tgt_node)] in
+      
+      -- Connect src output port to tgt input port
+      let src_port = src_agent.ports |> drop(1) |> head in
+      let tgt_port = tgt_agent.ports |> head in
+      Net.connect(n1, src_port, tgt_port)
+    ] n_with_agents
+  ]
+
+  --[[
+    Convert an interaction net to a graph
+    
+    This transformation creates a graph where:
+    - Agents become nodes
+    - Port connections become edges
+  ]]--
+  net_to_graph: !Net.Net -o> Grph.Grph [n ->
+    let g = Grph.new_graph() in
+    
+    -- First add all agents as nodes
+    let {n1, agents} = Net.get_agents(n) in
+    let g_with_nodes = agents |> fold [g agent ->
+      let label = Prim.get_agent_label(agent) in
+      Grph.add_node(g, label).0
+    ] g in
+    
+    -- Then add all connections as edges
+    let {n2, connections} = Net.get_connections(n1) in
+    connections |> fold [g conn ->
+      let port1 = Prim.get_port(n2, conn.port1) in
+      let port2 = Prim.get_port(n2, conn.port2) in
+      let agent1 = Prim.get_agent(n2, conn.agent1) in
+      let agent2 = Prim.get_agent(n2, conn.agent2) in
+      
+      -- Determine direction based on port principals
+      let (src_agent, tgt_agent) = 
+        if port1.principal {
+          (agent1, agent2)
+        } else if port2.principal {
+          (agent2, agent1)
+        } else {
+          -- Default to agent1->agent2 if no principal ports
+          (agent1, agent2)
+        } in
+      
+      let src_node = Grph.get_node_by_label(g, Prim.get_agent_label(src_agent)) in
+      let tgt_node = Grph.get_node_by_label(g, Prim.get_agent_label(tgt_agent)) in
+      Grph.add_edge(g, src_node, tgt_node, conn).0
+    ] g_with_nodes
+  ]
+
+  --------------------------------------------------
+  -- Net-Category Structural Mapping
+  --------------------------------------------------
+
+  --[[
+    Net-Category Structural Mapping
+    
+    Maps interaction nets to categories, establishing a direct structural
+    correspondence between agent-based nets and categorical structure.
+  ]]--
+  net_category_mapping: {
+    INet.Symbol = Cat.O,                 -- Symbols (agent types) are objects
+    INet.Agent = Cat.M,                  -- Agents are morphisms
+    INet.Rule = Cat.Natural,             -- Rules are natural transformations
+    
+    -- Structural mappings
+    INet.empty_net = Cat.initial,         -- Empty net is the initial object
+    INet.parallel = Cat.product,          -- Parallel composition is the categorical product
+    INet.compose = Cat.compose           -- Sequential composition is morphism composition
+  }
+
+  --[[
+    Convert an interaction net to a category
+    
+    This transformation creates a category where:
+    - Agent types (symbols) become objects
+    - Agents become morphisms
+    - Principal ports determine domains
+    - Auxiliary ports determine codomains
+    - Rules become natural transformations
+  ]]--
+  net_to_category: !INet.Net -o> Cat.Cat [n ->
+    let cat = Cat.new({}, {}) in
+    
+    -- First add all symbols as objects
+    let {n1, agents} = INet.get_agents(n) in
+    let symbols = agents |> map [a -> a.symbol] |> unique in
+    
+    let cat_with_objs = symbols |> fold [c sym ->
+      Cat.add_object(c, sym)
+    ] cat in
+    
+    -- Then add all agents as morphisms
+    let cat_with_morphs = agents |> fold [c agent ->
+      -- Calculate domain and codomain based on ports
+      let domain_ports = agent.ports |> filter [p -> p.principal] in
+      let codomain_ports = agent.ports |> filter [p -> not p.principal] in
+      
+      let domain = domain_ports |> map [p -> agent.symbol] in
+      let codomain = codomain_ports |> map [p -> agent.symbol] in
+      
+      Cat.add_morphism(c, {
+        id: agent.id,
+        domain: domain,
+        codomain: codomain,
+        agent: agent
+      })
+    ] cat_with_objs in
+    
+    -- Finally add all rules as natural transformations
+    let rules = Prim.get_rules(n) in
+    rules |> fold [c rule ->
+      Cat.add_natural_transformation(c, {
+        id: Prim.fresh_id(),
+        components: {},  -- Simplified, actual components would be based on rule LHS/RHS
+        rule: rule
+      })
+    ] cat_with_morphs
+  ]
+
+  --[[
+    Convert a category to an interaction net
+    
+    This transformation creates an interaction net where:
+    - Objects become agent types
+    - Morphisms become agents
+    - Composition becomes port connections
+  ]]--
+  category_to_net: !Cat.Cat -o> INet.Net [c ->
+    -- Only works for categories that are interaction net categories
+    let n = INet.empty_net() in
+    
+    -- First find all objects that can be interpreted as symbols
+    let objects = Cat.get_objects(c) in
+    
+    -- Then add all morphisms as agents
+    let morphisms = Cat.get_morphisms(c) in
+    let n_with_agents = morphisms |> fold [n m ->
+      -- Check if morphism has agent data
+      if m.agent |> Prim.is_valid {
+        INet.add_agent(n, m.agent).0
+      } else {
+        -- Create a synthetic agent based on morphism structure
+        let arity = (m.domain |> length) + (m.codomain |> length) in
+        let symbol = {name: "Morphism", arity: arity} in
+        let agent = INet.new_agent(symbol) in
+        INet.add_agent(n, agent).0
+      }
+    ] n in
+    
+    -- Add connections based on category structure
+    let compositions = Cat.get_compositions(c) in
+    compositions |> fold [n comp ->
+      let m1 = comp.0 in
+      let m2 = comp.1 in
+      
+      -- Find corresponding agents
+      let {n1, agents} = INet.get_agents(n) in
+      let agent1 = agents |> find [a -> a.id == m1.id] in
+      let agent2 = agents |> find [a -> a.id == m2.id] in
+      
+      -- Connect output ports of agent1 to input ports of agent2
+      let connections = Prim.zip(agent1.ports |> filter [p -> not p.principal],
+                               agent2.ports |> filter [p -> p.principal]) in
+      
+      connections |> fold [n [p1, p2] ->
+        INet.connect(n, 
+          {id: p1.id, agent: agent1.id}, 
+          {id: p2.id, agent: agent2.id})
+      ] n1
+    ] n_with_agents
+  ]
+
+  --------------------------------------------------
+  -- Rewrite Transformations
+  --------------------------------------------------
+
+  --[[
+    Convert a net to a rewrite system
+  ]]--
+  net_to_rewrite: INet.Net -> Rewrite [net ->
+    -- Convert interaction net to rewrite system
+    net |> Prim.net_to_rewrite
+  ]
+
+  --[[
+    Convert a rewrite system to a reduction system
+  ]]--
+  rewrite_to_red: Rewrite -> Red [rewrite ->
+    -- Convert rewrite system to reduction system
+    rewrite |> Prim.rewrite_to_red
+  ]
+} 

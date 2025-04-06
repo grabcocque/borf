@@ -1,0 +1,371 @@
+--[[
+  Linear Structural Mappings
+
+  This module defines linear structural mappings and transformations between
+  different categorical structures, with an emphasis on type-level guarantees
+  for resource consumption.
+]]--
+
+@Linear: {
+  typ: {
+    -- Structural mapping types
+    StructuralMapping ObjectMap MorphismMap LawMap
+    LinearMap ConsumingMap PreservingMap
+
+    -- Transformation properties
+    Structure Preserving Reflecting Creating
+  }
+
+  op: {
+    -- Structural operators
+    =>: -- Structural mapping
+    -o: -- Linear mapping
+    <:  -- Subtyping
+  }
+
+  fn: {
+    -- Structural mapping operations
+    structural_map object_map morphism_map law_map
+    linear_map consuming_map preserving_map
+    with_laws map_preserving laws_between
+    
+    -- Linear structure operations
+    linearly linear_transform linear_compose
+    
+    -- Structure mapping operations 
+    map_structure preserve_structure reflect_structure
+    structure_isomorphism structure_embedding structure_abstraction
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Linear, @T, true),     -- Add dependency on Type system
+    (@Linear, @Cata.Theory, true)   -- Add dependency on Category theory module
+  }
+
+  --------------------------------------------------
+  -- Structural Mapping Definitions
+  --------------------------------------------------
+
+  --[[
+    StructuralMapping maps between categorical structures
+    preserving selected laws and properties
+  ]]--
+  StructuralMapping: {
+    objects: ObjectMap,
+    morphisms: MorphismMap,
+    laws: LawMap
+  }
+  
+  --[[
+    ObjectMap defines how objects are mapped between structures
+  ]]--
+  ObjectMap: {
+    source_cat: @Cata.Theory.Category,
+    target_cat: @Cata.Theory.Category,
+    map: source_cat.O -> target_cat.O
+  }
+  
+  --[[
+    MorphismMap defines how morphisms are mapped between structures
+  ]]--
+  MorphismMap: {
+    source_cat: @Cata.Theory.Category,
+    target_cat: @Cata.Theory.Category,
+    map: source_cat.M -> target_cat.M
+  }
+  
+  --[[
+    LawMap defines how laws are preserved between structures
+  ]]--
+  LawMap: {
+    source_laws: [Law],
+    target_laws: [Law],
+    map: source_laws -> target_laws
+  }
+  
+  --[[
+    LinearMap is a mapping that consumes the input structure
+  ]]--
+  LinearMap: StructuralMapping & {
+    linear_objects: !source_cat.O -o> target_cat.O,
+    linear_morphisms: !source_cat.M -o> target_cat.M
+  }
+  
+  --[[
+    ConsumingMap guarantees that the source structure is fully consumed
+  ]]--
+  ConsumingMap: LinearMap & {
+    consuming: !source_cat.O -o> (),
+    verify_consumed: !source_cat.O -> Bool
+  }
+  
+  --[[
+    PreservingMap guarantees that structure is preserved in the mapping
+  ]]--
+  PreservingMap: StructuralMapping & {
+    preserves: (P: source_cat.O -> Bool) -> (target_cat.O -> Bool),
+    invariant: source_cat.O -> target_cat.O -> Bool
+  }
+
+  --[[
+    Structure: Abstract definition of a structural property
+  ]]--
+  Structure: T.Type_0
+
+  --[[
+    Preserving: A structure-preserving transformation
+  ]]--
+  Preserving: forall(A: T.Type_0 B: T.Type_0 P: A -> T.Type_0 Q: B -> T.Type_0) -> 
+              (A -> B) -> (forall(x: A) -> P x -> Q(f x)) -> T.Type_0
+
+  --[[
+    Reflecting: A structure-reflecting transformation
+  ]]--
+  Reflecting: forall(A: T.Type_0 B: T.Type_0 P: A -> T.Type_0 Q: B -> T.Type_0) ->
+              (A -> B) -> (forall(y: B) -> Q y -> P(g y)) -> T.Type_0
+
+  --[[
+    Creating: A structure-creating transformation
+  ]]--
+  Creating: forall(A: T.Type_0 B: T.Type_0 P: A -> T.Type_0 Q: B -> T.Type_0) ->
+            (A -> B) -> (forall(x: A) -> Q(f x)) -> T.Type_0
+  
+  --------------------------------------------------
+  -- Structural Mapping Functions
+  --------------------------------------------------
+  
+  --[[
+    Creates a structural mapping between two categories
+  ]]--
+  structural_map: @Cata.Theory.Category * @Cata.Theory.Category -> (O -> O) -> (M -> M) -> StructuralMapping [
+    source_cat target_cat object_mapper morphism_mapper ->
+    {
+      objects: {
+        source_cat: source_cat,
+        target_cat: target_cat,
+        map: object_mapper
+      },
+      morphisms: {
+        source_cat: source_cat,
+        target_cat: target_cat,
+        map: morphism_mapper
+      },
+      laws: {
+        source_laws: source_cat.laws,
+        target_laws: target_cat.laws,
+        map: [sl -> 
+          -- Default law mapping transfers each law if possible
+          sl |> [l -> 
+            target_cat.laws |> filter [tl -> 
+              tl.name == l.name
+            ] |> head |> default l
+          ]
+        ]
+      }
+    }
+  ]
+  
+  --[[
+    Creates a linear mapping between two categories
+  ]]--
+  linear_map: @Cata.Theory.Category * @Cata.Theory.Category -> (!O -o> O) -> (!M -o> M) -> LinearMap [
+    source_cat target_cat object_mapper morphism_mapper ->
+    {
+      objects: {
+        source_cat: source_cat,
+        target_cat: target_cat,
+        map: [o -> object_mapper(o)]
+      },
+      morphisms: {
+        source_cat: source_cat,
+        target_cat: target_cat,
+        map: [m -> morphism_mapper(m)]
+      },
+      laws: {
+        source_laws: source_cat.laws,
+        target_laws: target_cat.laws,
+        map: [laws -> laws] -- Identity law mapping
+      },
+      linear_objects: object_mapper,
+      linear_morphisms: morphism_mapper
+    }
+  ]
+  
+  --[[
+    Creates a consuming map between two categories
+  ]]--
+  consuming_map: @Cata.Theory.Category * @Cata.Theory.Category -> (!O -o> O) -> (!M -o> M) -> ConsumingMap [
+    source_cat target_cat object_mapper morphism_mapper ->
+    {
+      objects: {
+        source_cat: source_cat,
+        target_cat: target_cat,
+        map: [o -> object_mapper(o)]
+      },
+      morphisms: {
+        source_cat: source_cat,
+        target_cat: target_cat,
+        map: [m -> morphism_mapper(m)]
+      },
+      laws: {
+        source_laws: source_cat.laws,
+        target_laws: target_cat.laws,
+        map: [laws -> laws] -- Identity law mapping
+      },
+      linear_objects: object_mapper,
+      linear_morphisms: morphism_mapper,
+      consuming: [o -> o |> object_mapper |> [_ -> ()]],
+      verify_consumed: [o -> true] -- Default implementation always returns true
+    }
+  ]
+  
+  --[[
+    Creates a preserving map between two categories
+  ]]--
+  preserving_map: @Cata.Theory.Category * @Cata.Theory.Category -> (O -> O) -> (M -> M) -> PreservingMap [
+    source_cat target_cat object_mapper morphism_mapper ->
+    {
+      objects: {
+        source_cat: source_cat,
+        target_cat: target_cat,
+        map: object_mapper
+      },
+      morphisms: {
+        source_cat: source_cat,
+        target_cat: target_cat,
+        map: morphism_mapper
+      },
+      laws: {
+        source_laws: source_cat.laws,
+        target_laws: target_cat.laws,
+        map: [laws -> laws] -- Identity law mapping
+      },
+      preserves: [p -> [o -> p(object_mapper(o))]],
+      invariant: [so to -> 
+        -- Default invariant checks basic structure is preserved
+        source_cat.structure(so) == target_cat.structure(to)
+      ]
+    }
+  ]
+  
+  --[[
+    Adds law mapping to a structural mapping
+  ]]--
+  with_laws: StructuralMapping -> (Law -> Law) -> StructuralMapping [
+    mapping law_mapper ->
+    {
+      objects: mapping.objects,
+      morphisms: mapping.morphisms,
+      laws: {
+        source_laws: mapping.laws.source_laws,
+        target_laws: mapping.laws.target_laws,
+        map: law_mapper
+      }
+    }
+  ]
+  
+  --[[
+    Creates a law-preserving mapping function
+  ]]--
+  map_preserving: (source: a -> Bool) -> (target: b -> Bool) -> (a -> b) -> (a -> b) [
+    source_pred target_pred f ->
+    [x -> 
+      let result = f(x) in
+      -- Check and possibly assert that the mapping preserves the property
+      assert(source_pred(x) -> target_pred(result))
+      result
+    ]
+  ]
+  
+  --[[
+    Maps laws between two categories
+  ]]--
+  laws_between: @Cata.Theory.Category -> @Cata.Theory.Category -> [Law] -> [Law] -> (Law -> Law) [
+    source_cat target_cat source_laws target_laws ->
+    [law -> 
+      -- Find a matching law by name in the target category
+      target_laws |> filter [l -> l.name == law.name] |> head |> default law
+    ]
+  ]
+  
+  --[[
+    Applies a function in a linear context, ensuring the input is consumed
+  ]]--
+  linearly: (!a -o> b) -> (!a -o> b) [f ->
+    [x -> f(x)]
+  ]
+  
+  --[[
+    Transforms linearly between structures
+  ]]--
+  linear_transform: (!a -o> b) -> (!c -o> d) -> (!a -o> d) [f g ->
+    [x -> x |> f |> g]
+  ]
+  
+  --[[
+    Composes linear functions
+  ]]--
+  linear_compose: (!a -o> b) -> (!b -o> c) -> (!a -o> c) [f g ->
+    [x -> x |> f |> g]
+  ]
+
+  --[[
+    Map a transformation while preserving structural properties
+  ]]--
+  map_structure: forall(A: T.Type_0 B: T.Type_0 P: A -> Bool Q: B -> Bool) ->
+                (A -> B) -> (forall(x: A) -> P x -> Q(f x)) ->
+                {A | P} -> {B | Q} [f proof struct ->
+    struct |> Prim.map_preserving f proof
+  ]
+
+  --[[
+    Create a structure-preserving transformation
+  ]]--
+  preserve_structure: forall(A: T.Type_0 B: T.Type_0 P: A -> T.Type_0 Q: B -> T.Type_0) ->
+                     (A -> B) -> (forall(x: A) -> P x -> Q(f x)) ->
+                     Preserving A B P Q [f proof ->
+    {transform: f proof: proof}
+  ]
+
+  --[[
+    Create a structure-reflecting transformation
+  ]]--
+  reflect_structure: forall(A: T.Type_0 B: T.Type_0 P: A -> T.Type_0 Q: B -> T.Type_0) ->
+                    (A -> B) -> (forall(y: B) -> Q y -> P(g y)) ->
+                    Reflecting A B P Q [f proof ->
+    {transform: f proof: proof}
+  ]
+
+  --[[
+    Create an isomorphism between structures
+  ]]--
+  structure_isomorphism: forall(A: T.Type_0 B: T.Type_0) ->
+                        (A -> B) -> (B -> A) -> (A * B -> Bool) ->
+                        @base.Isomorphism A B [f g predicate ->
+    {forward: f reverse: g preserves: predicate}
+  ]
+
+  --[[
+    Create a structure embedding
+  ]]--
+  structure_embedding: forall(A: T.Type_0 B: T.Type_0) ->
+                      (A -> B) -> (forall(x: A y: A) -> x teq y <-> f x teq f y) ->
+                      Embedding A B [f injectivity ->
+    {embed: f injective: injectivity}
+  ]
+
+  --[[
+    Create a structure abstraction
+  ]]--
+  structure_abstraction: forall(A: T.Type_0 B: T.Type_0) ->
+                       (A -> B) -> (B -> ?A) ->
+                       Abstraction A B [f partial_inverse ->
+    {abstract: f lift: partial_inverse}
+  ]
+} 

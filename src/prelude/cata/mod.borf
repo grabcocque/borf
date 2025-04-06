@@ -1,0 +1,88 @@
+--[[
+  Categorical Abstraction Framework
+
+  This module coordinates the various categorical transformation modules,
+  providing a unified interface for transformations between different structures.
+]]--
+
+@Cata: {
+  --[[
+    Re-export all submodules
+  ]]--
+  typ: {
+    -- Core types
+    Cata Functor NaturalTransformation Isomorphism Adjunction
+
+    -- Domain-specific transformations
+    StringRep GraphRep WireRep NetRep SyntaxRep RewriteRep ReduceRep SeqRep
+
+    -- Transformation categories
+    Category Monoidal Cartesian Bicartesian Closed
+    
+    -- Structural mappings
+    StructuralMapping ObjectMap MorphismMap LawMap
+    LinearMap ConsumingMap PreservingMap
+
+    -- Transformation properties
+    Structure Preserving Reflecting Creating
+
+    -- Composition models
+    Sequential Parallel Hierarchical Incremental
+
+    -- Result types
+    Result Success Failure Partial
+  }
+
+  op: {
+    -- Transformation operators
+    ==> <== <=> ~~ ==
+
+    -- Composition operators
+    >>> <<< ||| &&&
+    
+    -- Structural operators
+    =>: -- Structural mapping
+    -o: -- Linear mapping
+    <:  -- Subtyping
+
+    -- Categorical operators
+    * tensor product unit counit
+
+    -- Structure mapping operators
+    map fmap bmap lens prism
+  }
+
+  fn: {
+    -- Re-export all function definitions
+  }
+
+  -- Import all submodules
+  @Theory: import "cata/cat"
+  @Linear: import "cata/linear"
+  @GraphXf: import "cata/graphxf"
+  @WireXf: import "cata/wirexf" 
+  @INetXf: import "cata/netxf"
+  @SeqXf: import "cata/seqxf"
+  @SyntaxXf: import "cata/syntaxxf"
+  @Pipeline: import "cata/pipeline"
+  @Verify: import "cata/verification"
+
+  -- Combine entity exports from all modules
+  E: typ cup op cup fn cup
+     @Theory.E cup @Linear.E cup @GraphXf.E cup
+     @WireXf.E cup @INetXf.E cup @SeqXf.E cup
+     @SyntaxXf.E cup @Pipeline.E cup @Verify.E
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Cata, @Syntax, true),   -- Add dependency on Syntax module
+    (@Cata, @T, true),     -- Add dependency on Type system
+    (@Cata, @Wire, true),  -- Add dependency on Wire module
+    (@Cata, @Graph, true),  -- Add dependency on Graph module
+    (@Cata, @Seq, true),   -- Add dependency on Seq module
+    (@Cata, @INet, true)    -- Add dependency on INet module
+  }
+} 

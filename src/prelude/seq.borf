@@ -12,7 +12,7 @@
   - Reducers: More efficient collection processing avoiding intermediate collections
   - Transducers: Composable algorithmic transformations decoupled from input/output sources
   - Transients: Temporarily mutable collections for efficient batch operations
-  
+
   It also implements categorical abstractions through structural mappings:
   - Structural typing for sequences
   - Linear operations instead of monadic structures
@@ -33,7 +33,7 @@
     Reducing
     Completing
     Reduced
-    
+
     -- Structural mappings and interfaces
     Collection
     Traversable
@@ -41,7 +41,7 @@
     Iterable
     Foldable
     Mappable
-    
+
     -- Structural mapping transformations
     SeqStructure
     MapStructure
@@ -54,7 +54,7 @@
   op: {
     >== -- Transducer composition
     =>> -- Threading through transducer
-    
+
     -- Structural operators
     @= -- Type-preserving mapping
     @> -- Linear transformation
@@ -78,20 +78,20 @@
 
     -- Transducer operations
     transduce compose_xf into xform mapping filtering taking
-    dropping partitioning chunking flattening cat interposing 
+    dropping partitioning chunking flattening cat interposing
     deduplicate keeping indexed
 
     -- Transient operations
     as_transient persistent! conj! assoc! disj!
-    
+
     -- Structural mapping operations
     struct_map struct_fold struct_transform
     seq_as list_as map_as
-    
+
     -- Linear transformation operations
     linearly transform_linearly consuming
     linear_fold linear_map linear_filter
-    
+
     -- Structural laws
     law.preservation law.reflection law.invariant_mapping
     law.structure_identity law.structure_composition
@@ -117,7 +117,7 @@
     (@Seq, @T, false),
     (@Seq, @Cat, true),
     (@Seq, @Cata, true),
-    (@Seq, @Grph, true),  -- Add dependency on Graph module
+    (@Seq, @Graph, true),  -- Add dependency on Graph module
     (@Seq, @Wire, true),  -- Add dependency on Wire module
     (@Seq, @Net, true)    -- Add dependency on Net module
   }
@@ -125,10 +125,10 @@
   --------------------------------------------------
   -- Direct Structural Mappings
   --------------------------------------------------
-  
+
   --[[
     Sequence Category Structure
-    
+
     Establishes the fundamental category structure for sequences, defining
     objects, morphisms, domains, codomains, identity, and composition.
   ]]--
@@ -140,35 +140,35 @@
     cod = [f -> f.codomain],           -- Codomain of a sequence function
     id = [a -> [x -> x]],              -- Identity is the identity function
     compose = [f g -> [x -> x |> g |> f]],  -- Composition is function composition
-    
+
     -- Monad structure
     bind = [m f -> m |> fold [acc x -> acc ++ f(x)] empty],
     return = [x -> cons(x, empty)],
-    
+
     -- Functor structure
     fmap = map,
-    
+
     -- Foldable structure
     fold_l = fold,
     fold_r = [f z xs -> xs |> reverse |> fold f z],
-    
+
     -- Core category laws
     law.identity = [f -> compose(id, f) == f and compose(f, id) == f],
     law.associativity = [f g h -> compose(f, compose(g, h)) == compose(compose(f, g), h)],
-    
+
     -- Functor laws
     law.fmap_id = [xs -> map(id, xs) == xs],
     law.fmap_compose = [f g xs -> map(compose(f, g), xs) == compose(map(f), map(g))(xs)],
-    
+
     -- Monad laws
     law.monad_left_id = [a f -> bind(return(a), f) == f(a)],
     law.monad_right_id = [m -> bind(m, return) == m],
     law.monad_assoc = [m f g -> bind(bind(m, f), g) == bind(m, [x -> bind(f(x), g)])]
   }
-  
+
   --[[
     Sequence-List Isomorphism
-    
+
     Establishes a bidirectional mapping between sequences and lists,
     showing they are structurally equivalent.
   ]]--
@@ -177,7 +177,7 @@
     Seq.structure = List.structure,
     Seq.a = [a],
     [a] = Seq.a,
-    
+
     -- Function mappings
     Seq.empty = List.empty |> list_as,
     Seq.cons = [x xs -> x (xs |> to_list) |> from_list],
@@ -186,10 +186,10 @@
     List.cons = [x xs -> x (xs |> from_list) |> to_list],
     List.head = [xs -> xs |> from_list |> head]
   }
-  
+
   --[[
     Sequence-Collection Structural Subtyping
-    
+
     Establishes that sequences implement the Collection interface,
     allowing sequences to be used wherever collections are required.
   ]]--
@@ -200,47 +200,47 @@
     Collection.length = Seq.length,
     Collection.to_list = Seq.to_list,
     Collection.from_list = Seq.from_list,
-    
+
     -- Structural subtyping relationship
     Seq <: Collection,
     Collection.laws.empty_is_empty <: Seq.laws.empty_is_empty,
     Collection.laws.empty_length_zero <: Seq.laws.empty_length_zero
   }
-  
+
   --[[
     Sequence-Foldable Structural Subtyping
-    
+
     Establishes that sequences implement the Foldable interface,
     allowing fold operations to be used on sequences.
   ]]--
   foldable_impl: {
     -- Mapping Seq operations to Foldable interface
     Foldable.fold = Seq.fold,
-    
+
     -- Structural subtyping relationship
     Seq <: Foldable,
     Foldable.laws.fold_assoc <: Seq.laws.fold_assoc
   }
-  
+
   --[[
     Sequence-Mappable Structural Subtyping
-    
+
     Establishes that sequences implement the Mappable interface,
     allowing mapping operations to be used on sequences.
   ]]--
   mappable_impl: {
     -- Mapping Seq operations to Mappable interface
     Mappable.map = Seq.map,
-    
+
     -- Structural subtyping relationship
     Seq <: Mappable,
     Mappable.laws.map_identity <: Seq.laws.map_identity,
     Mappable.laws.map_composition <: Seq.laws.map_composition
   }
-  
+
   --[[
     Transducer as Structural Endomorphism
-    
+
     Establishes that transducers are structure-preserving transformations
     on reduction functions.
   ]]--
@@ -252,32 +252,32 @@
     Cat.id = [_ -> [rf -> rf]],
     Cat.compose = [t1 t2 -> t1 >== t2]
   }
-  
+
   --[[
     List Category Structural Alignment
-    
+
     Aligns the List category with the Seq category for structural subtyping.
   ]]--
   list_alignment: {
     -- Object mappings
     List.O = Seq.O,
-    
+
     -- Morphism mappings
     List.M = Seq.M,
-    
-    -- Structural morphism correspondence  
+
+    -- Structural morphism correspondence
     List.map = Seq.map,
     List.filter = Seq.filter,
     List.fold = Seq.fold,
-    
+
     -- Preservation of laws
     List.law.map_composition = Seq.law.map_composition,
     List.law.fold_assoc = Seq.law.fold_assoc
   }
-  
+
   --[[
     Sequence-Functor Structural Correspondence
-    
+
     Establishes that sequences form a functor category, providing a structure-preserving
     mapping from the category of types to the category of sequences.
   ]]--
@@ -287,7 +287,7 @@
     Cata.Functor.target = Seq.Category,
     Cata.Functor.object_map = [a -> Seq a],
     Cata.Functor.morphism_map = [f -> [seq -> seq |> map(f)]],
-    
+
     -- Law preservation
     Cata.law.functor_identity <: Seq.law.map_identity,
     Cata.law.functor_composition <: Seq.law.map_composition
@@ -295,7 +295,7 @@
 
   --[[
     Sequence-Graph Structural Mapping
-    
+
     Establishes a direct structural correspondence between sequences and graphs,
     showing how a sequence can be viewed as a specific kind of graph.
   ]]--
@@ -303,13 +303,13 @@
     -- Object mappings
     Seq.a = Grph.!Node,               -- Sequence elements are graph nodes
     Seq = Grph.!Grph,                 -- A sequence is a special case of a graph
-    
+
     -- Structural mappings
     Seq.empty = Grph.new_graph,       -- Empty sequence is an empty graph
-    Seq.cons = [x xs -> 
+    Seq.cons = [x xs ->
       let g = xs |> seq_to_graph in
       let {graph, node} = Grph.add_node(g, x) in
-      
+
       -- Connect to previous node in sequence
       let node_count = Prim.graph_node_count(graph) in
       if node_count > 1 {
@@ -321,14 +321,14 @@
         graph
       }
     ],
-    
+
     -- Linear transformation functions
     seq_to_graph = [!xs -o>
       let g = Grph.new_graph() in
-      xs |> fold [graph item idx -> 
+      xs |> fold [graph item idx ->
         -- Add node for current item
         let {graph1, node} = Grph.add_node(graph, item) in
-        
+
         -- Connect to previous node if not first
         if idx > 0 {
           let {graph2, nodes} = Prim.get_graph_nodes(graph1) in
@@ -340,21 +340,21 @@
         }
       ] g 0
     ],
-    
+
     graph_to_seq = [!g -o>
       -- Convert graph to sequence by traversing edges
       let {graph, nodes} = Prim.get_graph_nodes(g) in
-      
+
       -- Find starting node (no incoming edges)
-      let start_node = nodes |> filter [n -> 
+      let start_node = nodes |> filter [n ->
         Prim.incoming_edges(graph, n) |> length == 0
       ] |> head in
-      
+
       -- Build sequence by following next edges
       let build_seq = [node acc ->
         let label = Grph.get_node_label(graph, node) in
         let next_seq = cons(label, acc) in
-        
+
         let out_edges = Prim.outgoing_edges(graph, node) in
         if out_edges |> length > 0 {
           let next_edge = out_edges |> head in
@@ -364,14 +364,14 @@
           next_seq
         }
       ] in
-      
+
       build_seq(start_node, empty) |> reverse
     ]
   }
-  
+
   --[[
     Sequence-Wire Structural Mapping
-    
+
     Establishes a direct structural correspondence between sequences and wiring diagrams,
     allowing sequences to be represented and manipulated as wiring structures.
   ]]--
@@ -379,24 +379,24 @@
     -- Object mappings
     Seq.a = Wire.Box,                 -- Sequence elements are boxes in a wiring diagram
     Seq = Wire.Diagram,               -- A sequence is a specific kind of wiring diagram
-    
+
     -- Structural mappings
     Seq.empty = Wire.id,              -- Empty sequence is an identity diagram
-    Seq.cons = [x xs -> 
+    Seq.cons = [x xs ->
       let d = xs |> seq_to_wire in
       let b = Prim.create_box(x) in
       d |> Wire.compose(Wire.extract(b))
     ],
-    
+
     -- Linear transformation functions
     seq_to_wire = [!xs -o>
       let d = Wire.id() in
-      xs |> fold [d x -> 
+      xs |> fold [d x ->
         let b = Prim.create_box(x) in
         d |> Wire.compose(Wire.extract(b))
       ] d
     ],
-    
+
     wire_to_seq = [!d -o>
       let boxes = Prim.get_boxes(d) in
       boxes |> fold [seq b ->
@@ -405,10 +405,10 @@
       ] empty
     ]
   }
-  
+
   --[[
     Sequence-Net Structural Mapping
-    
+
     Establishes a direct structural correspondence between sequences and interaction nets,
     allowing sequences to be represented as agent networks.
   ]]--
@@ -416,17 +416,17 @@
     -- Object mappings
     Seq.a = Net.!Agent,               -- Sequence elements are agents in a net
     Seq = Net.!Net,                   -- A sequence is a specific kind of interaction net
-    
+
     -- Structural mappings
     Seq.empty = Net.empty_net,        -- Empty sequence is an empty net
-    Seq.cons = [x xs -> 
+    Seq.cons = [x xs ->
       let n = xs |> seq_to_net in
       let sym = {name: "Element", arity: 2} in
       let a = Net.new_agent(sym) in
-      
+
       -- Store element value in agent (implementation dependent on Net module)
       let labeled_net = Prim.label_agent(n, a, x) in
-      
+
       -- Connect if not the first element
       let {net, agents} = Net.get_agents(labeled_net) in
       if agents |> length > 1 {
@@ -436,15 +436,15 @@
         labeled_net
       }
     ],
-    
+
     -- Linear transformation functions
     seq_to_net = [!xs -o>
       let net = Net.empty_net() in
-      xs |> fold [n x -> 
+      xs |> fold [n x ->
         let sym = {name: "Element", arity: 2} in
         let a = Net.new_agent(sym) in
         let {net1, agent} = Net.agent_of(Prim.label_agent(n, a, x), a.id) in
-        
+
         -- Link to previous agent if exists
         let {net2, agents} = Net.get_agents(net1) in
         if agents |> length > 1 {
@@ -455,7 +455,7 @@
         }
       ] net
     ],
-    
+
     net_to_seq = [!n -o>
       let {net, agents} = Net.get_agents(n) in
       agents |> fold [seq a ->
@@ -512,28 +512,28 @@
   --[[
     Reduces a sequence to a single value using an accumulator function (consuming the sequence)
   ]]--
-  fold: (b * a -o> b) * b * !(Seq a) -o> b [f acc xs -> 
+  fold: (b * a -o> b) * b * !(Seq a) -o> b [f acc xs ->
     xs |> Prim.fold(f, acc)
   ]
 
   --[[
     Flattens a sequence of sequences into a single sequence
   ]]--
-  concat: !(Seq (Seq a)) -o> (Seq a) [xss -> 
+  concat: !(Seq (Seq a)) -o> (Seq a) [xss ->
     xss |> Prim.concat
   ]
 
   --[[
     Reverses a sequence (consuming the sequence)
   ]]--
-  reverse: !(Seq a) -o> (Seq a) [xs -> 
+  reverse: !(Seq a) -o> (Seq a) [xs ->
     xs |> Prim.reverse
   ]
 
   --[[
     Generates a sequence of integers from start (inclusive) to end (exclusive)
   ]]--
-  range: Z * Z -> Seq(Z) [start end -> 
+  range: Z * Z -> Seq(Z) [start end ->
     Prim.range(start, end)
   ]
 
@@ -667,7 +667,7 @@
       let new_acc = reducing_fn(acc, x) in
       new_acc |> reduced? -> new_acc or_else new_acc
     ] init in
-    
+
     result |> reduced? -> result |> unreduced or_else result |> completed(reducer)
   ]
 
@@ -698,12 +698,12 @@
   --[[
     Transducer composition operator - composes transducers
   ]]--
-  >==: Transducer * Transducer -> Transducer [xf1 xf2 -> 
+  >==: Transducer * Transducer -> Transducer [xf1 xf2 ->
     [rf -> xf1(xf2(rf))]
   ]
 
   --[[
-    Sequence through transducer operator 
+    Sequence through transducer operator
   ]]--
   =>>: !(Seq a) * Transducer -o> (Seq b) [coll xform ->
     coll |> transduce xform conj empty
@@ -736,7 +736,7 @@
     Standard transducer that applies a function to each element
   ]]--
   mapping: (a -o> b) -> Transducer [f ->
-    [rf -> [acc input -> 
+    [rf -> [acc input ->
       rf(acc, f(input))
     ]]
   ]
@@ -745,7 +745,7 @@
     Standard transducer that filters elements by a predicate
   ]]--
   filtering: (a -> Bool) -> Transducer [pred ->
-    [rf -> [acc input -> 
+    [rf -> [acc input ->
       input |> pred -> rf(acc, input) or_else acc
     ]]
   ]
@@ -754,12 +754,12 @@
     Standard transducer that takes the first n elements
   ]]--
   taking: Z -> Transducer [n ->
-    [rf -> 
+    [rf ->
       let state = {count: 0} in
       [acc input ->
         let current = state.count in
         state.count + 1 -> state.count |> Prim.update_state
-        
+
         current < n -> rf(acc, input) or_else
         current == n -> rf(acc, input) |> ensure_reduced or_else
         acc
@@ -771,12 +771,12 @@
     Standard transducer that drops the first n elements
   ]]--
   dropping: Z -> Transducer [n ->
-    [rf -> 
+    [rf ->
       let state = {count: 0} in
       [acc input ->
         let current = state.count in
         state.count + 1 -> state.count |> Prim.update_state
-        
+
         current >= n -> rf(acc, input) or_else acc
       ]
     ]
@@ -786,13 +786,13 @@
     Standard transducer that partitions elements into chunks of specified size
   ]]--
   partitioning: Z -> Transducer [n ->
-    [rf -> 
+    [rf ->
       let state = {buffer: []} in
       [acc input ->
         let buffer = state.buffer ++ [input] in
         buffer |> Prim.update_state(state, :buffer)
-        
-        buffer |> length == n -> 
+
+        buffer |> length == n ->
           let result = rf(acc, buffer) in
           [] |> Prim.update_state(state, :buffer)
           result
@@ -805,13 +805,13 @@
     Standard transducer that creates chunks of items while pred is true
   ]]--
   chunking: (a -> Bool) -> Transducer [pred ->
-    [rf -> 
+    [rf ->
       let state = {buffer: [], last_match: false} in
       [acc input ->
         let matches = input |> pred in
-        
+
         -- Different from last? Start new chunk
-        matches != state.last_match and state.buffer |> length > 0 -> 
+        matches != state.last_match and state.buffer |> length > 0 ->
           let result = rf(acc, state.buffer) in
           {buffer: [input], last_match: matches} |> Prim.update_state(state)
           result
@@ -829,7 +829,7 @@
   ]]--
   flattening: () -> Transducer [_ ->
     [rf -> [acc input ->
-      input : Seq -> 
+      input : Seq ->
         input |> fold [a i -> rf(a, i)] acc
       or_else
         rf(acc, input)
@@ -849,10 +849,10 @@
     Standard transducer that inserts a separator between elements
   ]]--
   interposing: a -> Transducer [sep ->
-    [rf -> 
+    [rf ->
       let state = {first: true} in
       [acc input ->
-        state.first -> 
+        state.first ->
           false |> Prim.update_state(state, :first)
           rf(acc, input)
         or_else
@@ -866,10 +866,10 @@
     Standard transducer that removes consecutive duplicates
   ]]--
   deduplicate: () -> Transducer [_ ->
-    [rf -> 
+    [rf ->
       let state = {prev: null, seen_first: false} in
       [acc input ->
-        state.seen_first |> not -> 
+        state.seen_first |> not ->
           {prev: input, seen_first: true} |> Prim.update_state(state)
           rf(acc, input)
         or_else
@@ -896,7 +896,7 @@
     Standard transducer that adds indices to the items
   ]]--
   indexed: () -> Transducer [_ ->
-    [rf -> 
+    [rf ->
       let state = {idx: 0} in
       [acc input ->
         let i = state.idx in
@@ -909,7 +909,7 @@
   --------------------------------------------------
   -- Transient Operations
   --------------------------------------------------
-  
+
   --[[
     Transient collection - temporarily mutable for efficient batch operations
   ]]--
@@ -940,11 +940,11 @@
     Adds an element to a transient collection
   ]]--
   conj!: !Transient * a -o> !Transient [t val ->
-    t.type == :vector -> 
+    t.type == :vector ->
       let new_data = t.data |> cons(val) in
       {type: t.type, data: new_data, modified: true} : !Transient
     or_else
-    t.type == :set -> 
+    t.type == :set ->
       let new_data = t.data |> Prim.set_add(val) in
       {type: t.type, data: new_data, modified: true} : !Transient
     or_else
@@ -955,7 +955,7 @@
     Associates a key with a value in a transient map
   ]]--
   assoc!: !Transient * k * v -o> !Transient [t key val ->
-    t.type == :map -> 
+    t.type == :map ->
       let new_data = t.data |> Prim.map_assoc(key, val) in
       {type: t.type, data: new_data, modified: true} : !Transient
     or_else
@@ -966,21 +966,21 @@
     Removes a key or element from a transient collection
   ]]--
   disj!: !Transient * a -o> !Transient [t val ->
-    t.type == :map -> 
+    t.type == :map ->
       let new_data = t.data |> Prim.map_dissoc(val) in
       {type: t.type, data: new_data, modified: true} : !Transient
     or_else
-    t.type == :set -> 
+    t.type == :set ->
       let new_data = t.data |> Prim.set_remove(val) in
       {type: t.type, data: new_data, modified: true} : !Transient
     or_else
       t
   ]
-  
+
   --------------------------------------------------
   -- Structural Interface Definitions
   --------------------------------------------------
-  
+
   --[[
     Collection interface defines the basic operations that all collection types support
   ]]--
@@ -989,32 +989,32 @@
     empty: <> -> a,
     is_empty: a -> Bool,
     length: a -> Z,
-    
+
     -- Conversion operations
     to_list: !a -o> [b],
     from_list: ![b] -o> a,
-    
+
     -- Laws that all collections must satisfy
     law.empty_is_empty: a |> [coll -> coll |> empty |> is_empty == true],
     law.empty_length_zero: a |> [coll -> coll |> empty |> length == 0]
   }
-  
+
   --[[
     Traversable interface defines operations for traversing a structure
   ]]--
   Traversable: Collection & {
     -- Traversal operations
     each: !a * (b -o> ()) -o> (),
-    
+
     -- Laws for traversal
-    law.traversal_order: a |> [coll -> 
+    law.traversal_order: a |> [coll ->
       let order = [] in
-      coll |> each [x -> order := order ++ [x]] |> [_ -> 
+      coll |> each [x -> order := order ++ [x]] |> [_ ->
         order == (coll |> to_list)
       ]
     ]
   }
-  
+
   --[[
     Linear interface defines operations that consume their inputs
   ]]--
@@ -1022,59 +1022,59 @@
     -- Linear operations (consuming their inputs)
     transform: !a * (b -o> c) -o> d,
     linear_fold: !a * (e * b -o> e) * e -o> e,
-    
+
     -- Laws for linear operations
-    law.transform_preserves_length: a |> [coll f -> 
+    law.transform_preserves_length: a |> [coll f ->
       (coll |> length) == (coll |> transform(f) |> length)
     ],
-    law.linear_fold_identity: a |> [coll -> 
+    law.linear_fold_identity: a |> [coll ->
       let id_fold = [acc x -> acc] in
       coll |> linear_fold(id_fold, 0) == 0
     ]
   }
-  
+
   --[[
     Foldable interface defines operations for folding a structure to a single value
   ]]--
   Foldable: Collection & {
     -- Fold operations
     fold: (b * a -o> b) * b * !c -o> b,
-    
+
     -- Laws for folding
-    law.fold_assoc: a |> [coll -> 
+    law.fold_assoc: a |> [coll ->
       let f = [acc x -> acc + x] in
       let g = [acc x -> acc * x] in
       coll |> fold(f, 0) |> fold(g, 1) ==
       coll |> fold([acc x -> g(acc, f(0, x))], 1)
     ]
   }
-  
+
   --[[
     Mappable interface defines operations for mapping over a structure
   ]]--
   Mappable: Collection & {
     -- Mapping operations
     map: (a -o> b) * !c -o> d,
-    
+
     -- Laws for mapping
-    law.map_identity: a |> [coll -> 
+    law.map_identity: a |> [coll ->
       coll |> map([x -> x]) teq coll
     ],
-    law.map_composition: a |> [coll f g -> 
+    law.map_composition: a |> [coll f g ->
       coll |> map(f) |> map(g) teq
       coll |> map([x -> g(f(x))])
     ]
   }
-  
+
   --------------------------------------------------
   -- Structural Mapping Implementations
   --------------------------------------------------
-  
+
   --[[
     SeqStructure defines the structure of sequences
   ]]--
   SeqStructure: Collection & Traversable & Linear & Foldable & Mappable
-  
+
   --[[
     Structural mapping from sequences to collections
   ]]--
@@ -1082,29 +1082,29 @@
     -- Map from Seq structure to the target Collection structure
     seq |> to_list |> c.from_list
   ]
-  
+
   --[[
     Structural mapping from lists to sequences
   ]]--
   list_as: !(List a) -o> (Seq a) [list ->
     list |> from_list
   ]
-  
+
   --[[
     Structural mapping from maps to sequences
   ]]--
   map_as: !(k:-> v) -o> (Seq (k * v)) [map ->
     map |> Prim.entries |> list_as
   ]
-  
+
   --[[
     Structural mapping operation - maps between structures preserving properties
   ]]--
-  struct_map: forall(a: Collection, b: Collection) -> 
+  struct_map: forall(a: Collection, b: Collection) ->
               !(a c) -o> (b c) [struct ->
     struct |> a.to_list |> b.from_list
   ]
-  
+
   --[[
     Structural fold operation - linear fold that preserves structure
   ]]--
@@ -1112,29 +1112,29 @@
                (b * c -o> b) * b * !(a c) -o> b [f init struct ->
     struct |> a.fold(f, init)
   ]
-  
+
   --[[
     Structural transformation - transforms between structures preserving laws
   ]]--
-  struct_transform: forall(a: Mappable, b: Mappable) -> 
+  struct_transform: forall(a: Mappable, b: Mappable) ->
                    (c -o> d) * !(a c) -o> (b d) [f struct ->
     struct |> a.map(f) |> struct_map
   ]
-  
+
   --[[
     Type-preserving mapping operator - maps between instances preserving type
   ]]--
   @=: !(Collection a) * Collection a -o> (Collection a) [src dest ->
     src |> struct_map
   ]
-  
+
   --[[
     Linear transformation operator - transforms with linear functions
   ]]--
   @>: !(a b) * (b -o> c) -o> (a c) [struct f ->
     struct |> struct_transform(f)
   ]
-  
+
   --[[
     Structural subtyping operator - treats one structure as a subtype of another
   ]]--
@@ -1142,89 +1142,89 @@
     -- Structural subtyping is implemented through the interface mappings
     struct |> a.from(b)
   ]
-  
+
   --[[
     Linear operations that ensure inputs are consumed exactly once
   ]]--
   linearly: !(a) -o> !a [x -> x]
-  
+
   --[[
     Linear transformation that guarantees the function is applied exactly once
   ]]--
   transform_linearly: (a -o> b) * !c -o> d [f struct ->
     struct |> linearly |> struct_transform(f)
   ]
-  
+
   --[[
     Linear operation that ensures the structure is consumed
   ]]--
   consuming: !a -o> () [x -> ()]
-  
+
   --[[
     Linear fold using linear functions
   ]]--
   linear_fold: (a * b -o> a) * a * !(Foldable b) -o> a [f init struct ->
     struct |> linearly |> struct_fold(f, init)
   ]
-  
+
   --[[
     Linear map using linear functions
   ]]--
   linear_map: (a -o> b) * !(Mappable a) -o> (Mappable b) [f struct ->
     struct |> linearly |> struct_transform(f)
   ]
-  
+
   --[[
     Linear filter using linear predicates
   ]]--
   linear_filter: (a -o> Bool) * !(Seq a) -o> (Seq a) [pred seq ->
     seq |> linearly |> filter([x -> pred(x |> linearly)])
   ]
-  
+
   --------------------------------------------------
   -- Structural Laws
   --------------------------------------------------
-  
+
   --[[
     Structure preservation law - transformation preserves structure
   ]]--
   law.preservation: forall(a: Collection, b: Collection) [f ->
-    a |> [struct -> 
+    a |> [struct ->
       (struct |> a.length) == (struct |> f |> b.length)
     ]
   ]
-  
+
   --[[
     Structure reflection law - properties in target reflect properties in source
   ]]--
   law.reflection: forall(a: Collection, b: Collection) [f ->
-    a |> [struct -> 
+    a |> [struct ->
       (struct |> a.is_empty) == (struct |> f |> b.is_empty)
     ]
   ]
-  
+
   --[[
     Invariant mapping law - invariants are preserved through mappings
   ]]--
   law.invariant_mapping: forall(p: a -> Bool, q: b -> Bool) [f ->
     p |> [x -> p(x) -> q(f(x))]
   ]
-  
+
   --[[
     Structure identity law - identity mapping preserves structure
   ]]--
   law.structure_identity: forall(a: Collection) [
-    a |> [struct -> 
+    a |> [struct ->
       struct teq (struct |> a.to_list |> a.from_list)
     ]
   ]
-  
+
   --[[
     Structure composition law - composition of structure-preserving mappings
     preserves structure
   ]]--
   law.structure_composition: forall(a: Collection, b: Collection, c: Collection) [f g ->
-    a |> [struct -> 
+    a |> [struct ->
       (struct |> f |> g) teq (struct |> [x -> g(f(x))])
     ]
   ]

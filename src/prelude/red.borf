@@ -11,7 +11,7 @@
 @Red: {
   deps: {
     (@Red, @Prim, true),
-    (@Red, @Net, true)
+    (@Red, @INet, true)
   }
 
   typ: {

@@ -8,7 +8,7 @@
   are properly consumed exactly once.
 ]]--
 
-@Hom: {
+@Syntax: {
   typ: {
     !Expr !Symbol !Literal !Lambda !Application !Quote !Unquote !UnquoteSplice !Quasiquote
     !Let !If !Module !Declaration !Pattern !MacroRule !Transformer
@@ -37,11 +37,11 @@
   vis: E |> [e -> true]
 
   deps: {
-    (@Hom, @Proj, true)
+    (@Syntax, @Proj, true)
   }
 
   --[[
-    Version information for the Hom module
+    Version information for the Syntax module
   ]]--
   version: "2.0.0"
 
@@ -56,7 +56,7 @@
   }
 
   --[[
-    Configuration settings for the Hom module
+    Configuration settings for the Syntax module
   ]]--
   config: {
     hygiene: true,
