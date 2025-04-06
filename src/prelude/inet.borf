@@ -64,7 +64,7 @@
   
   deps: {
     (@INet, @Grph, true),  -- Add dependency on Graph module
-    (@INet, @Cat, true),   -- Add dependency on Cat module
+    (@INet, @Theory, true),   -- Add dependency on Theory module
     (@INet, @Wire, true)   -- Add dependency on Wire module
   }
   
@@ -333,25 +333,25 @@
   ]]--
   net_category_mapping: {
     -- Object mappings
-    INet.!Symbol = Cat.O,                 -- Symbols (agent types) are objects
-    INet.!Agent = Cat.M,                  -- Agents are morphisms
-    INet.!Rule = Cat.Natural,             -- Rules are natural transformations
+    INet.!Symbol = Theory.O,                 -- Symbols (agent types) are objects
+    INet.!Agent = Theory.M,                  -- Agents are morphisms
+    INet.!Rule = Theory.Natural,             -- Rules are natural transformations
     
     -- Structural mappings
-    INet.empty_net = Cat.initial,         -- Empty net is the initial object
-    INet.parallel = Cat.product,          -- Parallel composition is the categorical product
-    INet.compose = Cat.compose,           -- Sequential composition is morphism composition
+    INet.empty_net = Theory.initial,         -- Empty net is the initial object
+    INet.parallel = Theory.product,          -- Parallel composition is the categorical product
+    INet.compose = Theory.compose,           -- Sequential composition is morphism composition
     
     -- Linear transformation functions
     to_category = [!n -o>
-      let cat = Cat.new({}, {}) in
+      let cat = Theory.new({}, {}) in
       
       -- First add all symbols as objects
       let {n1, agents} = INet.get_agents(n) in
       let symbols = agents |> map [a -> a.symbol] |> unique in
       
       let cat_with_objs = symbols |> fold [c sym ->
-        Cat.add_object(c, sym)
+        Theory.add_object(c, sym)
       ] cat in
       
       -- Then add all agents as morphisms
@@ -363,7 +363,7 @@
         let domain = domain_ports |> map [p -> agent.symbol] in
         let codomain = codomain_ports |> map [p -> agent.symbol] in
         
-        Cat.add_morphism(c, {
+        Theory.add_morphism(c, {
           id: agent.id,
           domain: domain,
           codomain: codomain,
@@ -374,7 +374,7 @@
       -- Finally add all rules as natural transformations
       let rules = Prim.get_rules(n) in
       rules |> fold [c rule ->
-        Cat.add_natural_transformation(c, {
+        Theory.add_natural_transformation(c, {
           id: Prim.fresh_id(),
           components: {},  -- Simplified, actual components would be based on rule LHS/RHS
           rule: rule
@@ -387,10 +387,10 @@
       let n = INet.empty_net() in
       
       -- First find all objects that can be interpreted as symbols
-      let objects = Cat.get_objects(c) in
+      let objects = Theory.get_objects(c) in
       
       -- Then add all morphisms as agents
-      let morphisms = Cat.get_morphisms(c) in
+      let morphisms = Theory.get_morphisms(c) in
       let n_with_agents = morphisms |> fold [n m ->
         -- Check if morphism has agent data
         if m.agent |> Prim.is_valid {
@@ -405,7 +405,7 @@
       ] n in
       
       -- Add connections based on category structure
-      let compositions = Cat.get_compositions(c) in
+      let compositions = Theory.get_compositions(c) in
       compositions |> fold [n comp ->
         let m1 = comp.0 in
         let m2 = comp.1 in
@@ -783,7 +783,7 @@
   ]
 
   --[[
-    Performs a single reduction step on a net, if possible
+    Reduces a net by a single step with the given ruleset
   ]]--
   reduce_once: !Net * !RuleSet -o> !Reduction [net ruleset ->
     -- Find active pairs
@@ -791,31 +791,31 @@
 
     -- If no active pairs, cannot reduce
     if active_pairs.length == 0 {
-      return {
+      {
         original: net1,
         result: net1,
         reduced: false,
         active_pair: null
-      };
-    }
+      }
+    } else {
+      -- Take the first active pair
+      let active_pair = active_pairs[0];
 
-    -- Take the first active pair
-    let active_pair = active_pairs[0];
+      -- Find applicable rule
+      let rule = find_applicable_rule(ruleset, active_pair);
+      if rule == null {
+        error("No applicable rule for active pair");
+      }
 
-    -- Find applicable rule
-    let rule = find_applicable_rule(ruleset, active_pair);
-    if rule == null {
-      error("No applicable rule for active pair");
-    }
+      -- Apply the rule
+      let result_net = apply_rule(net1, active_pair, rule);
 
-    -- Apply the rule
-    let result_net = apply_rule(net1, active_pair, rule);
-
-    {
-      original: net1,
-      result: result_net,
-      reduced: true,
-      active_pair: active_pair
+      {
+        original: net1,
+        result: result_net,
+        reduced: true,
+        active_pair: active_pair
+      }
     }
   ]
 
@@ -1144,14 +1144,18 @@
   ::: !Net * !Rule -o> !Net [net rule ->
     let {net1, active_pairs} = find_active_pairs(net);
 
+    -- Try to find a matching pair
+    let result = net1;  -- Default to unchanged
+    
     for pair in active_pairs {
       let {_, _, matches} = match_rule(rule, pair);
       if matches {
-        return apply_rule(net1, pair, rule);
+        result = apply_rule(net1, pair, rule);
+        break;  -- Apply to the first matching pair only
       }
     }
-
-    net1  -- No match found, return unchanged
+    
+    result
   ]
 
   --[[

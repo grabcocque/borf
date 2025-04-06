@@ -1,0 +1,444 @@
+--[[
+  Redex - Reduction Systems as a Cartesian Closed Category
+
+  This module defines operations and abstractions for reduction systems in Borf,
+  implementing them as a cartesian closed category. Redexes (reducible expressions)
+  form objects, reduction paths form morphisms, with products representing parallel
+  reductions and exponentials capturing higher-order reductions.
+]]--
+
+@Redex: {
+  deps: {
+    (@Redex, @Prim, true),  -- Core primitives
+    (@Redex, @INet, true),  -- Interaction nets
+    (@Redex, @Theory, true) -- Category theory
+  }
+
+  typ: {
+    -- Category structure
+    RedexCategory Redex ReductionPath
+
+    -- Reduction structures
+    Strategy StrategyList Rule RuleSet History Step
+    
+    -- Cartesian structure
+    Product Parallel Terminal NormalForm
+    
+    -- Closed structure
+    Exponential HigherReduction
+  }
+
+  op: {
+    -- Reduction operators
+    -> => *>
+    
+    -- Category operators
+    . id
+    
+    -- Product operators
+    * and parallel
+    
+    -- Exponential operators
+    => higher compose
+  }
+
+  fn: {
+    -- Category operations
+    objects morphisms dom cod compose id
+    
+    -- Reduction operations
+    reduce apply match normalize evaluate
+    
+    -- Product operations
+    product parallel terminal
+    
+    -- Exponential operations
+    exponential curry uncurry apply
+    
+    -- Strategy operations
+    innermost outermost leftmost rightmost
+    repeat_strategy sequence_strategy choice_strategy
+    
+    -- Laws
+    law.associativity law.identity law.product_associativity
+    law.product_symmetry law.product_distributivity
+    law.curry_uncurry law.evaluate_apply
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+  
+  --------------------------------------------------
+  -- Structure Mapping to Cartesian Closed Category
+  --------------------------------------------------
+  
+  structure: {
+    -- Map Redex to CartesianClosedCategory
+    objects: Redex,
+    morphisms: ReductionPath,
+    dom: [path -> path.source],
+    cod: [path -> path.target],
+    id: [r -> {source: r, target: r, steps: []}],
+    compose: [p1 p2 -> 
+      { source: p2.source, target: p1.target, steps: p2.steps @ p1.steps }
+    ],
+    
+    -- Cartesian structure
+    terminal: NormalForm,
+    product: [a b -> {left: a, right: b}],
+    projection_left: [p -> {source: p, target: p.left, steps: []}],
+    projection_right: [p -> {source: p, target: p.right, steps: []}],
+    
+    -- Closed structure
+    exponential: [a b -> {domain: a, codomain: b, strategies: []}],
+    evaluation: [exp a -> {source: {left: exp, right: a}, target: exp.codomain, steps: []}],
+    curry: [f -> {domain: f.source.left, codomain: {domain: f.source.right, codomain: f.target}}]
+  }
+  
+  --------------------------------------------------
+  -- Redex Category Structure
+  --------------------------------------------------
+  
+  --[[
+    RedexCategory defines the categorical structure of redexes,
+    implementing a cartesian closed category of reducible expressions.
+  ]]--
+  RedexCategory: {
+    -- Objects are redexes (reducible expressions)
+    objects: Redex,
+    
+    -- Morphisms are reduction paths
+    morphisms: ReductionPath,
+    
+    -- Domain of a reduction path
+    dom: [path -> path.source],
+    
+    -- Codomain of a reduction path
+    cod: [path -> path.target],
+    
+    -- Identity reduction (no-op)
+    id: [r -> {
+      source: r,
+      target: r,
+      steps: []
+    }],
+    
+    -- Composition of reduction paths
+    compose: [p1 p2 ->
+      if p1.source == p2.target then
+        {
+          source: p2.source,
+          target: p1.target,
+          steps: p2.steps @ p1.steps
+        }
+      else
+        error("Cannot compose incompatible reduction paths")
+      end
+    ],
+    
+    -- Terminal object (fully normalized form)
+    terminal: NormalForm,
+    
+    -- Product of redexes (parallel composition)
+    product: [r1 r2 -> {
+      left: r1,
+      right: r2
+    }],
+    
+    -- Exponential object (higher-order reduction)
+    exponential: [r1 r2 -> {
+      domain: r1,
+      codomain: r2,
+      strategies: [Strategy]
+    }],
+    
+    -- Laws
+    laws: {
+      -- Category laws
+      associativity: forall [f g h -> 
+        compose(f, compose(g, h)) teq compose(compose(f, g), h)
+      ],
+      
+      identity_left: forall [f -> compose(id(cod(f)), f) teq f],
+      identity_right: forall [f -> compose(f, id(dom(f))) teq f],
+      
+      -- Product laws
+      product_associativity: forall [a b c ->
+        product(product(a, b), c) teq product(a, product(b, c))
+      ],
+      
+      product_symmetry: forall [a b ->
+        product(a, b) teq product(b, a)
+      ],
+      
+      -- Exponential laws
+      curry_uncurry: forall [a b c f ->
+        curry(uncurry(f)) teq f
+      ],
+      
+      uncurry_curry: forall [a b c g ->
+        uncurry(curry(g)) teq g
+      ]
+    }
+  }
+  
+  --[[
+    Redex represents a reducible expression that can undergo reduction.
+  ]]--
+  Redex: {
+    term: Any,           -- The actual expression
+    rules: [Rule],       -- Applicable reduction rules
+    normal_form: Bool    -- Whether the term is in normal form
+  }
+  
+  --[[
+    ReductionPath represents a sequence of reduction steps
+    forming a morphism in the category.
+  ]]--
+  ReductionPath: {
+    source: Redex,       -- Starting redex
+    target: Redex,       -- Resulting redex
+    steps: [Step]        -- Sequence of reduction steps
+  }
+  
+  --[[
+    Rule represents a single reduction rule.
+  ]]--
+  Rule: {
+    name: S,             -- Name of the rule
+    pattern: Any,        -- Pattern to match
+    result: Any,         -- Result after reduction
+    conditions: [Any -> Bool] -- Additional conditions for rule application
+  }
+  
+  --[[
+    RuleSet represents a collection of reduction rules.
+  ]]--
+  RuleSet: {
+    rules: [Rule],
+    name: S,
+    properties: {
+      confluent: Bool,     -- Whether the ruleset is confluent
+      terminating: Bool,   -- Whether the ruleset is terminating
+      deterministic: Bool  -- Whether the ruleset is deterministic
+    }
+  }
+  
+  --[[
+    Step represents a single reduction step.
+  ]]--
+  Step: {
+    rule: Rule,          -- The applied rule
+    position: [Z],       -- Position where rule was applied
+    before: Redex,       -- Expression before reduction
+    after: Redex         -- Expression after reduction
+  }
+  
+  --[[
+    Strategy represents a reduction strategy.
+  ]]--
+  Strategy: {
+    name: S,
+    apply: Redex -> ?ReductionPath,
+    properties: {
+      normalizing: Bool,   -- Whether strategy reaches normal form when it exists
+      optimal: Bool        -- Whether strategy uses minimum number of steps
+    }
+  }
+  
+  --[[
+    Product represents a product of redexes for parallel reduction.
+  ]]--
+  Product: {
+    left: Redex,
+    right: Redex,
+    parallel_reduce: (Rule -> Bool) -> ReductionPath
+  }
+  
+  --[[
+    Terminal represents a terminal object in the category.
+    In reduction systems, this corresponds to a fully normalized form.
+  ]]--
+  Terminal: {
+    term: Any,
+    is_normal: Bool,
+    unique_morphism: Redex -> ReductionPath
+  }
+  
+  --[[
+    NormalForm represents a redex that cannot be reduced further.
+  ]]--
+  NormalForm: Redex & {
+    normal_form: true,
+    proves_property: Any -> Bool
+  }
+  
+  --[[
+    Exponential represents a higher-order reduction function,
+    implementing the internal hom functor of the closed structure.
+  ]]--
+  Exponential: {
+    domain: Redex,
+    codomain: Redex,
+    strategies: [Strategy],
+    apply: domain -> ReductionPath
+  }
+  
+  --[[
+    HigherReduction represents a reduction strategy transformer,
+    taking a strategy and producing a new strategy.
+  ]]--
+  HigherReduction: {
+    input_strategy: Strategy,
+    output_strategy: Strategy,
+    transform: input_strategy -> output_strategy
+  }
+  
+  --------------------------------------------------
+  -- Category Operations
+  --------------------------------------------------
+  
+  --[[
+    Retrieves the objects in the redex category.
+  ]]--
+  objects: RedexCategory -> [Redex]
+  
+  --[[
+    Retrieves the morphisms in the redex category.
+  ]]--
+  morphisms: RedexCategory -> [ReductionPath]
+  
+  --[[
+    Gets the domain of a reduction path.
+  ]]--
+  dom: ReductionPath -> Redex
+  
+  --[[
+    Gets the codomain of a reduction path.
+  ]]--
+  cod: ReductionPath -> Redex
+  
+  --[[
+    Composes two compatible reduction paths.
+  ]]--
+  compose: ReductionPath -> ReductionPath -> ReductionPath
+  
+  --[[
+    Creates the identity reduction path for a redex.
+  ]]--
+  id: Redex -> ReductionPath
+  
+  --------------------------------------------------
+  -- Reduction Operations
+  --------------------------------------------------
+  
+  --[[
+    Reduces a redex according to a reduction strategy.
+  ]]--
+  reduce: Redex -> Strategy -> ?ReductionPath
+  
+  --[[
+    Applies a single reduction rule to a redex.
+  ]]--
+  apply: Redex -> Rule -> ?ReductionPath
+  
+  --[[
+    Matches a pattern against a redex.
+  ]]--
+  match: Any -> Any -> ?{Any: Any}
+  
+  --[[
+    Normalizes a redex to its normal form if possible.
+  ]]--
+  normalize: Redex -> ?NormalForm
+  
+  --[[
+    Evaluates a redex to a value.
+  ]]--
+  evaluate: Redex -> ?Any
+  
+  --------------------------------------------------
+  -- Product Operations
+  --------------------------------------------------
+  
+  --[[
+    Creates a product of two redexes.
+  ]]--
+  product: Redex -> Redex -> Product
+  
+  --[[
+    Performs parallel reduction on a product.
+  ]]--
+  parallel: Redex -> Redex -> Strategy -> ?ReductionPath
+  
+  --[[
+    Creates the terminal object.
+  ]]--
+  terminal: -> Terminal
+  
+  --------------------------------------------------
+  -- Exponential Operations
+  --------------------------------------------------
+  
+  --[[
+    Creates an exponential object.
+  ]]--
+  exponential: Redex -> Redex -> Exponential
+  
+  --[[
+    Curries a reduction strategy on a product.
+  ]]--
+  curry: (Product -> ReductionPath) -> Exponential
+  
+  --[[
+    Uncurries an exponential to a reduction strategy on a product.
+  ]]--
+  uncurry: Exponential -> (Product -> ReductionPath)
+  
+  --[[
+    Applies an exponential to a redex.
+  ]]--
+  apply: Exponential -> Redex -> ReductionPath
+  
+  --------------------------------------------------
+  -- Strategy Operations
+  --------------------------------------------------
+  
+  --[[
+    Innermost reduction strategy (eager).
+  ]]--
+  innermost: RuleSet -> Strategy
+  
+  --[[
+    Outermost reduction strategy (lazy).
+  ]]--
+  outermost: RuleSet -> Strategy
+  
+  --[[
+    Leftmost reduction strategy.
+  ]]--
+  leftmost: RuleSet -> Strategy
+  
+  --[[
+    Rightmost reduction strategy.
+  ]]--
+  rightmost: RuleSet -> Strategy
+  
+  --[[
+    Repeats a strategy until normal form.
+  ]]--
+  repeat_strategy: Strategy -> Strategy
+  
+  --[[
+    Sequences two strategies.
+  ]]--
+  sequence_strategy: Strategy -> Strategy -> Strategy
+  
+  --[[
+    Creates a choice between two strategies.
+  ]]--
+  choice_strategy: Strategy -> Strategy -> Strategy
+} 

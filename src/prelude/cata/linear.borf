@@ -1,32 +1,82 @@
 --[[
-  Linear Structural Mappings
+  Linear Types as a Symmetric Monoidal Closed Category
 
-  This module defines linear structural mappings and transformations between
-  different categorical structures, with an emphasis on type-level guarantees
-  for resource consumption.
+  This module extends the core linear module with categorical structure,
+  implementing a symmetric monoidal closed category with guarantees about
+  resource usage. It centralizes all categorical linear typing operations.
 ]]--
 
 @Linear: {
+  -- Import the core linear module
+  @Core: import "../linear"
+  
   typ: {
+    -- Category structure types
+    LinearCategory LinearType LinearArrow LinearTensor
+    
+    -- Monoidal structure
+    MonoidalLinear BraidedLinear SymmetricLinear ClosedLinear
+    
     -- Structural mapping types
     StructuralMapping ObjectMap MorphismMap LawMap
     LinearMap ConsumingMap PreservingMap
 
     -- Transformation properties
     Structure Preserving Reflecting Creating
+    
+    -- Re-export core types
+    Resource: @Core.Resource,
+    Usage: @Core.Usage,
+    Consumed: @Core.Consumed,
+    Unconsumed: @Core.Unconsumed,
+    Affine: @Core.Affine
   }
 
   op: {
+    -- Linear operators (imported from core)
+    -o>: @Core.-o>,
+    o*: @Core.o*,
+    multimap: @Core.multimap,
+    !: @Core.!,
+    
+    -- Category operators
+    . id
+    
     -- Structural operators
-    =>: -- Structural mapping
+    Rightarrow: -- Structural mapping
     -o: -- Linear mapping
     <:  -- Subtyping
   }
 
   fn: {
+    -- Category structure functions
+    objects morphisms dom cod compose id
+    
+    -- Re-export core linear resource management functions
+    consume: @Core.consume,
+    use: @Core.use, 
+    promote: @Core.promote,
+    clone: @Core.clone,
+    drop: @Core.drop,
+    
+    -- Linear operations
+    apply curry uncurry linear_apply
+    
+    -- Tensor operations
+    tensor unit assoc sym braiding
+    
+    -- Linear function space
+    lam lambda linear_lambda linear_map
+    
+    -- Laws
+    law.composition law.identity law.linearity 
+    law.no_copy law.no_discard law.tensor_product
+    law.associativity law.symmetry law.braiding
+    law.closure law.curry_uncurry
+    
     -- Structural mapping operations
     structural_map object_map morphism_map law_map
-    linear_map consuming_map preserving_map
+    consuming_map preserving_map
     with_laws map_preserving laws_between
     
     -- Linear structure operations
@@ -35,9 +85,14 @@
     -- Structure mapping operations 
     map_structure preserve_structure reflect_structure
     structure_isomorphism structure_embedding structure_abstraction
+    
+    -- Categorical transformations
+    to_theory from_theory
+    to_wire from_wire
   }
 
-  E: typ cup op cup fn
+  -- Include all entities from core module
+  E: @Core.E cup typ cup op cup fn
 
   tau: T.tau
 
@@ -45,16 +100,578 @@
 
   deps: {
     (@Linear, @T, true),     -- Add dependency on Type system
-    (@Linear, @Cata.Theory, true)   -- Add dependency on Category theory module
+    (@Linear, @Cata.Theory, true),  -- Add dependency on Category theory module
+    (@Linear, @Wire, true),  -- Add dependency on Wire module
+    (@Linear, @INet, true)   -- Add dependency on Interaction Net module
   }
+
+  --------------------------------------------------
+  -- Structure Mapping to Symmetric Monoidal Closed Category
+  --------------------------------------------------
+  
+  --[[
+    The "structure" block defines how this module implements a specific categorical structure.
+    
+    Unlike StructuralMapping, which defines transformations BETWEEN categories:
+    - This block declares what canonical categorical structure THIS category implements
+    - It's a concrete implementation specification (not a transformation interface)
+    - It defines objects, morphisms, and operations in terms of this module's own types
+    - It serves as part of the category's definition itself
+    
+    This mapping declares that the Linear module satisfies the properties of a
+    SymmetricMonoidalClosedCategory, and shows exactly how it does so.
+  ]]--
+  structure: {
+    -- Map Linear to SymmetricMonoidalClosedCategory
+    objects: LinearType,
+    morphisms: [a b -> (!a -o> b)],
+    dom: [f -> f.domain],
+    cod: [f -> f.codomain],
+    id: [a -> [!x -o> x]],
+    compose: [f g -> [!x -o> x |> g |> f]],
+    
+    -- Monoidal structure
+    tensor: [a b -> a o* b],
+    unit: T.Unit,
+    associator: [a b c -> {
+      forward: [!((a o* b) o* c) -o> (a o* (b o* c))],
+      reverse: [!(a o* (b o* c)) -o> ((a o* b) o* c)]
+    }],
+    left_unitor: [a -> {
+      forward: [!(T.Unit o* a) -o> a],
+      reverse: [!a -o> (T.Unit o* a)]
+    }],
+    right_unitor: [a -> {
+      forward: [!(a o* T.Unit) -o> a],
+      reverse: [!a -o> (a o* T.Unit)]
+    }],
+    
+    -- Symmetric structure
+    braiding: [a b -> {
+      forward: [!(a o* b) -o> (b o* a)],
+      reverse: [!(b o* a) -o> (a o* b)]
+    }],
+    
+    -- Closed structure
+    linear_arrow: [a b -> a -o> b],
+    curry: [a b c -> {
+      forward: [!((a o* b) -o> c) -o> (a -o> (b -o> c))],
+      reverse: [!(a -o> (b -o> c)) -o> ((a o* b) -o> c)]
+    }],
+    eval: [a b -> [!((a -o> b) o* a) -o> b]]
+  }
+
+  -- Re-export the core linear types directly
+  LinearType: @Core.LinearType
+  LinearArrow: @Core.LinearArrow
+  LinearTensor: @Core.LinearTensor
+
+  --------------------------------------------------
+  -- Linear Category Definition
+  --------------------------------------------------
+
+  --[[
+    LinearCategory defines the core structure of linear types as a
+    symmetric monoidal closed category.
+  ]]--
+  LinearCategory: {
+    -- Objects are linear types
+    objects: LinearType,
+    
+    -- Morphisms are linear functions between types
+    morphisms: (!a -o> b),
+    
+    -- Domain of a linear function
+    dom: [f -> f.domain],
+    
+    -- Codomain of a linear function
+    cod: [f -> f.codomain],
+    
+    -- Identity morphism consumes its input exactly once
+    id: [a -> [!x -o> x]],
+    
+    -- Composition of linear morphisms
+    compose: [f g -> [!x -o> x |> g |> f]],
+    
+    -- Unit object
+    unit: T.Unit,
+    
+    -- Tensor product of types
+    tensor: [a b -> a o* b],
+    
+    -- Linear function space
+    linear_arrow: [a b -> a -o> b],
+    
+    -- Category laws
+    laws: {
+      -- Composition is associative
+      associativity: forall [f g h -> compose(f, compose(g, h)) teq compose(compose(f, g), h)],
+      
+      -- Identity laws
+      identity_left: forall [f -> compose(id, f) teq f],
+      identity_right: forall [f -> compose(f, id) teq f],
+      
+      -- Linearity law: each input is used exactly once
+      linearity: forall [f -> f |> linearity_check]
+    }
+  }
+  
+  --[[
+    MonoidalLinear adds monoidal structure to the linear category.
+  ]]--
+  MonoidalLinear: LinearCategory & {
+    -- Tensor product of objects
+    tensor: [a b -> a o* b],
+    
+    -- Unit object for tensor
+    unit: T.Unit,
+    
+    -- Associator: (a o* b) o* c =~ a o* (b o* c)
+    assoc: [a b c -> 
+      { 
+        forward: [!((a o* b) o* c) -o> (a o* (b o* c))],
+        reverse: [!(a o* (b o* c)) -o> ((a o* b) o* c)]
+      }
+    ],
+    
+    -- Left unitor: I o* a =~ a
+    left_unitor: [a ->
+      {
+        forward: [!(T.Unit o* a) -o> a],
+        reverse: [!a -o> (T.Unit o* a)]
+      }
+    ],
+    
+    -- Right unitor: a o* I =~ a
+    right_unitor: [a ->
+      {
+        forward: [!(a o* T.Unit) -o> a],
+        reverse: [!a -o> (a o* T.Unit)]
+      }
+    ],
+    
+    -- Additional laws
+    laws: {
+      -- Associativity of tensor product
+      tensor_associativity: forall [a b c -> 
+        (a o* b) o* c teq a o* (b o* c)
+      ],
+      
+      -- Unit laws
+      left_unit: forall [a -> T.Unit o* a teq a],
+      right_unit: forall [a -> a o* T.Unit teq a],
+      
+      -- Coherence laws (simplified)
+      coherence: forall [a b c d -> 
+        assoc(a, b, c o* d) |> compose(assoc(a, b o* c, d)) teq
+        assoc(a o* b, c, d) |> compose(tensor(assoc(a, b, c), id(d)))
+      ]
+    }
+  }
+  
+  --[[
+    BraidedLinear adds braiding to the monoidal structure.
+  ]]--
+  BraidedLinear: MonoidalLinear & {
+    -- Braiding: a o* b =~ b o* a
+    braiding: [a b ->
+      {
+        forward: [!(a o* b) -o> (b o* a)],
+        reverse: [!(b o* a) -o> (a o* b)]
+      }
+    ],
+    
+    -- Additional laws
+    laws: {
+      -- Braiding naturality
+      braiding_naturality: forall [f g a b c d ->
+        tensor(f, g) |> compose(braiding(c, d)) teq
+        braiding(a, b) |> compose(tensor(g, f))
+      ],
+      
+      -- Hexagon axioms
+      hexagon1: forall [a b c ->
+        assoc(a, b, c) |> compose(braiding(a, b o* c)) |> compose(assoc(b, c, a)) teq
+        tensor(braiding(a, b), id(c)) |> compose(assoc(b, a, c)) |> compose(tensor(id(b), braiding(a, c)))
+      ],
+      
+      hexagon2: forall [a b c ->
+        assoc(a, b, c).reverse |> compose(braiding(a o* b, c)) |> compose(assoc(c, a, b).reverse) teq
+        tensor(id(a), braiding(b, c)) |> compose(assoc(a, c, b).reverse) |> compose(tensor(braiding(a, c), id(b)))
+      ]
+    }
+  }
+  
+  --[[
+    SymmetricLinear adds symmetry to the braided structure.
+  ]]--
+  SymmetricLinear: BraidedLinear & {
+    -- Additional laws
+    laws: {
+      -- Symmetry: braiding is an involution
+      symmetry: forall [a b ->
+        braiding(a, b) |> compose(braiding(b, a)) teq id(a o* b)
+      ]
+    }
+  }
+  
+  --[[
+    ClosedLinear adds closure to the symmetric monoidal structure,
+    providing internal hom objects.
+  ]]--
+  ClosedLinear: SymmetricLinear & {
+    -- Linear function space (internal hom)
+    linear_arrow: [a b -> a -o> b],
+    
+    -- Currying: (a o* b) -o> c =~ a -o> (b -o> c)
+    curry: forall [a b c -> 
+      {
+        forward: [!((a o* b) -o> c) -o> (a -o> (b -o> c))],
+        reverse: [!(a -o> (b -o> c)) -o> ((a o* b) -o> c)]
+      }
+    ],
+    
+    -- Evaluation: (a -o> b) o* a -o> b
+    eval: forall [a b -> [!((a -o> b) o* a) -o> b]],
+    
+    -- Additional laws
+    laws: {
+      -- Curry/uncurry are inverses
+      curry_uncurry: forall [a b c f ->
+        curry(a, b, c)(f) |> uncurry(a, b, c) teq f
+      ],
+      
+      uncurry_curry: forall [a b c g ->
+        uncurry(a, b, c)(g) |> curry(a, b, c) teq g
+      ],
+      
+      -- Evaluation naturality
+      eval_naturality: forall [a b c d f g ->
+        tensor(linear_map(f, g), f) |> compose(eval(b, d)) teq
+        eval(a, c) |> compose(g)
+      ]
+    }
+  }
+  
+  --------------------------------------------------
+  -- Linear Category Operations
+  --------------------------------------------------
+  
+  --[[
+    The objects of the linear category (linear types).
+  ]]--
+  objects: [LinearCategory -> LinearType]
+  
+  --[[
+    The morphisms of the linear category (linear functions).
+  ]]--
+  morphisms: [LinearCategory -> (!a -o> b)]
+  
+  --[[
+    The domain of a linear function.
+  ]]--
+  dom: (!a -o> b) -> a
+  
+  --[[
+    The codomain of a linear function.
+  ]]--
+  cod: (!a -o> b) -> b
+  
+  --[[
+    Composition of linear functions.
+  ]]--
+  compose: (!a -o> b) -> (!b -o> c) -> (!a -o> c) [f g ->
+    [!x -o> x |> f |> g]
+  ]
+  
+  --[[
+    Identity linear function.
+  ]]--
+  id: a -> (!a -o> a) [a ->
+    [!x -o> x]
+  ]
+  
+  --[[
+    Tensor product of types.
+  ]]--
+  tensor: a -> b -> (a o* b) [a b ->
+    {left: a, right: b}
+  ]
+  
+  --[[
+    Unit object for tensor product.
+  ]]--
+  unit: T.Unit
+  
+  --[[
+    Associator for tensor product.
+  ]]--
+  assoc: a -> b -> c -> {
+    forward: !((a o* b) o* c) -o> (a o* (b o* c)),
+    reverse: !(a o* (b o* c)) -o> ((a o* b) o* c)
+  }
+  
+  --[[
+    Symmetry (braiding) for tensor product.
+  ]]--
+  sym: a -> b -> {
+    forward: !(a o* b) -o> (b o* a),
+    reverse: !(b o* a) -o> (a o* b)
+  }
+  
+  --[[
+    Braiding natural transformation.
+  ]]--
+  braiding: a -> b -> {
+    forward: !(a o* b) -o> (b o* a),
+    reverse: !(b o* a) -o> (a o* b)
+  }
+  
+  --[[
+    Linear lambda abstraction.
+  ]]--
+  lam: a -> b -> (a -> b) -> (!a -o> b) [a b f ->
+    [!x -o> f(x)]
+  ]
+  
+  --[[
+    Lambda abstraction for linear functions.
+  ]]--
+  lambda: a -> b -> (a -> b) -> (!a -o> b) [a b f ->
+    [!x -o> f(x)]
+  ]
+  
+  --[[
+    Lambda abstraction specifically for linear functions.
+  ]]--
+  linear_lambda: a -> b -> (!a -o> b) -> (!a -o> b) [a b f ->
+    f
+  ]
+  
+  --[[
+    Curry a linear function.
+  ]]--
+  curry: a -> b -> c -> (!((a o* b) -o> c) -o> (a -o> (b -o> c))) [a b c f ->
+    [!x -o> [!y -o> f(!(x o* y))]]
+  ]
+  
+  --[[
+    Uncurry a linear function.
+  ]]--
+  uncurry: a -> b -> c -> (!(a -o> (b -o> c)) -o> ((a o* b) -o> c)) [a b c f ->
+    [!(p) -o> let {x, y} = p in f(!x)(!y)]
+  ]
+  
+  --[[
+    Linear function application.
+  ]]--
+  apply: (!a -o> b) -> !a -o> b [f x ->
+    f(x)
+  ]
+  
+  --[[
+    Linear function application with explicit tensor product.
+  ]]--
+  linear_apply: !((!a -o> b) o* !a) -o> b [p ->
+    let {f, x} = p in f(x)
+  ]
+  
+  --[[
+    Fmap for linear functions.
+  ]]--
+  linear_map: (a -> b) -> (c -> d) -> ((!a -o> c) -> (!b -o> d)) [f g h ->
+    [!x -o> h(!(f(x))) |> g]
+  ]
+
+  --------------------------------------------------
+  -- Linear Category Laws
+  --------------------------------------------------
+  
+  --[[
+    Composition law: composition is associative.
+  ]]--
+  law.composition: forall [f g h -> compose(compose(f, g), h) teq compose(f, compose(g, h))]
+  
+  --[[
+    Identity law: identity functions act as units for composition.
+  ]]--
+  law.identity: forall [f -> compose(id, f) teq f and compose(f, id) teq f]
+  
+  --[[
+    Linearity law: linear functions use their inputs exactly once.
+  ]]--
+  law.linearity: forall [f x -> f(!x) |> resource_consumed_exactly_once]
+  
+  --[[
+    No-copy law: linear resources cannot be duplicated.
+  ]]--
+  law.no_copy: forall [x -> let !y = !x in {!y, !y} |> type_error]
+  
+  --[[
+    No-discard law: linear resources cannot be discarded.
+  ]]--
+  law.no_discard: forall [x -> let !y = !x in unit |> type_error]
+  
+  --[[
+    Tensor product law: tensor product is a bifunctor.
+  ]]--
+  law.tensor_product: forall [f g h j ->
+    tensor(compose(f, g), compose(h, j)) teq compose(tensor(f, h), tensor(g, j))
+  ]
+  
+  --[[
+    Associativity law: tensor product is associative up to isomorphism.
+  ]]--
+  law.associativity: forall [a b c ->
+    (a o* b) o* c teq a o* (b o* c)
+  ]
+  
+  --[[
+    Symmetry law: tensor product is symmetric up to isomorphism.
+  ]]--
+  law.symmetry: forall [a b ->
+    a o* b teq b o* a
+  ]
+  
+  --[[
+    Braiding law: braiding is a natural isomorphism.
+  ]]--
+  law.braiding: forall [a b -> 
+    braiding(a, b).forward |> compose(braiding(b, a).forward) teq id(a o* b)
+  ]
+  
+  --[[
+    Closure law: linear function space provides internal hom objects.
+  ]]--
+  law.closure: forall [a b c ->
+    HomLinear(a o* b, c) teq HomLinear(a, b -o> c)
+  ]
+  
+  --[[
+    Curry-uncurry law: currying and uncurrying are inverse operations.
+  ]]--
+  law.curry_uncurry: forall [a b c f ->
+    curry(a, b, c)(f) |> uncurry(a, b, c) teq f and
+    uncurry(a, b, c)(curry(a, b, c)(f)) teq f
+  ]
+
+  --------------------------------------------------
+  -- Linear-Theory Category Mappings
+  --------------------------------------------------
+  
+  --[[
+    Maps from the linear category to the category theory domain
+  ]]--
+  to_theory: LinearCategory -> @Cata.Theory.Category [linear_cat ->
+    let theory_cat = @Cata.Theory.new({}, {}) in
+    
+    -- Map objects
+    let theory_with_objects = linear_cat.objects |> fold [cat obj ->
+      @Cata.Theory.add_object(cat, obj)
+    ] theory_cat in
+    
+    -- Map morphisms
+    let theory_with_morphisms = linear_cat.morphisms |> fold [cat morph ->
+      @Cata.Theory.add_morphism(cat, morph, dom(morph), cod(morph))
+    ] theory_with_objects in
+    
+    -- Add monoidal structure
+    let theory_with_monoidal = theory_with_morphisms |> @Cata.Theory.add_monoidal_structure(
+      tensor, unit, braiding
+    ) in
+    
+    theory_with_monoidal
+  ]
+  
+  --[[
+    Creates a linear category from a category theory domain
+  ]]--
+  from_theory: @Cata.Theory.Category -> LinearCategory [theory_cat ->
+    {
+      objects: theory_cat.objects |> linear_type_from,
+      morphisms: theory_cat.morphisms |> linear_morphism_from,
+      dom: theory_cat.dom,
+      cod: theory_cat.cod,
+      id: theory_cat.id |> linear_morphism_from,
+      compose: [f g -> theory_cat.compose(linear_morphism_to(f), linear_morphism_to(g)) |> linear_morphism_from],
+      unit: theory_cat.unit |> linear_type_from,
+      tensor: [a b -> theory_cat.tensor(linear_type_to(a), linear_type_to(b)) |> linear_type_from],
+      linear_arrow: [a b -> theory_cat.internal_hom(linear_type_to(a), linear_type_to(b)) |> linear_type_from],
+      laws: theory_cat.laws
+    }
+  ]
+
+  --------------------------------------------------
+  -- Linear-Wire Category Mappings
+  --------------------------------------------------
+  
+  --[[
+    Maps from the linear category to the wiring diagram domain
+  ]]--
+  to_wire: LinearCategory -> @Wire.Category [linear_cat ->
+    let wire_cat = @Wire.new() in
+    
+    -- Map objects (types become boxes)
+    let wire_with_objects = linear_cat.objects |> fold [cat obj ->
+      @Wire.add_box(cat, {type: obj})
+    ] wire_cat in
+    
+    -- Map morphisms (linear functions become wiring connections)
+    let wire_with_morphisms = linear_cat.morphisms |> fold [cat morph ->
+      let dom_box = @Wire.get_box_by_type(cat, dom(morph)) in
+      let cod_box = @Wire.get_box_by_type(cat, cod(morph)) in
+      let port_in = @Wire.add_port(dom_box, :in) in
+      let port_out = @Wire.add_port(cod_box, :out) in
+      @Wire.connect(cat, port_out, port_in)
+    ] wire_with_objects in
+    
+    wire_with_morphisms
+  ]
+  
+  --[[
+    Creates a linear category from a wiring diagram
+  ]]--
+  from_wire: @Wire.Category -> LinearCategory [wire_cat ->
+    {
+      objects: wire_cat |> @Wire.get_boxes |> map [b -> b.type] |> linear_type_from,
+      morphisms: wire_cat |> @Wire.get_connections |> map [c -> 
+        let in_box = @Wire.box(c.in_port) in
+        let out_box = @Wire.box(c.out_port) in
+        linear_morphism_from(in_box.type, out_box.type)
+      ],
+      dom: [f -> f |> linear_morphism_to |> @Wire.connection_dom |> box_type],
+      cod: [f -> f |> linear_morphism_to |> @Wire.connection_cod |> box_type],
+      id: [a -> a |> [a -> a |> @Wire.id_connection] |> linear_morphism_from],
+      compose: [f g -> 
+        f |> linear_morphism_to |> @Wire.compose(g |> linear_morphism_to) |> linear_morphism_from
+      ],
+      unit: wire_cat |> @Wire.get_unit_box |> box_type |> linear_type_from,
+      tensor: [a b -> 
+        a |> linear_type_to |> @Wire.tensor(b |> linear_type_to) |> linear_type_from
+      ],
+      linear_arrow: [a b -> 
+        a |> linear_type_to |> @Wire.function_box(b |> linear_type_to) |> box_type |> linear_type_from
+      ],
+      laws: wire_cat.laws
+    }
+  ]
 
   --------------------------------------------------
   -- Structural Mapping Definitions
   --------------------------------------------------
 
   --[[
-    StructuralMapping maps between categorical structures
-    preserving selected laws and properties
+    StructuralMapping defines a reusable interface for transformations BETWEEN categories.
+    
+    Unlike the "structure" block (which declares what THIS category IS):
+    - StructuralMapping is a tool for building transformations between different categories
+    - It's an abstract interface, not a concrete implementation declaration
+    - It contains components for mapping objects, morphisms, and laws
+    - It supports various kinds of mappings (linear, consuming, preserving)
+    - It's used to implement actual transformations like to_theory and from_wire
+    
+    Think of "structure" as "what I am" versus StructuralMapping as "how I transform into 
+    something else or transform something else into me".
   ]]--
   StructuralMapping: {
     objects: ObjectMap,

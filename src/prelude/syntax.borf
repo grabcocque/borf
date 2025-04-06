@@ -666,13 +666,29 @@
   ]
 
   --[[
+    Apply a series of rules to rewrite an expression
+  ]]--
+  rewrite: [!Rule] * !Expr -o> !Expr [rules expr ->
+    rules |> fold_expr [e rule ->
+      let {matched, bindings} = match_and_extract(rule.pattern, e) in
+      if matched {
+        let template = rule.template |> internal_clone in
+        let result = template |> substitute(bindings) in
+        result
+      } else {
+        e
+      }
+    ] expr
+  ]
+
+  --[[
     Internal helper functions (not exposed in the interface)
   ]]--
   internal_parse: S -o> !Expr
   internal_eval: !Expr -o> Any
   internal_clone: !Expr -o> !Expr
   is_different_from: !Expr * !Expr -o> (!Expr * !Bool)
-  bind_pattern: !Pattern * !Expr -o> {!Symbol: !Expr}
+  match_and_extract: !Pattern * !Expr -o> {!Symbol: !Expr}
   append_string: S * S -o> S
   add_key: {k: v} * k * v -o> {k: v}
   has_key: {k: v} * k -o> !Bool

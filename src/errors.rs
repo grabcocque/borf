@@ -153,6 +153,18 @@ pub enum ParseError {
         location: String,
     },
 
+    #[error("Legacy Syntax Error: Illegal comma at {location}")]
+    #[diagnostic(code(borf::parser::legacy_comma))]
+    LegacyComma {
+        #[source_code]
+        src: Arc<miette::NamedSource<String>>,
+        #[label("legacy comma - not valid in modern Borf")]
+        span: SourceSpan,
+        location: String,
+        #[help]
+        help_message: String,
+    },
+
     #[error("Multiple errors found")]
     #[diagnostic(code(borf::parser::multiple_errors))]
     MultipleErrors {
@@ -304,6 +316,17 @@ impl Clone for ParseError {
                 found_rule: found_rule.clone(),
                 span: *span,
                 location: location.clone(),
+            },
+            ParseError::LegacyComma {
+                src,
+                span,
+                location,
+                help_message,
+            } => ParseError::LegacyComma {
+                src: Arc::clone(src),
+                span: *span,
+                location: location.clone(),
+                help_message: help_message.clone(),
             },
             ParseError::MultipleErrors { errors } => ParseError::MultipleErrors {
                 errors: errors.clone(),
@@ -474,6 +497,7 @@ impl ParseError {
             ParseError::InvalidMapKey { .. } => false,
             ParseError::InvalidMapPatternKey { .. } => false,
             ParseError::InvalidTypePattern { .. } => false,
+            ParseError::LegacyComma { .. } => false,
             // Aggregate/System errors
             ParseError::MultipleErrors { .. } => false, // Or maybe recoverable if sub-errors are?
             ParseError::Io(_) => false,

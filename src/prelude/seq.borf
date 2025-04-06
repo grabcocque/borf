@@ -26,13 +26,9 @@
     Core types defined in the sequence module
   ]]--
   typ: {
-    Seq
-    !Transient
-    Reducer
-    Transducer
-    Reducing
-    Completing
-    Reduced
+    !Seq -- Linear sequence type
+    !Transducer -- Linear transformation of reduction functions
+    Reducing Completing Transducable Collection Foldable Mappable
 
     -- Structural mappings and interfaces
     Collection
@@ -52,7 +48,10 @@
     Core operators
   ]]--
   op: {
-    >== -- Transducer composition
+    ++ -- Sequence concatenation
+    -- -- Sequence difference
+    &  -- Sequence intersection
+    |  -- Sequence union
     =>> -- Threading through transducer
 
     -- Structural operators
@@ -65,36 +64,48 @@
     Core functions for sequence manipulation
   ]]--
   fn: {
-    -- Basic sequence operations
-    empty cons head tail is_empty map filter zip
-    fold concat reverse range
-    from_list to_list
-    take drop
-    any all length
+    -- Constructors
+    empty singleton cons generate of
 
-    -- Reducer operations
-    reduce reducing reduce_kv completed reduced? ensure_reduced unreduced
-    fold_r
+    -- Accessors
+    head tail get at length is_empty
+
+    -- Common Transformations
+    map filter take drop take_while drop_while
+    concat reverse append prepend slice partition group_by
+    scan transpose flatten uniquify shuffle
+    zip zip_with unzip fold reduce collect
+
+    -- Predicates
+    any all contains count
+
+    -- Indexing
+    find find_index first last index_of indices_of
+
+    -- Conversions
+    to_list from_list to_set from_set
+    to_map from_map range repeat to_string
+
+    -- Zippers
+    zipper next prev up down top focus insert remove
+
+    -- Specialized operations
+    sort sort_by min max sum product
+    grouping chunk sliding split join
+    intersperse dedup deduplicate
 
     -- Transducer operations
-    transduce compose_xf into xform mapping filtering taking
-    dropping partitioning chunking flattening cat interposing
-    deduplicate keeping indexed
+    transduce completing mapping filtering reducing
+    mapping filtering taking dropping scanning partitioning
 
-    -- Transient operations
-    as_transient persistent! conj! assoc! disj!
+    -- Laws and theorems
+    law.empty_is_empty law.empty_length_zero
+    law.append_is_associative law.prepend_is_associative
+    law.map_identity law.map_composition law.filter_identity
+    law.fold_assoc law.transform_identity law.transform_composition
 
-    -- Structural mapping operations
-    struct_map struct_fold struct_transform
-    seq_as list_as map_as
-
-    -- Linear transformation operations
-    linearly transform_linearly consuming
-    linear_fold linear_map linear_filter
-
-    -- Structural laws
-    law.preservation law.reflection law.invariant_mapping
-    law.structure_identity law.structure_composition
+    -- Structural mapping functions
+    to_graph from_graph to_wire from_wire to_net from_net
   }
 
   --[[
@@ -115,7 +126,7 @@
   deps: {
     (@Seq, @Prim, true),
     (@Seq, @T, false),
-    (@Seq, @Cat, true),
+    (@Seq, @Theory, true),
     (@Seq, @Cata, true),
     (@Seq, @Graph, true),  -- Add dependency on Graph module
     (@Seq, @Wire, true),  -- Add dependency on Wire module
@@ -141,9 +152,9 @@
     id = [a -> [x -> x]],              -- Identity is the identity function
     compose = [f g -> [x -> x |> g |> f]],  -- Composition is function composition
 
-    -- Monad structure
-    bind = [m f -> m |> fold [acc x -> acc ++ f(x)] empty],
-    return = [x -> cons(x, empty)],
+    -- Linear transformation structure
+    transform = [!xs -o> f -> xs |> fold [acc x -> acc ++ f(x)] empty],
+    singleton = [x -> cons(x, empty)],
 
     -- Functor structure
     fmap = map,
@@ -160,10 +171,11 @@
     law.fmap_id = [xs -> map(id, xs) == xs],
     law.fmap_compose = [f g xs -> map(compose(f, g), xs) == compose(map(f), map(g))(xs)],
 
-    -- Monad laws
-    law.monad_left_id = [a f -> bind(return(a), f) == f(a)],
-    law.monad_right_id = [m -> bind(m, return) == m],
-    law.monad_assoc = [m f g -> bind(bind(m, f), g) == bind(m, [x -> bind(f(x), g)])]
+    -- Linear transformation laws
+    law.transform_identity = [!xs -o> xs |> transform(singleton) teq xs],
+    law.transform_composition = [!xs -o> f g ->
+      xs |> transform(f) |> transform(g) teq xs |> transform([x -> f(x) |> transform(g)])
+    ]
   }
 
   --[[
@@ -246,11 +258,11 @@
   ]]--
   transducer_structure: {
     -- Mapping Transducer to morphisms in Category
-    Cat.M = Transducer,
-    Cat.dom = [t -> t.domain],
-    Cat.cod = [t -> t.codomain],
-    Cat.id = [_ -> [rf -> rf]],
-    Cat.compose = [t1 t2 -> t1 >== t2]
+    Theory.M = Transducer,
+    Theory.dom = [t -> t.domain],
+    Theory.cod = [t -> t.codomain],
+    Theory.id = [_ -> [rf -> rf]],
+    Theory.compose = [t1 t2 -> t1 >== t2]
   }
 
   --[[

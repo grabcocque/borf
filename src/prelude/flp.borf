@@ -34,6 +34,43 @@
 
   vis: E |> [e -> true]
 
+  --------------------------------------------------
+  -- Structure Mapping to Monad Category
+  --------------------------------------------------
+  
+  --[[
+    Structure mapping that explicitly connects the Flp module to the 
+    categorical framework as a Monad. This mapping establishes @Flp.Result
+    as a proper monad with appropriate return/unit and bind operations.
+  ]]--
+  structure: {
+    -- Map Flp to MonadCategory
+    objects: T.Type_0,
+    morphisms: [a b -> (a -> b)],
+    
+    -- Base category structure
+    dom: [f -> f.domain],
+    cod: [f -> f.codomain],
+    id: [a -> [x -> x]],
+    compose: [f g -> [x -> g(f(x))]],
+    
+    -- Functor structure (Result is a functor)
+    functor: [a -> !Result(a)],
+    fmap: [f -> [r -> r |> map(f)]],
+    
+    -- Monad structure
+    unit: [a -> [x -> ok(x)]],             -- return/pure operation (wraps a value)
+    bind: [ma f -> ma |> and_then(f)],     -- bind/flatMap operation (chains computations)
+    
+    -- Applicative structure
+    pure: [a -> [x -> ok(x)]],
+    ap: [mf mx -> combine(mf, mx) |> map([pair -> let {f, x} = pair in f(x)])],
+    
+    -- Monoid structure for error accumulation
+    empty: [a -> ok(a)],
+    append: [r1 r2 -> combine(r1, r2)]
+  }
+
   --[[
     !Error represents a structured error with a code and a message.
     The code can be any type, allowing for flexibility (e.g., integer, symbol, string).

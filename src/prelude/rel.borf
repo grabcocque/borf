@@ -80,6 +80,37 @@
   deps: {
     (@R, @T, true)
   }
+  
+  --------------------------------------------------
+  -- Structure Mapping to Category
+  --------------------------------------------------
+  
+  structure: {
+    -- Map Relation to Category
+    objects: {a}, -- Sets as objects
+    morphisms: (a * a -> Bool), -- Relations as morphisms
+    dom: [r -> r.domain],
+    cod: [r -> r.codomain],
+    id: [a -> [x y -> x == y]], -- Identity relation
+    compose: [r s -> [x z -> exists(y, r(x, y) && s(y, z))]], -- Relation composition
+    
+    -- For equivalence relations, additional structure
+    reflexive: [r -> forall(x, r(x, x))],
+    symmetric: [r -> forall(x y, r(x, y) -> r(y, x))],
+    transitive: [r -> forall(x y z, r(x, y) && r(y, z) -> r(x, z))],
+    
+    -- For preorders and partial orders
+    antisymmetric: [r -> forall(x y, r(x, y) && r(y, x) -> x == y)],
+    
+    -- For posets, additional structure mapping
+    meets: [r -> [x y -> meet(r, x, y)]], -- Greatest lower bound
+    joins: [r -> [x y -> join(r, x, y)]], -- Least upper bound
+    
+    -- For relation operations
+    union: [r s -> [x y -> r(x, y) || s(x, y)]],
+    intersection: [r s -> [x y -> r(x, y) && s(x, y)]],
+    complement: [r -> [x y -> !r(x, y)]]
+  }
 
   --[[
     Core Relations
@@ -154,32 +185,32 @@
   ]]--
 
   --[[
-    Composes two relations: (R ∘ S)(x,z) = ∃y. R(x,y) ∧ S(y,z)
+    Composes two relations: (R o S)(x,z) = exists y. R(x,y) and S(y,z)
   ]]--
   compose: (a * b -> Bool) * (b * c -> Bool) -> (a * c -> Bool)
 
   --[[
-    Creates the inverse of a relation: R⁻¹(y,x) = R(x,y)
+    Creates the inverse of a relation: R^-1(y,x) = R(x,y)
   ]]--
   inverse: (a * b -> Bool) -> (b * a -> Bool)
 
   --[[
-    Restricts a relation to a subset: R|₍ₛ₎(x,y) = R(x,y) ∧ x∈S ∧ y∈S
+    Restricts a relation to a subset: R|(S)(x,y) = R(x,y) and x in S and y in S
   ]]--
   restrict: (a * a -> Bool) * {a} -> (a * a -> Bool)
 
   --[[
-    Creates the union of two relations: (R ∪ S)(x,y) = R(x,y) ∨ S(x,y)
+    Creates the union of two relations: (R union S)(x,y) = R(x,y) or S(x,y)
   ]]--
   union: (a * a -> Bool) * (a * a -> Bool) -> (a * a -> Bool)
 
   --[[
-    Creates the intersection of two relations: (R ∩ S)(x,y) = R(x,y) ∧ S(x,y)
+    Creates the intersection of two relations: (R intersect S)(x,y) = R(x,y) and S(x,y)
   ]]--
   intersection: (a * a -> Bool) * (a * a -> Bool) -> (a * a -> Bool)
 
   --[[
-    Creates the complement of a relation: (¬R)(x,y) = ¬(R(x,y))
+    Creates the complement of a relation: (not R)(x,y) = not(R(x,y))
   ]]--
   complement: (a * a -> Bool) -> (a * a -> Bool)
 
@@ -188,22 +219,22 @@
   ]]--
 
   --[[
-    Checks if a relation is reflexive: ∀x. R(x,x)
+    Checks if a relation is reflexive: forall x. R(x,x)
   ]]--
   is_reflexive: (a * a -> Bool) * {a} -> Bool
 
   --[[
-    Checks if a relation is symmetric: ∀x,y. R(x,y) -> R(y,x)
+    Checks if a relation is symmetric: forall x,y. R(x,y) -> R(y,x)
   ]]--
   is_symmetric: (a * a -> Bool) * {a} -> Bool
 
   --[[
-    Checks if a relation is transitive: ∀x,y,z. R(x,y) ∧ R(y,z) -> R(x,z)
+    Checks if a relation is transitive: forall x,y,z. R(x,y) and R(y,z) -> R(x,z)
   ]]--
   is_transitive: (a * a -> Bool) * {a} -> Bool
 
   --[[
-    Checks if a relation is antisymmetric: ∀x,y. R(x,y) ∧ R(y,x) -> x = y
+    Checks if a relation is antisymmetric: forall x,y. R(x,y) and R(y,x) -> x = y
   ]]--
   is_antisymmetric: (a * a -> Bool) * {a} -> Bool
 
@@ -227,7 +258,7 @@
 
   --[[
     Checks if a relation is a total order:
-    partial order where ∀x,y. R(x,y) ∨ R(y,x)
+    partial order where forall x,y. R(x,y) or R(y,x)
   ]]--
   is_total_order: (a * a -> Bool) * {a} -> Bool
 
@@ -236,18 +267,18 @@
   ]]--
 
   --[[
-    Creates the reflexive closure of a relation: R' = R ∪ {(x,x) | x ∈ domain}
+    Creates the reflexive closure of a relation: R' = R union {(x,x) | x in domain}
   ]]--
   reflexive_closure: (a * a -> Bool) -> (a * a -> Bool)
 
   --[[
-    Creates the symmetric closure of a relation: R' = R ∪ R⁻¹
+    Creates the symmetric closure of a relation: R' = R union R^-1
   ]]--
   symmetric_closure: (a * a -> Bool) -> (a * a -> Bool)
 
   --[[
     Creates the transitive closure of a relation:
-    R' = R ∪ (R ∘ R) ∪ (R ∘ R ∘ R) ∪ ...
+    R' = R union (R o R) union (R o R o R) union ...
   ]]--
   transitive_closure: (a * a -> Bool) -> (a * a -> Bool)
 
@@ -259,7 +290,7 @@
 
   --[[
     Creates a preorder from a function:
-    R(x,y) = (f(x) ≤ f(y))
+    R(x,y) = (f(x) <= f(y))
   ]]--
   preorder_from_function: (a -> b) -> (a * a -> Bool)
 

@@ -81,7 +81,7 @@
 
   deps: {
     (@Wire, @Grph, true),  -- Add dependency on Graph module
-    (@Wire, @Cat, true),   -- Add dependency on Cat module
+    (@Wire, @Theory, true),   -- Add dependency on Theory module
     (@Wire, @INet, true)    -- Add dependency on INet module
   }
 
@@ -361,18 +361,18 @@
   ]]--
   wire_category_mapping: {
     -- Object mappings
-    Wire.Box = Cat.O,                  -- Boxes are objects
-    Wire.Diagram = Cat.M,              -- Diagrams are morphisms
+    Wire.Box = Theory.O,                  -- Boxes are objects
+    Wire.Diagram = Theory.M,              -- Diagrams are morphisms
 
     -- Structural mappings
-    Wire.compose = Cat.,               -- Sequential composition is morphism composition
-    Wire.tensor_compose = Cat.tensor,  -- Parallel composition is tensor product
-    Wire.id = Cat.id,                  -- Identity wiring is identity morphism
+    Wire.compose = Theory.compose,        -- Sequential composition is morphism composition
+    Wire.tensor_compose = Theory.tensor,  -- Parallel composition is tensor product
+    Wire.id = Theory.id,                  -- Identity wiring is identity morphism
 
     -- Law mappings
-    Wire.law.composition_associativity = Cat.law.associativity,
-    Wire.law.identity_unit = Cat.law.id_right_neutral,
-    Wire.law.tensor_associativity = Cat.law.tensor_associativity,
+    Wire.law.composition_associativity = Theory.law.associativity,
+    Wire.law.identity_unit = Theory.law.id_right_neutral,
+    Wire.law.tensor_associativity = Theory.law.tensor_associativity,
 
     -- Linear transformation functions
     to_category = [!d -o>
@@ -448,7 +448,7 @@
 
   --[[
     Wiring function - connects ports together
-    w is an involution (w ∘ w = id)
+    w is an involution (w o w = id)
   ]]--
   w: Port -> Port
 

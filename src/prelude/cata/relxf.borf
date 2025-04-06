@@ -1,0 +1,272 @@
+--[[
+  Relation Theory Transformations
+
+  This module defines transformations between relation theory and other structures,
+  allowing for categorical representation of relations, equivalences, and orders.
+]]--
+
+@RelXf: {
+  typ: {
+    -- Transformation types
+    RelationTransformation Functor Natural Isomorphism
+    
+    -- Specific transformations
+    GraphTransform CategoryTransform SetTransform
+  }
+
+  op: {
+    -- Transformation operators
+    ==> <== <=> ~~
+    
+    -- Relation operators
+    veq: @R.veq,
+    seq: @R.seq,
+    omega: @R.omega,
+    rel: @R.rel
+  }
+
+  fn: {
+    -- Relation transformations
+    to_graph from_graph
+    to_category from_category
+    to_set from_set
+    to_preorder from_preorder
+    
+    -- Mapping functions
+    map_relation map_elements map_properties
+    
+    -- Transformation utilities
+    compose identity invert
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@RelXf, @T, true),       -- Add dependency on Type system
+    (@RelXf, @R, true),       -- Add dependency on Relation module
+    (@RelXf, @Theory, true),  -- Add dependency on Category Theory module
+    (@RelXf, @Graph, true),   -- Add dependency on Graph module
+    (@RelXf, @Std, true)      -- Add dependency on Standard module
+  }
+
+  --------------------------------------------------
+  -- Relation to Graph Transformations
+  --------------------------------------------------
+
+  --[[
+    to_graph transforms a Relation into a Graph structure,
+    where elements become nodes and related pairs become edges.
+  ]]--
+  to_graph: @R.R * {a} -> @Graph.Graph [relation domain ->
+    let graph = @Graph.new_graph() in
+    
+    -- Create nodes for all elements in the domain
+    for elem in domain do
+      @Graph.add_node(graph, elem)
+    end
+    
+    -- Create edges for all related pairs
+    for a in domain do
+      for b in domain do
+        if relation(a, b) then
+          @Graph.add_edge(graph, a, b, "related")
+        end
+      end
+    end
+    
+    graph
+  ]
+
+  --[[
+    from_graph transforms a Graph into a Relation,
+    where edges define the relation between elements.
+  ]]--
+  from_graph: @Graph.Graph -> (@R.R * {a}) [graph ->
+    let domain = {} in
+    
+    -- Extract all nodes as domain elements
+    for node in @Graph.nodes(graph) do
+      domain := domain cup {node}
+    end
+    
+    -- Create relation function based on edges
+    let relation = [a b ->
+      @Graph.has_edge(graph, a, b)
+    ] in
+    
+    (relation, domain)
+  ]
+
+  --------------------------------------------------
+  -- Relation to Category Transformations
+  --------------------------------------------------
+
+  --[[
+    to_category transforms a Relation into a Category,
+    where elements become objects and related pairs become morphisms.
+  ]]--
+  to_category: @R.R * {a} -> @Theory.Category [relation domain ->
+    let cat = @Cata.Theory.new_category() in
+    
+    -- Create objects for all elements in the domain
+    for elem in domain do
+      @Theory.add_object(cat, elem)
+    end
+    
+    -- Create morphisms for all related pairs
+    let morph_id = 0 in
+    for a in domain do
+      for b in domain do
+        if relation(a, b) then
+          let morph = {
+            id: morph_id,
+            name: "rel_" + a.to_string() + "_" + b.to_string(),
+            domain: a,
+            codomain: b
+          } in
+          
+          @Theory.add_morphism(cat, morph, a, b)
+          morph_id := morph_id + 1
+        end
+      end
+    end
+    
+    -- If relation is transitive, add appropriate compositions
+    if @R.is_transitive(relation, domain) then
+      for a in domain do
+        for b in domain do
+          for c in domain do
+            if relation(a, b) and relation(b, c) then
+              if !relation(a, c) then
+                -- This should not happen for a truly transitive relation
+                -- but we'll add the composition explicitly anyway
+                let composed_morph = {
+                  id: morph_id,
+                  name: "comp_" + a.to_string() + "_" + c.to_string(),
+                  domain: a,
+                  codomain: c
+                } in
+                
+                @Theory.add_morphism(cat, composed_morph, a, c)
+                morph_id := morph_id + 1
+              end
+            end
+          end
+        end
+      end
+    end
+    
+    cat
+  ]
+
+  --[[
+    from_category transforms a Category into a Relation,
+    where the existence of morphisms defines the relation.
+  ]]--
+  from_category: @Theory.Category -> (@R.R * {a}) [cat ->
+    let domain = {} in
+    
+    -- Extract all objects as domain elements
+    for obj in @Theory.objects(cat) do
+      domain := domain cup {obj}
+    end
+    
+    -- Create relation function based on the existence of morphisms
+    let relation = [a b ->
+      let morphs = @Theory.get_morphisms(cat, a, b) in
+      morphs.size() > 0
+    ] in
+    
+    (relation, domain)
+  ]
+
+  --------------------------------------------------
+  -- Relation to Set Transformations
+  --------------------------------------------------
+
+  --[[
+    to_set transforms a Relation into a collection of Sets,
+    representing the relation as sets of pairs and its properties.
+  ]]--
+  to_set: @R.R * {a} -> {a * a} [relation domain ->
+    let pairs = {} in
+    
+    -- Create the set of all pairs in the relation
+    for a in domain do
+      for b in domain do
+        if relation(a, b) then
+          pairs := pairs cup {(a, b)}
+        end
+      end
+    end
+    
+    pairs
+  ]
+
+  --[[
+    from_set transforms a Set of pairs into a Relation.
+  ]]--
+  from_set: {a * a} -> (@R.R * {a}) [pairs ->
+    let domain = {} in
+    
+    -- Extract the domain from the pairs
+    for (a, b) in pairs do
+      domain := domain cup {a, b}
+    end
+    
+    -- Create relation function based on pair membership
+    let relation = [a b ->
+      (a, b) in pairs
+    ] in
+    
+    (relation, domain)
+  ]
+
+  --------------------------------------------------
+  -- Relation to Preorder Transformations
+  --------------------------------------------------
+
+  --[[
+    to_preorder transforms a Relation into a Preorder,
+    ensuring reflexivity and transitivity.
+  ]]--
+  to_preorder: @R.R * {a} -> @R.PreOrder [relation domain ->
+    -- Ensure the relation is reflexive
+    let reflexive_rel = if @R.is_reflexive(relation, domain) then
+      relation
+    else
+      @R.reflexive_closure(relation)
+    end in
+    
+    -- Ensure the relation is transitive
+    let preorder_rel = if @R.is_transitive(reflexive_rel, domain) then
+      reflexive_rel
+    else
+      @R.transitive_closure(reflexive_rel)
+    end in
+    
+    -- Create the preorder structure
+    {
+      domain: domain,
+      relation: preorder_rel,
+      compare: [a b -> 
+        if preorder_rel(a, b) then
+          if preorder_rel(b, a) then 0 else -1
+        else
+          if preorder_rel(b, a) then 1 else null
+        end
+      ]
+    }
+  ]
+
+  --[[
+    from_preorder transforms a Preorder into a basic Relation.
+  ]]--
+  from_preorder: @R.PreOrder -> (@R.R * {a}) [preorder ->
+    (preorder.relation, preorder.domain)
+  ]
+} 

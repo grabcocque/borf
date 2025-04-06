@@ -45,6 +45,65 @@
   }
 
   --------------------------------------------------
+  -- Structure Mapping to 2-Category
+  --------------------------------------------------
+  
+  structure: {
+    -- Category of categories is itself a 2-category
+    objects: Cat,
+    morphisms: Functor,
+    twomorphisms: Natural,
+    
+    dom: [f -> f.source],
+    cod: [f -> f.target],
+    id: [c -> {
+      source: c,
+      target: c,
+      map_obj: [o -> o],
+      map_morph: [m -> m]
+    }],
+    
+    compose: [f g -> {
+      source: g.source,
+      target: f.target,
+      map_obj: [o -> g.map_obj(o) |> f.map_obj],
+      map_morph: [m -> g.map_morph(m) |> f.map_morph]
+    }],
+    
+    -- 2-morphism structure
+    vert_dom: [n -> n.source],         -- Vertical domain of natural transformation
+    vert_cod: [n -> n.target],         -- Vertical codomain of natural transformation
+    vert_id: [f -> {                   -- Vertical identity 2-morphism
+      source: f,
+      target: f,
+      components: [o -> f.target.id(f.map_obj(o))]
+    }],
+    vert_compose: [n1 n2 -> {          -- Vertical composition of natural transformations
+      source: n2.source,
+      target: n1.target,
+      components: [o -> n2.components(o) |> n1.target.compose(n1.components(o))]
+    }],
+    horiz_compose: [n1 n2 -> {         -- Horizontal composition of natural transformations
+      source: {
+        source: n2.source.source,
+        target: n1.source.target,
+        map_obj: [o -> n2.source.map_obj(o) |> n1.source.map_obj],
+        map_morph: [m -> n2.source.map_morph(m) |> n1.source.map_morph]
+      },
+      target: {
+        source: n2.target.source,
+        target: n1.target.target,
+        map_obj: [o -> n2.target.map_obj(o) |> n1.target.map_obj],
+        map_morph: [m -> n2.target.map_morph(m) |> n1.target.map_morph]
+      },
+      components: [o -> 
+        n1.target.compose(n1.components(n2.source.map_obj(o)), 
+                          n2.components(o) |> n1.source.map_morph)
+      ]
+    }]
+  }
+
+  --------------------------------------------------
   -- Direct Structural Mappings
   --------------------------------------------------
 
@@ -206,7 +265,7 @@
     -- Object mappings
     Theory.O = Wire.Box,                  -- Objects are boxes
     Theory.M = Wire.Diagram,              -- Morphisms are diagrams
-    Theory. = Wire.compose,              -- Composition is sequential composition
+    Theory.compose = Wire.compose,        -- Composition is sequential composition
 
     -- Structural mappings
     Theory.id = Wire.id,                  -- Identity morphism is identity diagram

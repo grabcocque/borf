@@ -1,0 +1,494 @@
+--[[
+  Redex Transformations
+
+  This module defines transformations between redex systems (modeled as cartesian
+  closed categories) and other categorical structures, enabling representation of
+  reduction systems in various mathematical frameworks.
+]]--
+
+@RedexXf: {
+  typ: {
+    -- Transformation types
+    RedexTransformation Functor Natural Isomorphism
+    
+    -- Specific transformations
+    GraphTransform WireTransform INetTransform CategoryTransform
+    
+    -- Structure transformations
+    CartesianTransform ClosedTransform
+  }
+
+  op: {
+    -- Transformation operators
+    ==> <== <=> ~~
+    
+    -- Redex operators
+    ->: @Redex.->,
+    =>: @Redex.=>,
+    *>: @Redex.*>
+  }
+
+  fn: {
+    -- Redex transformations
+    to_graph from_graph
+    to_wire from_wire
+    to_inet from_inet
+    to_category from_category
+    to_rewrite from_rewrite
+    
+    -- Cartesian transformations
+    to_cartesian from_cartesian
+    product_to_parallel parallel_to_product
+    
+    -- Closed transformations
+    to_closed from_closed
+    exponential_to_higher higher_to_exponential
+    
+    -- Object and morphism mappings
+    map_objects map_morphisms map_rules map_products map_exponentials
+    
+    -- Transformation utilities
+    compose identity invert
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@RedexXf, @T, true),        -- Add dependency on Type system
+    (@RedexXf, @Redex, true),    -- Add dependency on Redex module
+    (@RedexXf, @Theory, true),   -- Add dependency on Category Theory module
+    (@RedexXf, @RW, true),       -- Add dependency on Rewrite System module
+    (@RedexXf, @Graph, true),    -- Add dependency on Graph module
+    (@RedexXf, @Wire, true),     -- Add dependency on Wire module
+    (@RedexXf, @INet, true)      -- Add dependency on Interaction Net module
+  }
+
+  --------------------------------------------------
+  -- Redex to Graph Transformations
+  --------------------------------------------------
+
+  --[[
+    to_graph transforms a Redex system into a Graph structure,
+    where redexes become nodes and reduction paths become edges.
+  ]]--
+  to_graph: @Redex.RedexCategory -> @Graph.Graph [redex_cat ->
+    let graph = @Graph.new_graph() in
+    
+    -- Map redexes to nodes
+    for redex in @Redex.objects(redex_cat) do
+      @Graph.add_node(graph, redex)
+    end
+    
+    -- Map reduction paths to edges
+    for path in @Redex.morphisms(redex_cat) do
+      let source = @Redex.dom(path) in
+      let target = @Redex.cod(path) in
+      @Graph.add_edge(graph, source, target, path)
+    end
+    
+    -- Map product structure to graph (as metadata)
+    for redex in @Redex.objects(redex_cat) do
+      if is_product(redex) then
+        let left = redex.left in
+        let right = redex.right in
+        
+        -- Add special edges to represent product structure
+        @Graph.add_edge(graph, redex, left, "projection_left")
+        @Graph.add_edge(graph, redex, right, "projection_right")
+      end
+    end
+    
+    graph
+  ]
+
+  --[[
+    from_graph transforms a Graph into a Redex system,
+    inferring reduction rules from the graph structure.
+  ]]--
+  from_graph: @Graph.Graph -> @Redex.RedexCategory [graph ->
+    let redex_cat = @Redex.new_category() in
+    
+    -- Map nodes to redexes
+    for node in @Graph.nodes(graph) do
+      let redex = {
+        term: node,
+        rules: [],
+        normal_form: !@Graph.has_outgoing_edges(graph, node)
+      } in
+      @Redex.add_object(redex_cat, redex)
+    end
+    
+    -- Map edges to reduction paths
+    for edge in @Graph.edges(graph) do
+      let source = @Graph.source(graph, edge) in
+      let target = @Graph.target(graph, edge) in
+      
+      -- Create a reduction rule from the edge
+      let rule = {
+        name: edge.label || "rule_from_edge",
+        pattern: source,
+        result: target,
+        conditions: []
+      } in
+      
+      -- Create a reduction path from source to target
+      let path = {
+        source: @Redex.get_object(redex_cat, source),
+        target: @Redex.get_object(redex_cat, target),
+        steps: [{
+          rule: rule,
+          position: [0], -- Default position
+          before: @Redex.get_object(redex_cat, source),
+          after: @Redex.get_object(redex_cat, target)
+        }]
+      } in
+      
+      @Redex.add_morphism(redex_cat, path)
+    end
+    
+    -- Infer product structure from graph
+    for node in @Graph.nodes(graph) do
+      let out_edges = @Graph.outgoing_edges(graph, node) in
+      let projection_edges = filter(out_edges, [e -> e.label == "projection_left" or e.label == "projection_right"]) in
+      
+      if projection_edges.length == 2 then
+        let left_target = @Graph.target(graph, find(projection_edges, [e -> e.label == "projection_left"])) in
+        let right_target = @Graph.target(graph, find(projection_edges, [e -> e.label == "projection_right"])) in
+        
+        -- Mark this node as a product
+        let product_redex = @Redex.get_object(redex_cat, node) in
+        product_redex.is_product = true
+        product_redex.left = @Redex.get_object(redex_cat, left_target)
+        product_redex.right = @Redex.get_object(redex_cat, right_target)
+      end
+    end
+    
+    redex_cat
+  ]
+
+  --------------------------------------------------
+  -- Redex to Category Transformations
+  --------------------------------------------------
+
+  --[[
+    to_category transforms a Redex system into a Category,
+    where redexes become objects and reduction paths become morphisms.
+  ]]--
+  to_category: @Redex.RedexCategory -> @Theory.Category [redex_cat ->
+    let cat = @Cata.Theory.new_category() in
+    
+    -- Map redexes to objects
+    for redex in @Redex.objects(redex_cat) do
+      @Theory.add_object(cat, redex)
+    end
+    
+    -- Map reduction paths to morphisms
+    for path in @Redex.morphisms(redex_cat) do
+      let source = @Redex.dom(path) in
+      let target = @Redex.cod(path) in
+      @Theory.add_morphism(cat, path, source, target)
+    end
+    
+    -- Map product structure to categorical products
+    if is_cartesian(redex_cat) then
+      @Theory.add_cartesian_structure(cat, 
+        -- Products
+        [a b -> 
+          let product = @Redex.product(a, b) in
+          {
+            object: product,
+            left_projection: @Redex.get_morphism(redex_cat, product, a),
+            right_projection: @Redex.get_morphism(redex_cat, product, b)
+          }
+        ],
+        -- Terminal
+        @Redex.terminal()
+      )
+    end
+    
+    -- Map closed structure to categorical exponentials
+    if is_closed(redex_cat) then
+      @Theory.add_closed_structure(cat,
+        -- Exponentials
+        [a b ->
+          let exp = @Redex.exponential(a, b) in
+          {
+            object: exp,
+            evaluation: @Redex.get_morphism(redex_cat, @Redex.product(exp, a), b),
+            curry: [f -> @Redex.curry(f)]
+          }
+        ]
+      )
+    end
+    
+    cat
+  ]
+
+  --[[
+    from_category transforms a Category into a Redex system.
+  ]]--
+  from_category: @Theory.Category -> @Redex.RedexCategory [cat ->
+    let redex_cat = @Redex.new_category() in
+    
+    -- Map objects to redexes
+    for obj in @Theory.objects(cat) do
+      let redex = {
+        term: obj,
+        rules: [],
+        normal_form: is_terminal(cat, obj)
+      } in
+      @Redex.add_object(redex_cat, redex)
+    end
+    
+    -- Map morphisms to reduction paths
+    for morph in @Theory.morphisms(cat) do
+      let source = @Theory.dom(morph) in
+      let target = @Theory.cod(morph) in
+      
+      -- Create a reduction rule from the morphism
+      let rule = {
+        name: morph.name || "rule_from_morphism",
+        pattern: source,
+        result: target,
+        conditions: []
+      } in
+      
+      -- Create a reduction path from source to target
+      let path = {
+        source: @Redex.get_object(redex_cat, source),
+        target: @Redex.get_object(redex_cat, target),
+        steps: [{
+          rule: rule,
+          position: [0], -- Default position
+          before: @Redex.get_object(redex_cat, source),
+          after: @Redex.get_object(redex_cat, target)
+        }]
+      } in
+      
+      @Redex.add_morphism(redex_cat, path)
+    end
+    
+    -- If category has cartesian structure, map it to redex products
+    if @Theory.is_cartesian(cat) then
+      for obj_a in @Theory.objects(cat) do
+        for obj_b in @Theory.objects(cat) do
+          let product = @Theory.product(cat, obj_a, obj_b) in
+          if product != null then
+            let product_redex = @Redex.get_object(redex_cat, product.object) in
+            product_redex.is_product = true
+            product_redex.left = @Redex.get_object(redex_cat, obj_a)
+            product_redex.right = @Redex.get_object(redex_cat, obj_b)
+          end
+        end
+      end
+    end
+    
+    -- If category has closed structure, map it to redex exponentials
+    if @Theory.is_closed(cat) then
+      for obj_a in @Theory.objects(cat) do
+        for obj_b in @Theory.objects(cat) do
+          let exp = @Theory.exponential(cat, obj_a, obj_b) in
+          if exp != null then
+            let exp_redex = @Redex.get_object(redex_cat, exp.object) in
+            exp_redex.is_exponential = true
+            exp_redex.domain = @Redex.get_object(redex_cat, obj_a)
+            exp_redex.codomain = @Redex.get_object(redex_cat, obj_b)
+          end
+        end
+      end
+    end
+    
+    redex_cat
+  ]
+
+  --------------------------------------------------
+  -- Redex to Wire Transformations
+  --------------------------------------------------
+
+  --[[
+    to_wire transforms a Redex system into a Wiring Diagram,
+    where redexes become boxes and reduction paths become wires.
+  ]]--
+  to_wire: @Redex.RedexCategory -> @Wire.Diagram [redex_cat ->
+    let diagram = @Wire.new_diagram() in
+    
+    -- Map redexes to boxes
+    for redex in @Redex.objects(redex_cat) do
+      let box = @Wire.create_box(redex) in
+      -- Add standard input and output ports
+      let box_with_ports = @Wire.add_ports(box, ["in", "out"]) in
+      @Wire.add_box(diagram, box_with_ports)
+    end
+    
+    -- Map reduction paths to wires
+    for path in @Redex.morphisms(redex_cat) do
+      let source_redex = @Redex.dom(path) in
+      let target_redex = @Redex.cod(path) in
+      
+      let source_box = @Wire.get_box_by_data(diagram, source_redex) in
+      let target_box = @Wire.get_box_by_data(diagram, target_redex) in
+      
+      -- Connect output port of source to input port of target
+      let source_port = @Wire.get_port(source_box, "out") in
+      let target_port = @Wire.get_port(target_box, "in") in
+      
+      @Wire.connect(diagram, source_port, target_port, path)
+    end
+    
+    -- Map product structure to wire diagram structure
+    for redex in @Redex.objects(redex_cat) do
+      if is_product(redex) then
+        let product_box = @Wire.get_box_by_data(diagram, redex) in
+        let left_box = @Wire.get_box_by_data(diagram, redex.left) in
+        let right_box = @Wire.get_box_by_data(diagram, redex.right) in
+        
+        -- Add special ports for product structure
+        @Wire.add_port(product_box, "left_proj")
+        @Wire.add_port(product_box, "right_proj")
+        
+        -- Connect product box to component boxes
+        @Wire.connect(diagram, 
+          @Wire.get_port(product_box, "left_proj"),
+          @Wire.get_port(left_box, "in"),
+          "left_projection"
+        )
+        
+        @Wire.connect(diagram,
+          @Wire.get_port(product_box, "right_proj"),
+          @Wire.get_port(right_box, "in"),
+          "right_projection"
+        )
+      end
+    end
+    
+    diagram
+  ]
+
+  --------------------------------------------------
+  -- Cartesian Structure Transformations
+  --------------------------------------------------
+
+  --[[
+    to_cartesian transforms a category into a cartesian structure,
+    adding products and terminal object.
+  ]]--
+  to_cartesian: @Theory.Category -> @Theory.CartesianCategory [cat ->
+    let cartesian_cat = @Theory.new_cartesian_category() in
+    
+    -- Copy all objects and morphisms
+    for obj in @Theory.objects(cat) do
+      @Theory.add_object(cartesian_cat, obj)
+    end
+    
+    for morph in @Theory.morphisms(cat) do
+      let source = @Theory.dom(morph) in
+      let target = @Theory.cod(morph) in
+      @Theory.add_morphism(cartesian_cat, morph, source, target)
+    end
+    
+    -- Add terminal object
+    let terminal = @Theory.new_object("terminal") in
+    @Theory.add_object(cartesian_cat, terminal)
+    
+    -- Add unique morphism from each object to terminal
+    for obj in @Theory.objects(cat) do
+      let terminal_morph = {
+        name: "to_terminal_" + obj.name,
+        domain: obj,
+        codomain: terminal
+      } in
+      @Theory.add_morphism(cartesian_cat, terminal_morph, obj, terminal)
+    end
+    
+    -- Add products for all pairs of objects
+    for obj_a in @Theory.objects(cat) do
+      for obj_b in @Theory.objects(cat) do
+        let product_obj = {
+          name: "product_" + obj_a.name + "_" + obj_b.name,
+          product_components: [obj_a, obj_b]
+        } in
+        @Theory.add_object(cartesian_cat, product_obj)
+        
+        -- Add projections
+        let proj_left = {
+          name: "proj_left_" + product_obj.name,
+          domain: product_obj,
+          codomain: obj_a
+        } in
+        @Theory.add_morphism(cartesian_cat, proj_left, product_obj, obj_a)
+        
+        let proj_right = {
+          name: "proj_right_" + product_obj.name,
+          domain: product_obj,
+          codomain: obj_b
+        } in
+        @Theory.add_morphism(cartesian_cat, proj_right, product_obj, obj_b)
+      end
+    end
+    
+    cartesian_cat
+  ]
+
+  --[[
+    to_closed transforms a cartesian category into a cartesian closed category,
+    adding exponential objects.
+  ]]--
+  to_closed: @Theory.CartesianCategory -> @Theory.CartesianClosedCategory [cat ->
+    let closed_cat = @Theory.new_cartesian_closed_category() in
+    
+    -- Copy all objects, morphisms, and cartesian structure
+    for obj in @Theory.objects(cat) do
+      @Theory.add_object(closed_cat, obj)
+    end
+    
+    for morph in @Theory.morphisms(cat) do
+      let source = @Theory.dom(morph) in
+      let target = @Theory.cod(morph) in
+      @Theory.add_morphism(closed_cat, morph, source, target)
+    end
+    
+    -- Copy terminal and products
+    @Theory.set_terminal(closed_cat, @Theory.terminal(cat))
+    
+    for obj_a in @Theory.objects(cat) do
+      for obj_b in @Theory.objects(cat) do
+        let product = @Theory.product(cat, obj_a, obj_b) in
+        if product != null then
+          @Theory.set_product(closed_cat, obj_a, obj_b, product.object)
+          @Theory.set_projection_left(closed_cat, product.object, product.left_projection)
+          @Theory.set_projection_right(closed_cat, product.object, product.right_projection)
+        end
+      end
+    end
+    
+    -- Add exponential objects for all pairs of objects
+    for obj_a in @Theory.objects(cat) do
+      for obj_b in @Theory.objects(cat) do
+        let exp_obj = {
+          name: obj_b.name + "^" + obj_a.name,
+          exponential_domain: obj_a,
+          exponential_codomain: obj_b
+        } in
+        @Theory.add_object(closed_cat, exp_obj)
+        
+        -- Add evaluation morphism
+        let product = @Theory.product(cat, exp_obj, obj_a) in
+        if product != null then
+          let eval_morph = {
+            name: "eval_" + exp_obj.name,
+            domain: product.object,
+            codomain: obj_b
+          } in
+          @Theory.add_morphism(closed_cat, eval_morph, product.object, obj_b)
+          @Theory.set_evaluation(closed_cat, obj_a, obj_b, eval_morph)
+        end
+      end
+    end
+    
+    closed_cat
+  ]
+} 

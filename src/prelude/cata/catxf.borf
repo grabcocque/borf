@@ -1,0 +1,255 @@
+--[[
+  Category Theory Transformations
+
+  This module defines transformations between categories and other structures,
+  allowing for rigorous mappings between different categorical frameworks.
+]]--
+
+@CatXf: {
+  typ: {
+    -- Transformation types
+    CategoryTransformation Functor Natural Isomorphism
+    
+    -- Specific transformations
+    GraphTransform WireTransform INetTransform
+  }
+
+  op: {
+    -- Transformation operators
+    ==> <== <=> ~~
+    
+    -- Categorical operators
+    .: @Theory..,
+    *: @Theory.*,
+    tensor: @Theory.tensor,
+    product: @Theory.product
+  }
+
+  fn: {
+    -- Category transformations
+    to_graph from_graph
+    to_wire from_wire
+    to_inet from_inet
+    
+    -- Object and morphism mappings
+    map_objects map_morphisms map_laws
+    
+    -- Transformation utilities
+    compose identity invert
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@CatXf, @T, true),        -- Add dependency on Type system
+    (@CatXf, @Theory, true),   -- Add dependency on Category Theory module
+    (@CatXf, @Cata.Theory, true), -- Add dependency on Categorical theory module
+    (@CatXf, @Graph, true),    -- Add dependency on Graph module
+    (@CatXf, @Wire, true),     -- Add dependency on Wire module
+    (@CatXf, @INet, true)      -- Add dependency on Interaction Net module
+  }
+
+  --------------------------------------------------
+  -- Category to Graph Transformations
+  --------------------------------------------------
+
+  --[[
+    to_graph transforms a Category into a Graph structure,
+    where objects become nodes and morphisms become edges.
+  ]]--
+  to_graph: @Theory.Category -> @Graph.Graph [cat ->
+    let graph = @Graph.new_graph() in
+    
+    -- Map objects to nodes
+    for obj in @Theory.objects(cat) do
+      @Graph.add_node(graph, obj)
+    end
+    
+    -- Map morphisms to edges
+    for morph in @Theory.morphisms(cat) do
+      let dom = @Theory.dom(morph) in
+      let cod = @Theory.cod(morph) in
+      @Graph.add_edge(graph, dom, cod, morph)
+    end
+    
+    graph
+  ]
+
+  --[[
+    from_graph transforms a Graph into a Category structure,
+    inferring categorical structure from the graph topology.
+  ]]--
+  from_graph: @Graph.Graph -> @Theory.Category [graph ->
+    let cat = @Cata.Theory.new_category() in
+    
+    -- Map nodes to objects
+    for node in @Graph.nodes(graph) do
+      @Theory.add_object(cat, node)
+    end
+    
+    -- Map edges to morphisms
+    for edge in @Graph.edges(graph) do
+      let src = @Graph.source(graph, edge) in
+      let tgt = @Graph.target(graph, edge) in
+      @Theory.add_morphism(cat, edge, src, tgt)
+    end
+    
+    -- Add composition structure
+    -- This creates composition by connecting paths in the graph
+    for src in @Graph.nodes(graph) do
+      for mid in @Graph.nodes(graph) do
+        for tgt in @Graph.nodes(graph) do
+          let e1 = @Graph.get_edge(graph, src, mid) in
+          let e2 = @Graph.get_edge(graph, mid, tgt) in
+          
+          if e1 != null and e2 != null then
+            let comp = @Theory.create_composite_morphism(e1, e2) in
+            @Theory.add_morphism(cat, comp, src, tgt)
+          end
+        end
+      end
+    end
+    
+    cat
+  ]
+
+  --------------------------------------------------
+  -- Category to Wire Transformations
+  --------------------------------------------------
+
+  --[[
+    to_wire transforms a Category into a Wiring Diagram,
+    where objects become boxes and morphisms become wires.
+  ]]--
+  to_wire: @Theory.Category -> @Wire.Diagram [cat ->
+    let diagram = @Wire.new_diagram() in
+    
+    -- Map objects to boxes
+    for obj in @Theory.objects(cat) do
+      let box = @Wire.create_box(obj) in
+      -- Add standard input and output ports
+      let box_with_ports = @Wire.add_ports(box, ["in", "out"]) in
+      @Wire.add_box(diagram, box_with_ports)
+    end
+    
+    -- Map morphisms to wires
+    for morph in @Theory.morphisms(cat) do
+      let dom_box = @Wire.get_box_by_type(diagram, @Theory.dom(morph)) in
+      let cod_box = @Wire.get_box_by_type(diagram, @Theory.cod(morph)) in
+      
+      -- Connect output port of domain to input port of codomain
+      let dom_port = @Wire.get_port(dom_box, "out") in
+      let cod_port = @Wire.get_port(cod_box, "in") in
+      
+      @Wire.connect(diagram, dom_port, cod_port, morph)
+    end
+    
+    diagram
+  ]
+
+  --[[
+    from_wire transforms a Wiring Diagram into a Category,
+    reconstructing categorical structure from the wiring layout.
+  ]]--
+  from_wire: @Wire.Diagram -> @Theory.Category [diagram ->
+    let cat = @Cata.Theory.new_category() in
+    
+    -- Map boxes to objects
+    for box in @Wire.boxes(diagram) do
+      @Theory.add_object(cat, box)
+    end
+    
+    -- Map wires to morphisms
+    for wire in @Wire.wires(diagram) do
+      let src_port = @Wire.source_port(wire) in
+      let tgt_port = @Wire.target_port(wire) in
+      
+      let src_box = @Wire.get_box_for_port(diagram, src_port) in
+      let tgt_box = @Wire.get_box_for_port(diagram, tgt_port) in
+      
+      @Theory.add_morphism(cat, wire, src_box, tgt_box)
+    end
+    
+    cat
+  ]
+
+  --------------------------------------------------
+  -- Category to Interaction Net Transformations
+  --------------------------------------------------
+
+  --[[
+    to_inet transforms a Category into an Interaction Net,
+    representing categorical composition as interaction net reduction.
+  ]]--
+  to_inet: @Theory.Category -> @INet.Net [cat ->
+    let net = @INet.new_net() in
+    
+    -- Map objects to agent types
+    for obj in @Theory.objects(cat) do
+      @INet.add_agent_type(net, obj.name, 2)  -- Each object gets input/output
+    end
+    
+    -- Map morphisms to interaction rules
+    for morph in @Theory.morphisms(cat) do
+      let dom = @Theory.dom(morph) in
+      let cod = @Theory.cod(morph) in
+      
+      -- Create an agent representing this morphism
+      let agent_type = morph.name in
+      @INet.add_agent_type(net, agent_type, 2)  -- Input and output ports
+      
+      -- Add the agent to the net
+      let agent = @INet.create_agent(net, agent_type) in
+      
+      -- Create appropriate connection rules for composition
+      @INet.add_rule(net, dom.name, agent_type, (port_pattern, active_pair) -> {
+        -- When domain object connects with this morphism,
+        -- they reduce to a new configuration
+        let result = @INet.create_agent(net, cod.name) in
+        @INet.connect(net, result, active_pair.right)
+      })
+    end
+    
+    net
+  ]
+
+  --[[
+    from_inet transforms an Interaction Net into a Category,
+    extracting categorical structure from interaction rules.
+  ]]--
+  from_inet: @INet.Net -> @Theory.Category [net ->
+    let cat = @Cata.Theory.new_category() in
+    
+    -- Map agent types with arity 2 to objects (input/output)
+    for agent_type in @INet.agent_types(net) do
+      if @INet.arity(agent_type) == 2 then
+        @Theory.add_object(cat, {name: agent_type})
+      end
+    end
+    
+    -- Map interaction rules to morphisms
+    for rule in @INet.rules(net) do
+      let src_type = rule.left_agent_type in
+      let tgt_type = rule.right_agent_type in
+      
+      -- Find corresponding objects
+      let src = @Theory.get_object(cat, {name: src_type}) in
+      let tgt = @Theory.get_object(cat, {name: tgt_type}) in
+      
+      -- Create morphism from the rule
+      let morph = {
+        name: src_type + "_to_" + tgt_type,
+        domain: src,
+        codomain: tgt
+      } in
+      
+      @Theory.add_morphism(cat, morph, src, tgt)
+    end
+    
+    cat
+  ]
+} 

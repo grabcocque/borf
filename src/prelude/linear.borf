@@ -1,0 +1,177 @@
+--[[
+  Core Linear Types System
+
+  This module defines the fundamental linear type abstractions in Borf,
+  implementing the core linear types without the categorical structure extensions.
+  This core module provides the essential resource usage tracking that other modules depend on.
+]]--
+
+@Linear: {
+  typ: {
+    -- Core types for linear operations
+    LinearType LinearArrow LinearTensor Resource Usage
+    
+    -- Resource management
+    Consumed Unconsumed Affine
+  }
+
+  op: {
+    -- Linear operators
+    -o> o* multimap !
+  }
+
+  fn: {
+    -- Linear resource management
+    consume use promote clone drop
+    
+    -- Linear operations
+    linear_apply
+    
+    -- Laws
+    law.linearity law.no_copy law.no_discard
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Linear, @T, true)     -- Add dependency on Type system
+  }
+  
+  --------------------------------------------------
+  -- Structure Mapping to Symmetric Monoidal Closed Category
+  --------------------------------------------------
+  
+  structure: {
+    -- Map Linear to SymmetricMonoidalClosedCategory
+    objects: LinearType,
+    morphisms: [a b -> (!a -o> b)],
+    dom: [f -> f.domain],
+    cod: [f -> f.codomain],
+    id: [a -> [!x -o> x]],
+    compose: [f g -> [!x -o> x |> g |> f]],
+    
+    -- Monoidal structure
+    tensor: [a b -> a o* b],
+    unit: T.Unit,
+    associator: [a b c -> {
+      forward: [!((a o* b) o* c) -o> (a o* (b o* c))],
+      reverse: [!(a o* (b o* c)) -o> ((a o* b) o* c)]
+    }],
+    
+    -- Symmetric structure
+    braiding: [a b -> {
+      forward: [!(a o* b) -o> (b o* a)],
+      reverse: [!(b o* a) -o> (a o* b)]
+    }],
+    
+    -- Closed structure
+    linear_arrow: [a b -> a -o> b],
+    curry: [a b c -> {
+      forward: [!((a o* b) -o> c) -o> (a -o> (b -o> c))],
+      reverse: [!(a -o> (b -o> c)) -o> ((a o* b) -o> c)]
+    }],
+    eval: [a b -> [!((a -o> b) o* a) -o> b]]
+  }
+  
+  --[[
+    LinearType represents types that can be used in linear operations.
+    These types track resource usage to ensure values are used exactly once.
+  ]]--
+  LinearType: T.Type_1
+  
+  --[[
+    LinearArrow represents linear functions that consume their input exactly once.
+  ]]--
+  LinearArrow: {
+    domain: LinearType,
+    codomain: LinearType,
+    lambda: !domain -o> codomain
+  }
+  
+  --[[
+    LinearTensor represents the tensor product of linear types, 
+    combining resources while preserving linearity.
+  ]]--
+  LinearTensor: {
+    left: LinearType,
+    right: LinearType,
+    tensor: left o* right
+  }
+  
+  --[[
+    Usage tracking for linear resources
+  ]]--
+  Usage: {:consumed, :unconsumed}
+  Consumed: {status: "consumed"}
+  Unconsumed: {status: "unconsumed"}
+  
+  --[[
+    Resource represents a linearly tracked value
+  ]]--
+  Resource: {
+    value: Any,
+    usage: Usage
+  }
+  
+  --[[
+    Affine types can be used at most once (can be dropped but not duplicated)
+  ]]--
+  Affine: LinearType & {
+    allow_drop: true,
+    allow_clone: false
+  }
+  
+  --[[
+    Linear operations
+  ]]--
+  
+  -- Consume a resource, marking it as used
+  consume: [!r -> 
+    r.usage := :consumed;
+    r.value
+  ]
+  
+  -- Use a resource without consuming it (for read-only operations)
+  use: [r ->
+    if r.usage == :unconsumed then
+      r.value
+    else
+      error("Attempted to use an already consumed resource")
+    end
+  ]
+  
+  -- Promote a regular value to a linear resource
+  promote: [v -> {value: v, usage: :unconsumed}]
+  
+  -- Clone a resource if allowed by its type
+  clone: [r ->
+    if r.type.allow_clone then
+      {value: r.value, usage: :unconsumed}
+    else
+      error("Attempted to clone a non-clonable resource")
+    end
+  ]
+  
+  -- Drop a resource if allowed by its type
+  drop: [!r ->
+    if r.type.allow_drop then
+      r.usage := :consumed
+    else
+      error("Attempted to drop a non-droppable resource")
+    end
+  ]
+  
+  -- Apply a linear function to a resource
+  linear_apply: [!f !x -> 
+    if x.usage == :unconsumed then
+      let result = f(consume(x)) in
+      promote(result)
+    else
+      error("Attempted to apply a linear function to an already consumed resource")
+    end
+  ]
+}

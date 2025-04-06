@@ -232,8 +232,8 @@
   Effect in T
 
   --[[
-    Establishes the subtyping hierarchy for number types:
-    Natural numbers ⊂ Integers ⊂ Rationals ⊂ Reals ⊂ Complex ⊂ Hyperreals
+    Type Hierarchy
+    Natural numbers subset Integers subset Rationals subset Reals subset Complex subset Hyperreals
   ]]--
   law.base_subtyping: N <:: Z and Z <:: Q and Q <:: R and R <:: C and C <:: H
 

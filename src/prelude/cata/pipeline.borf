@@ -41,7 +41,7 @@
     (@Pipeline, @Cata.Linear, true), -- Add dependency on linear transformations
     (@Pipeline, @Cata.GraphXf, true),  -- Add dependency on graph transformations
     (@Pipeline, @Cata.WireXf, true),   -- Add dependency on wire transformations
-    (@Pipeline, @Cata.NetXf, true),    -- Add dependency on net transformations 
+    (@Pipeline, @Cata.INetXf, true),    -- Add dependency on net transformations 
     (@Pipeline, @Cata.SeqXf, true),    -- Add dependency on sequence transformations
     (@Pipeline, @Cata.SyntaxXf, true)  -- Add dependency on syntax transformations
   }
@@ -155,7 +155,7 @@
     Equivalence transformation operator
     a == b transforms a to b preserving equivalence
   ]]--
-  ==: a * (a -> b) -> b [a f -> assert(a ≡ f(a)) |> [_ -> f(a)]]
+  ==: a * (a -> b) -> b [a f -> assert(a equiv f(a)) |> [_ -> f(a)]]
 
   --------------------------------------------------
   -- Composition Operators
@@ -237,14 +237,14 @@
   ]
 
   --[[
-    Parses a string to a net that's ready for execution
+    Transforms a string directly to a runnable net
   ]]--
-  string_to_runnable_net: S -> Result Net.Net [s ->
-    s |> @Cata.SyntaxXf.string_to_syntax
-      |> @Cata.SyntaxXf.transform_syntax Prim.optimize_transformer
-      |> @Cata.SyntaxXf.syntax_to_net
-      |> [net -> Success {value: net, metadata: {}}]
-      |> Prim.catch [err -> Failure {error: err, context: {}}]
+  string_to_runnable_net: S -o> !Result(!INet.Net) [s ->
+    s |> @Cata.SyntaxXf.string_to_net
+    |> [net -> net |> INet.red]
+    |> [reduced -> reduced |> @Cata.INetXf.net_to_string]
+    |> [result -> Success {value: result, metadata: {}}]
+    |> Prim.catch [err -> Failure {error: err, context: {}}]
   ]
 
   --[[
@@ -253,7 +253,7 @@
   full_pipeline: S -> Result S [s ->
     s |> @Cata.SyntaxXf.string_to_net
       |> [net -> net |> Net.red]
-      |> [reduced -> reduced |> @Cata.NetXf.net_to_string]
+      |> [reduced -> reduced |> @Cata.INetXf.net_to_string]
       |> [result -> Success {value: result, metadata: {}}]
       |> Prim.catch [err -> Failure {error: err, context: {}}]
   ]

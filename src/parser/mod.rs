@@ -607,79 +607,85 @@ pub fn parse_module(
     pair: Pair<Rule>,
     source_name: &Option<String>,
 ) -> Result<Module, Box<ParseError>> {
-    // Ensure the input pair is actually a module_decl rule as expected by this function
-    if pair.as_rule() != Rule::module_decl {
-        return Err(Box::new(ParseError::UnexpectedRule {
-            expected: "module_decl".to_string(),
-            found: format!("{:?}", pair.as_rule()),
-            span: get_span_from_pair(&pair),
-            location: get_location_from_pair(&pair),
-        }));
-    }
+    // Create a context for error collection
+    let mut context = ParserContext::new(pair.as_str(), source_name.clone());
+    context.error_recovery = true;
 
-    let mod_location = loc(&pair, source_name);
-    // Change: No need for `into_inner()` here if pair is already module_decl
-    // let mut inner = pair.into_inner();
+    match pair.as_rule() {
+        Rule::file => {
+            // Find the module declaration
+            let module_decl = pair.into_inner().find(|p| p.as_rule() == Rule::module_decl);
 
-    // Expect module name and body inside module_decl
-    let mut decl_inner = pair.into_inner();
-    let name_pair = decl_inner.next().ok_or_else(|| {
-        Box::new(ParseError::MissingNode {
-            expected: "module name (@Name)".to_string(),
-            span: mod_location
-                .clone()
-                .map_or_else(|| (0, 0).into(), |l| l.to_miette_span()),
-            location: "after module declaration start".to_string(),
-        })
-    })?;
-    let module_name = name_pair.as_str().trim_start_matches('@').to_string();
+            if let Some(module_decl) = module_decl {
+                // Get the module name
+                let mut module_iter = module_decl.into_inner();
+                let module_name = module_iter
+                    .next()
+                    .map(|id| id.as_str().to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
 
-    let mut module = make_module(&module_name);
-    module.location = mod_location;
+                // Get the module body
+                let module_body = module_iter.next().unwrap_or_else(|| {
+                    panic!("Could not find module body for module {}", module_name)
+                });
 
-    // Parse declarations within the module body
-    let body_pair = decl_inner.next().ok_or_else(|| {
-        Box::new(ParseError::MissingNode {
-            expected: "module body ({ ... })".to_string(),
-            span: get_span_from_pair(&name_pair), // Approx span
-            location: "after module name".to_string(),
-        })
-    })?;
+                // Process all declarations in the module body, but also check for illegal commas
+                let mut declarations = Vec::new();
+                let mut has_errors = false;
 
-    if body_pair.as_rule() != Rule::module_body {
-        return Err(Box::new(ParseError::UnexpectedRule {
-            expected: "module_body".to_string(),
-            found: format!("{:?}", body_pair.as_rule()),
-            span: get_span_from_pair(&body_pair),
-            location: get_location_from_pair(&body_pair),
-        }));
-    }
-
-    for item_pair in body_pair.into_inner() {
-        match item_pair.as_rule() {
-            Rule::declaration => {
-                match parse_declaration(item_pair, source_name) {
-                    Ok(decl) => add_declaration(&mut module, decl),
-                    Err(e) => return Err(e), // Propagate parse errors immediately
+                // Process all pairs in the module body
+                for p in module_body.into_inner() {
+                    match p.as_rule() {
+                        Rule::declaration => match parse_declaration(p.clone(), source_name) {
+                            Ok(decl) => declarations.push(decl),
+                            Err(e) => {
+                                context.record_error(&e, &p);
+                                has_errors = true;
+                            }
+                        },
+                        Rule::CATCH_ERROR => {
+                            // Handle illegal comma
+                            handle_illegal_comma(&p, &mut context);
+                            has_errors = true;
+                        }
+                        _ => {} // Skip comments and whitespace
+                    }
                 }
-            }
-            Rule::COMMENT | Rule::MULTILINE_COMMENT | Rule::WHITESPACE => {
-                // Skip comments and whitespace within the body
-                continue;
-            }
-            Rule::EOI => break, // Should not happen inside body normally, but handle
-            _ => {
-                return Err(Box::new(ParseError::UnexpectedRule {
-                    expected: "declaration or comment".to_string(),
-                    found: format!("{:?}", item_pair.as_rule()),
-                    span: get_span_from_pair(&item_pair),
-                    location: get_location_from_pair(&item_pair),
-                }));
+
+                // If there were parsing errors and we're not in recovery mode, return an error
+                if has_errors && !context.error_recovery {
+                    // Collect all errors into a single error message
+                    let error_messages: Vec<String> = context
+                        .diagnostics
+                        .get_diagnostics()
+                        .iter()
+                        .map(|d| d.message.clone())
+                        .collect();
+
+                    return Err(Box::new(ParseError::Other(format!(
+                        "Failed to parse module {}. Errors: {}",
+                        module_name,
+                        error_messages.join(", ")
+                    ))));
+                }
+
+                // Return the module with all valid declarations
+                Ok(Module {
+                    name: module_name,
+                    declarations,
+                    source: source_name.clone(),
+                })
+            } else {
+                Err(Box::new(ParseError::MissingNode(
+                    "module declaration".to_string(),
+                )))
             }
         }
+        _ => Err(Box::new(ParseError::UnexpectedToken(
+            "file".to_string(),
+            format!("{:?}", pair.as_rule()),
+        ))),
     }
-
-    Ok(module)
 }
 
 // Assumes parse_declaration exists
@@ -1228,4 +1234,42 @@ pub fn parse_repl_input_with_trace(
     }
 
     result
+}
+
+// Add the custom handler for illegal commas
+pub fn handle_illegal_comma(pair: &Pair<Rule>, context: &mut ParserContext) {
+    let span = get_span_from_pair(pair);
+    let start_pos = pair.as_span().start_pos();
+    let line_col = start_pos.line_col();
+    let location = format!("{}:{}", line_col.0, line_col.1);
+    let src = Arc::new(miette::NamedSource::new(
+        context
+            .source_name
+            .clone()
+            .unwrap_or_else(|| "<unknown>".to_string()),
+        context.input.to_string(),
+    ));
+
+    // Create a specific legacy comma error
+    let error = ParseError::LegacyComma {
+        src,
+        span,
+        location,
+        help_message: "Commas are only valid as separators in collection literals and pattern matching. This appears to be legacy syntax that needs to be updated.".to_string(),
+    };
+
+    // Add the error to the diagnostics
+    context.diagnostics.add_diagnostic(ParseDiagnostic {
+        severity: DiagnosticSeverity::Error,
+        message: format!(
+            "Legacy Syntax Error: Illegal comma at line {}:{}",
+            line_col.0, line_col.1
+        ),
+        span,
+        suggestions: vec![CodeSuggestion {
+            description: "Remove the comma and use proper Borf syntax".to_string(),
+            replacement: "".to_string(), // Default is to remove the comma
+            span,
+        }],
+    });
 }
