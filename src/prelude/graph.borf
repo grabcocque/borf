@@ -26,7 +26,7 @@
     loop connect is_loop is_connected path
     node_eq edge_eq subgraph merge transform veq constrain
     to_category from_category visualize
-    
+
     -- Structural mapping functions
     to_wire from_wire to_net from_net
   }
@@ -36,46 +36,46 @@
   tau: T.tau
 
   vis: E |> [e -> true]
-  
+
   deps: {
     (@Graph, @Prim, true),  -- Add dependency on Prim module
     (@Graph, @Theory, true),   -- Add dependency on Theory module
     (@Graph, @Wire, true)   -- Add dependency on Wire module
   }
-  
+
   --------------------------------------------------
   -- Direct Structural Mappings
   --------------------------------------------------
-  
+
   --[[
     Graph-Category Structural Mapping
-    
+
     Establishes a direct structural correspondence between graphs and categories,
     showing how a graph can be viewed as a simple category.
   ]]--
   graph_cat_mapping: {
     -- Core structural mappings
     Grph.!Grph = Theory.Cat,             -- A graph is a simple category
-    
+
     -- Structural mappings
     Grph.src = Theory.dom,               -- Source of an edge is the domain of a morphism
     Grph.tgt = Theory.cod,               -- Target of an edge is the codomain of a morphism
     Grph.+ = Theory.compose,             -- Edge composition is morphism composition
-    
+
     -- Law mappings
     Grph.law.path_compose = Theory.law.composition_associativity,
-    
+
     -- Linear transformation functions
     to_category = [!g -o>
       let cat = Theory.new({}, {}) in
-      
+
       -- First add all nodes as objects
       let {g1, nodes} = Prim.get_graph_nodes(g) in
       let cat_with_objs = nodes |> fold [c n ->
         let label = Grph.get_node_label(g1, n) in
         Theory.add_object(c, {id: n.id, label: label})
       ] cat in
-      
+
       -- Then add all edges as morphisms
       let {g2, edges} = Prim.get_graph_edges(g1) in
       edges |> fold [c e ->
@@ -90,16 +90,16 @@
         })
       ] cat_with_objs
     ],
-    
+
     from_category = [!c -o>
       let g = Grph.new_graph() in
-      
+
       -- First add all objects as nodes
       let objs = Theory.get_objects(c) in
       let g_with_nodes = objs |> fold [g obj ->
         Grph.add_node(g, obj.label).0
       ] g in
-      
+
       -- Then add all morphisms as edges
       let morphs = Theory.get_morphisms(c) in
       morphs |> fold [g m ->
@@ -111,10 +111,10 @@
       ] g_with_nodes
     ]
   }
-  
+
   --[[
     Graph-Wire Structural Mapping
-    
+
     Establishes a direct structural correspondence between graphs and wiring diagrams,
     showing how a graph can be interpreted as a wiring structure.
   ]]--
@@ -123,16 +123,16 @@
     Grph.!Node = Wire.Box,            -- Graph nodes are wiring boxes
     Grph.!Edge = Wire.Connection,     -- Graph edges are wiring connections
     Grph.!Grph = Wire.Diagram,        -- A graph is a wiring diagram
-    
+
     -- Structural mappings
     Grph.neighbors = Wire.connected_boxes,
     Grph.incoming = Wire.incoming_connections,
     Grph.outgoing = Wire.outgoing_connections,
-    
+
     -- Linear transformation functions
     to_wire = [!g -o>
       let d = Wire.id() in
-      
+
       -- First add all nodes as boxes
       let {g1, nodes} = Prim.get_graph_nodes(g) in
       let d_with_boxes = nodes |> fold [d n ->
@@ -140,7 +140,7 @@
         let box = Prim.create_box(label) in
         Wire.subdiagram(d, box)
       ] d in
-      
+
       -- Then add all edges as connections
       let {g2, edges} = Prim.get_graph_edges(g1) in
       edges |> fold [d e ->
@@ -148,24 +148,24 @@
         let tgt_node = Grph.tgt(g2, e) in
         let src_box = Prim.find_box(d, src_node.id) in
         let tgt_box = Prim.find_box(d, tgt_node.id) in
-        
+
         -- Create connection between output port of source and input port of target
         let src_port = Wire.out_ports(src_box) |> head in
         let tgt_port = Wire.in_ports(tgt_box) |> head in
         Wire.connect(d, src_port, tgt_port)
       ] d_with_boxes
     ],
-    
+
     from_wire = [!d -o>
       let g = Grph.new_graph() in
-      
+
       -- First add all boxes as nodes
       let boxes = Prim.get_boxes(d) in
       let g_with_nodes = boxes |> fold [g b ->
         let label = Prim.get_box_label(b) in
         Grph.add_node(g, label).0
       ] g in
-      
+
       -- Then add all connections as edges
       let connections = Prim.get_connections(d) in
       connections |> fold [g c ->
@@ -179,10 +179,10 @@
       ] g_with_nodes
     ]
   }
-  
+
   --[[
     Graph-Net Structural Mapping
-    
+
     Establishes a direct structural correspondence between graphs and interaction nets,
     showing how a graph can be interpreted as an interaction net.
   ]]--
@@ -191,11 +191,11 @@
     Grph.!Node = INet.!Agent,          -- Graph nodes are net agents
     Grph.!Edge = INet.!Connection,     -- Graph edges are net connections
     Grph.!Grph = INet.!Net,            -- A graph is an interaction net
-    
+
     -- Linear transformation functions
     to_net = [!g -o>
       let n = INet.empty_net() in
-      
+
       -- First add all nodes as agents
       let {g1, nodes} = Prim.get_graph_nodes(g) in
       let n_with_agents = nodes |> fold [n node ->
@@ -204,35 +204,35 @@
         let agent = INet.new_agent({name: "Node", arity: arity}) in
         Prim.label_agent(INet.add_agent(n, agent).0, agent, label)
       ] n in
-      
+
       -- Then add all edges as connections
       let {g2, edges} = Prim.get_graph_edges(g1) in
       edges |> fold [n edge ->
         let src_node = Grph.src(g2, edge) in
         let tgt_node = Grph.tgt(g2, edge) in
-        
+
         -- Find corresponding agents
         let {n1, agents} = INet.get_agents(n) in
         let src_agent = agents |> find [a -> Prim.get_agent_label(a) == Grph.get_node_label(g2, src_node)] in
         let tgt_agent = agents |> find [a -> Prim.get_agent_label(a) == Grph.get_node_label(g2, tgt_node)] in
-        
+
         -- Connect src output port to tgt input port
         let src_port = src_agent.ports |> drop(1) |> head in
         let tgt_port = tgt_agent.ports |> head in
         INet.connect(n1, src_port, tgt_port)
       ] n_with_agents
     ],
-    
+
     from_net = [!n -o>
       let g = Grph.new_graph() in
-      
+
       -- First add all agents as nodes
       let {n1, agents} = INet.get_agents(n) in
       let g_with_nodes = agents |> fold [g agent ->
         let label = Prim.get_agent_label(agent) in
         Grph.add_node(g, label).0
       ] g in
-      
+
       -- Then add all connections as edges
       let {n2, connections} = INet.get_connections(n1) in
       connections |> fold [g conn ->
@@ -240,9 +240,9 @@
         let port2 = Prim.get_port(n2, conn.port2) in
         let agent1 = Prim.get_agent(n2, conn.agent1) in
         let agent2 = Prim.get_agent(n2, conn.agent2) in
-        
+
         -- Determine direction based on port principals
-        let (src_agent, tgt_agent) = 
+        let (src_agent, tgt_agent) =
           if port1.principal {
             (agent1, agent2)
           } else if port2.principal {
@@ -251,7 +251,7 @@
             -- Default to agent1->agent2 if no principal ports
             (agent1, agent2)
           } in
-        
+
         let src_node = Grph.get_node_by_label(g, Prim.get_agent_label(src_agent)) in
         let tgt_node = Grph.get_node_by_label(g, Prim.get_agent_label(tgt_agent)) in
         Grph.add_edge(g, src_node, tgt_node, conn).0
@@ -472,22 +472,22 @@
     Creates a graph from a category
   ]]--
   from_category: Cat.Cat -o> !Grph
-  
+
   --[[
     Converts a graph to a wiring diagram
   ]]--
   to_wire: !Grph -o> Wire.Diagram
-  
+
   --[[
     Creates a graph from a wiring diagram
   ]]--
   from_wire: Wire.Diagram -o> !Grph
-  
+
   --[[
     Converts a graph to an interaction net
   ]]--
   to_net: !Grph -o> Net.!Net
-  
+
   --[[
     Creates a graph from an interaction net
   ]]--
@@ -507,7 +507,7 @@
     Internal function to compose edge labels
   ]]--
   compose_labels: !EdgeLabel * !EdgeLabel -o> !EdgeLabel
-  
+
   --[[
     Retrieves a node by its label
   ]]--

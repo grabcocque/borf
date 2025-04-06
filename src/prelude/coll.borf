@@ -1,5 +1,5 @@
 --[[
-  Standard Library (Basic Data Structures)
+  Collection Types
 
   This module provides essential data structures and collection operations for
   the Borf language. It implements Maps, Lists, Sets, and Queues
@@ -12,13 +12,13 @@
 ]]--
 
 
-@Std: {
+@Coll: {
 
   --[[
-    Core types defined in the standard library
+    Core types defined in the collection library
   ]]--
   typ: {
-    Std Map List Set Queue
+    Coll Map List Set Queue
   }
 
   --[[
@@ -60,9 +60,137 @@
   vis: E |> [e -> true]
 
   deps: {
-    (@Std, @Prim, true),
-    (@Std, @T, false),
-    (@Std, @Seq, true)  -- Add dependency on Seq module
+    (@Coll, @Prim, true),
+    (@Coll, @T, false),
+    (@Coll, @Seq, true)  -- Add dependency on Seq module
+  }
+
+  --------------------------------------------------
+  -- Structure Mapping to Collection Category
+  --------------------------------------------------
+  
+  --[[
+    Structure mapping that establishes @Coll as a category of collections.
+    
+    In this categorical structure:
+    - Objects are collections (Map, List, Set, Queue) parametrized by element types
+    - Morphisms are structure-preserving transformations between collections
+    - Identity is the identity transformation on a collection
+    - Composition is sequential application of collection transformations
+    
+    This category captures the rich structure of collections, including:
+    - Natural transformations between collection types (e.g., List to Set)
+    - Functorial relationships (e.g., mapping over collections)
+    - Monadic structures (e.g., binding operations on collections)
+    - Resource-aware transformations that track linearity
+  ]]--
+  structure: {
+    -- Map Coll to a category
+    objects: {Map.k:->v, List.a, Set._map_type.a, Queue._list_type.a},
+    morphisms: [c1 c2 -> c1 -> c2],
+    
+    -- Base category structure
+    dom: [f -> Prim.domain(f)],
+    cod: [f -> Prim.codomain(f)],
+    id: [c -> [x -> x]],
+    compose: [f g -> [x -> g(f(x))]],
+    
+    -- Collection-specific structure
+    empty: {
+      Map: Map.empty,
+      List: List.empty,
+      Set: Set.empty,
+      Queue: Queue.empty
+    },
+    
+    -- Fundamental operations as categorical constructs
+    insert: {
+      Map: Map.insert,
+      List: List.cons,
+      Set: Set.insert,
+      Queue: Queue.enqueue
+    },
+    
+    -- Collection conversions as natural transformations
+    to_list: {
+      Map: [m -> Map.entries(m)],
+      Set: Set.to_list,
+      Queue: [q -> q]  -- Queue is already a list internally
+    },
+    
+    from_list: {
+      Map: [entries -> entries |> List.fold [m (k,v) -> Map.insert(m,k,v)] Map.empty],
+      Set: Set.from_list,
+      Queue: [xs -> xs]  -- Queue is already a list internally
+    },
+    
+    -- Monadic structure
+    return: [a -> [a]],  -- Singleton collection
+    bind: [c f -> c |> List.map(f) |> List.fold(List.concat, List.empty)],  -- flatMap operation
+    
+    -- Linear resource structure
+    consume: [!c f -> f(c)],  -- Linear consumption of a collection
+    share: [c -> (c, c)],     -- Non-linear sharing (for non-linear collections)
+    
+    -- Functorial structure
+    fmap: {
+      Map: [f m -> m |> Map.entries |> List.map [(k,v) -> (k, f(v))] |> from_list.Map],
+      List: List.map,
+      Set: [f s -> s |> Set.to_list |> List.map(f) |> Set.from_list],
+      Queue: [f q -> q |> List.map(f)]
+    },
+    
+    -- Monoidal structure (combining collections)
+    combine: {
+      Map: Map.merge,
+      List: List.concat,
+      Set: Set.union,
+      Queue: [q1 q2 -> q1 q2 |> List.concat]
+    },
+    
+    -- Category laws
+    laws: {
+      -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
+      associativity: forall [f g h ->
+        compose(compose(f, g), h) == compose(f, compose(g, h))
+      ],
+      
+      -- Identity: id ∘ f = f = f ∘ id
+      identity: forall [f ->
+        compose(id(dom(f)), f) == f && compose(f, id(cod(f))) == f
+      ],
+      
+      -- Functorial laws
+      functor_id: forall [c ->
+        fmap.List(id)(c) == id(c)
+      ],
+      
+      functor_compose: forall [f g c ->
+        fmap.List(compose(f, g))(c) == compose(fmap.List(f), fmap.List(g))(c)
+      ],
+      
+      -- Monadic laws
+      monad_left_id: forall [a f ->
+        bind(return(a), f) == f(a)
+      ],
+      
+      monad_right_id: forall [m ->
+        bind(m, return) == m
+      ],
+      
+      monad_associativity: forall [m f g ->
+        bind(bind(m, f), g) == bind(m, [x -> bind(f(x), g)])
+      ],
+      
+      -- Monoidal laws
+      monoid_associativity: forall [c1 c2 c3 ->
+        combine.List(combine.List(c1, c2), c3) == combine.List(c1, combine.List(c2, c3))
+      ],
+      
+      monoid_identity: forall [c ->
+        combine.List(c, empty.List) == c && combine.List(empty.List, c) == c
+      ]
+    }
   }
 
   --[[
@@ -185,7 +313,7 @@
     --[[
       Appends a single element to the end of a list (consuming the list)
     ]]--
-    append: ![a] * a -o> [a] [xs x -> xs x |> Std.append]
+    append: ![a] * a -o> [a] [xs x -> xs x |> Coll.append]
 
     --[[
       Concatenates two lists together (consuming both lists)
@@ -453,4 +581,4 @@
     ]]--
     size: _list_type[a] -> Z [q -> q |> List.size]
   }
-}
+} 

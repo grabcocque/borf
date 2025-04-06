@@ -10,10 +10,10 @@
   typ: {
     -- Transformation types
     PipelineTransformation StageTransform BranchTransform
-    
+
     -- Specific transformations
     PipelineToCategory PipelineToGraph PipelineToNet
-    
+
     -- Structure transformations
     SequentialCategory ParallelCategory DataflowGraph
   }
@@ -21,7 +21,7 @@
   op: {
     -- Transformation operators
     ==> <== <=> ~~
-    
+
     -- Pipeline operators
     |> >>> <<< ||| &&&
   }
@@ -32,30 +32,30 @@
     to_graph from_graph
     to_inet from_inet
     to_wire from_wire
-    
+
     -- Stage transformations
     stage_to_morphism stage_from_morphism
     stages_to_composition stages_from_composition
-    
+
     -- Branch transformations
     branch_to_graph branch_from_graph
     parallel_to_monoidal parallel_from_monoidal
-    
+
     -- Pipeline structure transformations
     sequential_to_category sequential_from_category
     hierarchical_to_operad hierarchical_from_operad
     incremental_to_lens incremental_from_lens
-    
+
     -- Error handling transformations
     error_to_sum error_from_sum
     with_recovery fallible_pipeline
-    
+
     -- Resource management
     with_resource manage_resources track_resources
-    
+
     -- Object and morphism mappings
     map_pipeline map_stages map_branches
-    
+
     -- Transformation utilities
     compose identity optimize fuse distribute
   }
@@ -86,21 +86,21 @@
   ]]--
   to_theory: @Pipeline.!Pipeline -> @Cata.Theory.SequentialCategory [pipeline_system ->
     let sequential_cat = @Cata.Theory.new_sequential_category() in
-    
+
     -- Map the morphism structure
     @Cata.Theory.add_morphisms(sequential_cat, {
       objects: T.Type_0,
       id: [a -> [x -> x]],
       compose: [f g -> [x -> x |> f |> g]]
     }) |>
-    
+
     -- Add sequential composition structure
     [cat -> @Cata.Theory.add_sequential_structure(cat, {
       sequential: @Pipeline.>>>,
       parallel: @Pipeline.|||,
       fanout: @Pipeline.&&&
     })] |>
-    
+
     -- Add pipeline-specific operations
     [cat -> @Cata.Theory.add_pipeline_operations(cat, {
       fork: @Pipeline.fork,
@@ -132,14 +132,14 @@
   --------------------------------------------------
   -- Pipeline to Graph Transformations
   --------------------------------------------------
-  
+
   --[[
     to_graph transforms a Pipeline system into a Graph structure,
     where stages are nodes and connections are edges.
   ]]--
   to_graph: @Pipeline.!Pipeline -> @Graph.!Graph [pipeline ->
     let g = @Graph.empty() in
-    
+
     -- Add each stage as a node
     let g_with_stages = pipeline.stages |> fold [graph stage idx ->
       @Graph.add_node(graph, stage.name, {
@@ -147,7 +147,7 @@
         stage: stage
       })
     ] g in
-    
+
     -- Add connections between stages as edges
     let g_with_connections = pipeline.stages |> fold [graph stage idx ->
       if stage.next then
@@ -157,7 +157,7 @@
       else
         graph
     ] g_with_stages in
-    
+
     -- Add fork and join connections if any
     pipeline.stages |> fold [graph stage ->
       stage.config?.connections or [] |> fold [inner_graph conn ->
@@ -167,17 +167,17 @@
       ] graph
     ] g_with_connections
   ]
-  
+
   --[[
     from_graph transforms a Graph into a Pipeline structure.
   ]]--
   from_graph: @Graph.!Graph -> @Pipeline.!Pipeline [graph ->
     -- Get all nodes as potential stages
     let nodes = @Graph.get_nodes(graph) in
-    
+
     -- Sort nodes by edge connections to determine stage order
     let sorted_nodes = @Graph.topological_sort(graph) in
-    
+
     -- Create stages from nodes
     let stages = sorted_nodes |> map [node ->
       @Pipeline.!Stage {
@@ -187,7 +187,7 @@
         next: null  -- Will be filled in next step
       }
     ] in
-    
+
     -- Connect stages based on edges
     let connected_stages = zip(stages, sorted_nodes) |> fold [acc (stage, node) ->
       let outgoing = @Graph.get_edges_from(graph, node.label) in
@@ -198,7 +198,7 @@
       else
         acc
     ] stages in
-    
+
     -- Create the final pipeline
     @Pipeline.create(
       "graph_derived_pipeline",
@@ -216,14 +216,14 @@
   --------------------------------------------------
   -- Pipeline to Interaction Net Transformations
   --------------------------------------------------
-  
+
   --[[
     to_inet transforms a Pipeline system into an Interaction Net,
     where stages are agents and connections are wires.
   ]]--
   to_inet: @Pipeline.!Pipeline -> @INet.!Net [pipeline ->
     let net = @INet.empty_net() in
-    
+
     -- Create agent for each stage
     let net_with_agents = pipeline.stages |> fold [n stage ->
       let agent = @INet.new_agent({
@@ -236,13 +236,13 @@
       }) in
       @INet.add_agent(n, agent)
     ] net in
-    
+
     -- Connect agents according to pipeline structure
     pipeline.stages |> fold [n stage idx ->
       if stage.next then
         let source_agent = @INet.find_agent(n, stage.name) in
         let target_agent = @INet.find_agent(n, stage.next.name) in
-        
+
         @INet.connect(n,
           @INet.get_port(source_agent, "out"),
           @INet.get_port(target_agent, "in")
@@ -251,14 +251,14 @@
         n
     ] net_with_agents
   ]
-  
+
   --[[
     from_inet transforms an Interaction Net into a Pipeline structure.
   ]]--
   from_inet: @INet.!Net -> @Pipeline.!Pipeline [net ->
     -- Get all agents
     let agents = @INet.get_agents(net) in
-    
+
     -- Create stages from agents
     let stages = agents |> map [agent ->
       @Pipeline.!Stage {
@@ -268,25 +268,25 @@
         next: null  -- Will be connected below
       }
     ] in
-    
+
     -- Connect stages based on connections in the net
     let connections = @INet.get_connections(net) in
     let connected_stages = connections |> fold [acc conn ->
       let source_port = conn.source_port in
       let target_port = conn.target_port in
-      
+
       let source_agent = @INet.agent_of(source_port) in
       let target_agent = @INet.agent_of(target_port) in
-      
+
       if source_port.name == "out" and target_port.name == "in" then
         let source_stage = find [s -> s.name == source_agent.name] acc in
         let target_stage = find [s -> s.name == target_agent.name] acc in
-        
+
         update_by_name(acc, source_stage.name, [s -> {s with next: target_stage}])
       else
         acc
     ] stages in
-    
+
     -- Create the final pipeline
     @Pipeline.create(
       "inet_derived_pipeline",
@@ -304,13 +304,13 @@
   --------------------------------------------------
   -- Pipeline to Wiring Diagram Transformations
   --------------------------------------------------
-  
+
   --[[
     to_wire transforms a Pipeline into a Wiring Diagram
   ]]--
   to_wire: @Pipeline.!Pipeline -> @Wire.!Diagram [pipeline ->
     let diagram = @Wire.empty_diagram() in
-    
+
     -- Create a box for each stage
     let diagram_with_boxes = pipeline.stages |> fold [d stage ->
       @Wire.add_box(d, {
@@ -319,7 +319,7 @@
         outputs: [{name: "out", type: Any}]
       })
     ] diagram in
-    
+
     -- Add wires between boxes based on pipeline connections
     pipeline.stages |> fold [d stage ->
       if stage.next then
@@ -331,14 +331,14 @@
         d
     ] diagram_with_boxes
   ]
-  
+
   --[[
     from_wire transforms a Wiring Diagram into a Pipeline
   ]]--
   from_wire: @Wire.!Diagram -> @Pipeline.!Pipeline [diagram ->
     -- Get all boxes
     let boxes = @Wire.get_boxes(diagram) in
-    
+
     -- Create stages from boxes
     let stages = boxes |> map [box ->
       @Pipeline.!Stage {
@@ -348,22 +348,22 @@
         next: null  -- Will be connected below
       }
     ] in
-    
+
     -- Connect stages based on wires
     let wires = @Wire.get_wires(diagram) in
     let connected_stages = wires |> fold [acc wire ->
       let source_box = wire.source.box in
       let target_box = wire.target.box in
-      
+
       if wire.source.port == "out" and wire.target.port == "in" then
         let source_stage = find [s -> s.name == source_box] acc in
         let target_stage = find [s -> s.name == target_box] acc in
-        
+
         update_by_name(acc, source_stage.name, [s -> {s with next: target_stage}])
       else
         acc
     ] stages in
-    
+
     -- Create the final pipeline
     @Pipeline.create(
       "wire_derived_pipeline",
@@ -381,7 +381,7 @@
   --------------------------------------------------
   -- Stage Transformations
   --------------------------------------------------
-  
+
   --[[
     stage_to_morphism transforms a pipeline stage to a category morphism
   ]]--
@@ -392,7 +392,7 @@
       stage.transformer
     )
   ]
-  
+
   --[[
     stage_from_morphism creates a pipeline stage from a category morphism
   ]]--
@@ -404,7 +404,7 @@
       next: null
     }
   ]
-  
+
   --[[
     stages_to_composition transforms a sequence of stages to a composed morphism
   ]]--
@@ -416,7 +416,7 @@
         morphism
     ] null
   ]
-  
+
   --[[
     stages_from_composition decomposes a morphism into a sequence of stages
   ]]--
@@ -431,39 +431,39 @@
   --------------------------------------------------
   -- Branch Transformations
   --------------------------------------------------
-  
+
   --[[
     branch_to_graph converts a set of parallel branches to a graph
   ]]--
   branch_to_graph: [@Pipeline.!Branch] -> @Graph.!Graph [branches ->
     let g = @Graph.empty() in
-    
+
     -- Add a fork node
     let g_with_fork = @Graph.add_node(g, "fork", {type: "fork"}) in
-    
+
     -- Add a join node
     let g_with_join = @Graph.add_node(g_with_fork, "join", {type: "join"}) in
-    
+
     -- Add each branch and connect to fork and join
     branches |> fold [graph branch ->
       -- Convert branch pipeline to graph
       let branch_graph = to_graph(branch.pipeline) in
-      
+
       -- Find entry and exit nodes of the branch
       let entry_node = @Graph.get_entry_nodes(branch_graph)[0] in
       let exit_node = @Graph.get_exit_nodes(branch_graph)[0] in
-      
+
       -- Merge the branch graph into the main graph
       let merged_graph = @Graph.merge(graph, branch_graph) in
-      
+
       -- Connect fork to branch entry
       let with_fork_edge = @Graph.add_edge(merged_graph, "fork", entry_node.label, {branch: branch.name}) in
-      
+
       -- Connect branch exit to join
       @Graph.add_edge(with_fork_edge, exit_node.label, "join", {branch: branch.name})
     ] g_with_join
   ]
-  
+
   --[[
     branch_from_graph reconstructs parallel branches from a graph
   ]]--
@@ -471,19 +471,19 @@
     -- Find fork and join nodes
     let fork_node = @Graph.find_node(graph, [n -> n.data?.type == "fork"]) in
     let join_node = @Graph.find_node(graph, [n -> n.data?.type == "join"]) in
-    
+
     if fork_node and join_node then
       -- Find all outgoing edges from fork
       let fork_edges = @Graph.get_edges_from(graph, fork_node.label) in
-      
+
       -- Create a branch for each outgoing edge
       fork_edges |> map [edge ->
         -- Find all nodes and edges between this branch's entry and join
         let subgraph = @Graph.subgraph_between(graph, edge.target, join_node.label) in
-        
+
         -- Convert subgraph to pipeline
         let branch_pipeline = from_graph(subgraph) in
-        
+
         @Pipeline.!Branch {
           name: edge.data?.branch or "branch_" + edge.target,
           pipeline: branch_pipeline,
@@ -493,26 +493,26 @@
     else
       []
   ]
-  
+
   --[[
     parallel_to_monoidal transforms parallel pipelines to a monoidal category
   ]]--
   parallel_to_monoidal: @Pipeline.!Pipeline -> @Cata.Theory.MonoidalCategory [pipeline ->
     let monoidal_cat = @Cata.Theory.new_monoidal_category() in
-    
+
     -- Map morphisms and objects
     @Cata.Theory.add_morphisms(monoidal_cat, {
       objects: T.Type_0,
       id: [a -> [x -> x]],
       compose: [f g -> [x -> x |> f |> g]]
     }) |>
-    
+
     -- Add monoidal structure
     [cat -> @Cata.Theory.add_monoidal_structure(cat, {
       tensor: @Pipeline.|||,
       unit: T.Unit
-    })] |> 
-    
+    })] |>
+
     -- Add pipeline-specific parallel operations
     [cat -> @Cata.Theory.add_parallel_operations(cat, {
       fork: @Pipeline.fork,
@@ -520,7 +520,7 @@
       fanout: @Pipeline.&&&
     })]
   ]
-  
+
   --[[
     parallel_from_monoidal creates parallel pipelines from a monoidal category
   ]]--
@@ -539,7 +539,7 @@
     ) |> [pipeline ->
       -- Extract morphisms from monoidal category
       let morphisms = @Cata.Theory.get_morphisms(monoidal) in
-      
+
       -- Create stages from morphisms and add to pipeline
       morphisms |> fold [p morph ->
         let stage = stage_from_morphism(morph) in
@@ -551,7 +551,7 @@
   --------------------------------------------------
   -- Pipeline Structure Transformations
   --------------------------------------------------
-  
+
   --[[
     sequential_to_category transforms sequential pipelines to a category
   ]]--
@@ -560,18 +560,18 @@
       -- Add morphisms from pipeline stages
       let stages = pipeline.stages in
       let morphisms = stages |> map stage_to_morphism in
-      
+
       @Cata.Theory.add_morphisms_from_list(cat, morphisms)
     ]
   ]
-  
+
   --[[
     sequential_from_category creates a sequential pipeline from a category
   ]]--
   sequential_from_category: @Cata.Theory.Category -> @Pipeline.!Pipeline [category ->
     let morphisms = @Cata.Theory.get_morphisms(category) in
     let stages = morphisms |> map stage_from_morphism in
-    
+
     @Pipeline.create(
       "category_pipeline",
       stages,
@@ -584,7 +584,7 @@
       }
     )
   ]
-  
+
   --[[
     hierarchical_to_operad transforms hierarchical pipelines to an operad
   ]]--
@@ -599,14 +599,14 @@
       ] op
     ]
   ]
-  
+
   --[[
     hierarchical_from_operad creates a hierarchical pipeline from an operad
   ]]--
   hierarchical_from_operad: @Cata.Theory.Operad -> @Pipeline.Hierarchical [operad ->
     -- Group operations by arity
     let operations_by_arity = @Cata.Theory.group_by_arity(operad) in
-    
+
     -- Create levels from operations grouped by arity
     let levels = map (\(arity, ops) ->
       @Pipeline.Hierarchical.Level {
@@ -614,22 +614,22 @@
         children: []
       }
     ) operations_by_arity in
-    
+
     @Pipeline.Hierarchical {
       levels: levels
     }
   ]
-  
+
   --[[
     incremental_to_lens transforms incremental pipelines to lenses
   ]]--
   incremental_to_lens: @Pipeline.Incremental -> @Cata.Theory.Lens [incremental ->
     @Cata.Theory.new_lens() |> [lens ->
       -- Add view/update functions as a lens
-      @Cata.Theory.add_lens_pair(lens, 
+      @Cata.Theory.add_lens_pair(lens,
         -- View function (get current state)
         [s -> incremental.base],
-        
+
         -- Update function (apply changes)
         [s u -> incremental.changes |> fold [state change ->
           change.transform(state)
@@ -637,14 +637,14 @@
       )
     ]
   ]
-  
+
   --[[
     incremental_from_lens creates an incremental pipeline from a lens
   ]]--
   incremental_from_lens: @Cata.Theory.Lens -> @Pipeline.Incremental [lens ->
     let view = @Cata.Theory.get_view(lens) in
     let update = @Cata.Theory.get_update(lens) in
-    
+
     @Pipeline.Incremental {
       base: view(null),
       changes: [
@@ -660,7 +660,7 @@
   --------------------------------------------------
   -- Error Handling Transformations
   --------------------------------------------------
-  
+
   --[[
     error_to_sum transforms pipeline error handling to sum types
   ]]--
@@ -673,7 +673,7 @@
         Right(result.error)
     ]
   ]
-  
+
   --[[
     error_from_sum creates pipeline error handling from sum type functions
   ]]--
@@ -701,7 +701,7 @@
       }
     )
   ]
-  
+
   --[[
     with_recovery adds error recovery to a pipeline transformation
   ]]--
@@ -715,7 +715,7 @@
       })
     ]
   ]
-  
+
   --[[
     fallible_pipeline wraps a pipeline with error handling
   ]]--
@@ -728,7 +728,7 @@
   --------------------------------------------------
   -- Resource Management
   --------------------------------------------------
-  
+
   --[[
     with_resource safely manages pipeline resources
   ]]--
@@ -740,7 +740,7 @@
       result
     ]
   ]
-  
+
   --[[
     manage_resources adds resource management to pipeline
   ]]--
@@ -754,11 +754,11 @@
         config: {},
         next: null
       } in
-      
+
       -- Add teardown stage that releases resources
       let teardown_stage = @Pipeline.!Stage {
         name: "resource_teardown",
-        transformer: [x -> 
+        transformer: [x ->
           try {
             release_resources(x.resources);
             x.value
@@ -770,13 +770,13 @@
         config: {},
         next: null
       } in
-      
+
       -- Insert setup at beginning and teardown at end
       let pipeline_with_setup = @Pipeline.prepend_stage(p, setup_stage) in
       @Pipeline.append_stage(pipeline_with_setup, teardown_stage)
     ]
   ]
-  
+
   --[[
     track_resources tracks resource usage in a pipeline
   ]]--
@@ -788,7 +788,7 @@
           let start_resources = get_resource_usage() in
           let result = stage.transformer(x) in
           let end_resources = get_resource_usage() in
-          
+
           log_resource_usage(stage.name, end_resources - start_resources);
           result
         ],
@@ -801,42 +801,42 @@
   --------------------------------------------------
   -- Transformation Utilities
   --------------------------------------------------
-  
+
   --[[
     map_pipeline applies a transformation to a pipeline
   ]]--
   map_pipeline: @Pipeline.!Pipeline * (@Pipeline.!Pipeline -> @Pipeline.!Pipeline) -> @Pipeline.!Pipeline [pipeline transform ->
     transform(pipeline)
   ]
-  
+
   --[[
     map_stages applies a function to all stages in a pipeline
   ]]--
   map_stages: (@Pipeline.!Stage -> @Pipeline.!Stage) * [@Pipeline.!Stage] -> [@Pipeline.!Stage] [transform stages ->
     stages |> map transform
   ]
-  
+
   --[[
     map_branches applies a function to all branches in a pipeline
   ]]--
   map_branches: (@Pipeline.!Branch -> @Pipeline.!Branch) * [@Pipeline.!Branch] -> [@Pipeline.!Branch] [transform branches ->
     branches |> map transform
   ]
-  
+
   --[[
     compose composes two pipeline transformations
   ]]--
   compose: (@Pipeline.!Pipeline -> @Pipeline.!Pipeline) * (@Pipeline.!Pipeline -> @Pipeline.!Pipeline) -> (@Pipeline.!Pipeline -> @Pipeline.!Pipeline) [f g ->
     [p -> p |> f |> g]
   ]
-  
+
   --[[
     identity creates an identity transformation for pipelines
   ]]--
   identity: @Pipeline.!Pipeline -> @Pipeline.!Pipeline [p ->
     p
   ]
-  
+
   --[[
     optimize optimizes a pipeline using transformation rules
   ]]--
@@ -845,19 +845,19 @@
       match_and_replace(p, rule.pattern, rule.replacement)
     ] pipeline
   ]
-  
+
   --[[
     fuse combines adjacent stages in a pipeline when possible
   ]]--
   fuse: @Pipeline.!Pipeline -> @Pipeline.!Pipeline [pipeline ->
     let stages = pipeline.stages in
-    
+
     -- Identify fusible stages
     let fusible_pairs = zip(stages, tail(stages)) |> filter [pair ->
       let (s1, s2) = pair in
       can_fuse(s1, s2)
     ] in
-    
+
     -- Fuse those stages
     fusible_pairs |> fold [p pair ->
       let (s1, s2) = pair in
@@ -865,7 +865,7 @@
       replace_stages(p, [s1, s2], [fused])
     ] pipeline
   ]
-  
+
   --[[
     distribute distributes a stage across parallel branches
   ]]--
@@ -875,12 +875,12 @@
     if has_distributable_pattern(pipeline) then
       let leading_stage = get_leading_stage(pipeline) in
       let branches = get_parallel_branches(pipeline) in
-      
+
       -- Distribute the leading stage to each branch
       let distributed_branches = branches |> map [branch ->
         prepend_to_branch(branch, leading_stage)
       ] in
-      
+
       -- Replace in the pipeline
       replace_branches(pipeline, branches, distributed_branches)
     else
@@ -890,7 +890,7 @@
   --------------------------------------------------
   -- Helper Functions
   --------------------------------------------------
-  
+
   -- Helper function to update a stage in a list by name
   update_by_name: [@Pipeline.!Stage] * S * (@Pipeline.!Stage -> @Pipeline.!Stage) -> [@Pipeline.!Stage] [stages name update_fn ->
     stages |> map [stage ->
@@ -900,14 +900,14 @@
         stage
     ]
   ]
-  
+
   -- Helper function to check if two stages can be fused
   can_fuse: @Pipeline.!Stage * @Pipeline.!Stage -> Bool [s1 s2 ->
     -- Check if the stages are compatible for fusion
     -- For example, both are pure functions with no side effects
     s1.config?.pure and s2.config?.pure
   ]
-  
+
   -- Helper function to fuse two stages
   fuse_stages: @Pipeline.!Stage * @Pipeline.!Stage -> @Pipeline.!Stage [s1 s2 ->
     @Pipeline.!Stage {
@@ -917,13 +917,13 @@
       next: s2.next       -- Connect to the second stage's next
     }
   ]
-  
+
   -- Resource acquisition and release helpers
   acquire_resources: () -> {} [-> {}]
   release_resources: {} -> () [_ -> ()]
   get_resource_usage: () -> {} [-> {}]
   log_resource_usage: S * {} -> () [_ _ -> ()]
-  
+
   -- Pattern matching helpers
   has_distributable_pattern: @Pipeline.!Pipeline -> Bool [_ -> false]
   get_leading_stage: @Pipeline.!Pipeline -> @Pipeline.!Stage [p -> p.stages[0]]
@@ -932,4 +932,4 @@
   replace_stages: @Pipeline.!Pipeline * [@Pipeline.!Stage] * [@Pipeline.!Stage] -> @Pipeline.!Pipeline [p _ _ -> p]
   replace_branches: @Pipeline.!Pipeline * [@Pipeline.!Branch] * [@Pipeline.!Branch] -> @Pipeline.!Pipeline [p _ _ -> p]
   match_and_replace: @Pipeline.!Pipeline * Any * Any -> @Pipeline.!Pipeline [p _ _ -> p]
-} 
+}

@@ -12,12 +12,12 @@
     Evidence           -- Evidence about potential non-termination
     TerminationWitness -- Witness of termination
     NonTermWitness     -- Witness of non-termination
-    
+
     -- Analysis types
     Analysis         -- A termination analysis process
     AnalysisStep     -- A single step in analysis
     AnalysisTrace    -- A sequence of analysis steps
-    
+
     -- Agent types
     Agent           -- An analysis agent that gathers evidence
     CycleDetector   -- Agent that detects reduction cycles
@@ -28,10 +28,10 @@
   op: {
     -- Evidence operators
     + & |  -- Evidence combination operators
-    
+
     -- Analysis operators
     >> << ==> <==
-    
+
     -- Logical operators
     => && || !
   }
@@ -39,23 +39,23 @@
   fn: {
     -- Evidence management
     gather_evidence combine_evidence sufficient_evidence contradictory_evidence
-    
+
     -- Cycle detection
     detect_cycle has_cycle cycle_length
-    
+
     -- Size analysis
     size_growth bounded_growth unbounded_growth
-    
+
     -- Pattern analysis
     match_pattern known_nonterminating
-    
+
     -- Agent management
     create_agent run_agent agent_evidence agent_confidence
-    
+
     -- Termination analysis
     analyze_termination prove_termination disprove_termination
     maybe_terminates trace_reduction critical_pattern
-    
+
     -- Verification
     verify_termination verify_nontermination
   }
@@ -76,16 +76,16 @@
   --------------------------------------------------
   -- Structure Mapping to Termination Analysis Category
   --------------------------------------------------
-  
+
   --[[
     Structure mapping that establishes @Term as a termination analysis category.
-    
+
     In this categorical structure:
     - Objects are evidence collections about termination properties of interaction nets
     - Morphisms are analysis steps that transform evidence into more refined evidence
     - Identity is the "no-op" analysis that leaves evidence unchanged
     - Composition represents sequential application of analysis steps
-    
+
     This categorical structure formalizes the process of incrementally gathering
     and refining evidence about the termination properties of interaction nets.
   ]]--
@@ -93,46 +93,46 @@
     -- Map Term to a category
     objects: Evidence,
     morphisms: [e1 e2 -> AnalysisStep(e1, e2)],
-    
+
     -- Base category structure
     dom: [step -> step.input_evidence],
     cod: [step -> step.output_evidence],
     id: [e -> no_op_analysis(e)],
     compose: [step1 step2 -> compose_steps(step1, step2)],
-    
+
     -- Termination-specific structure
     evidence_join: [e1 e2 -> combine_evidence(e1, e2)],
     evidence_meet: [e1 e2 -> intersect_evidence(e1, e2)],
-    
+
     -- Agent structure
     agent_action: [agent evidence -> run_agent(agent, evidence)],
     concurrent_analysis: [agents evidence -> run_multiple_agents(agents, evidence)],
-    
+
     -- Evidence ordering
     refines: [e1 e2 -> refines_evidence(e1, e2)],
-    
+
     -- Category laws
     laws: {
       -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
       associativity: forall [f g h ->
         compose(compose(f, g), h) == compose(f, compose(g, h))
       ],
-      
+
       -- Identity: id ∘ f = f = f ∘ id
       identity: forall [f ->
         compose(id(dom(f)), f) == f && compose(f, id(cod(f))) == f
       ],
-      
+
       -- Evidence combination is commutative: e1 + e2 = e2 + e1
       evidence_commutative: forall [e1 e2 ->
         evidence_join(e1, e2) == evidence_join(e2, e1)
       ],
-      
+
       -- Evidence combination is associative: (e1 + e2) + e3 = e1 + (e2 + e3)
       evidence_associative: forall [e1 e2 e3 ->
         evidence_join(evidence_join(e1, e2), e3) == evidence_join(e1, evidence_join(e2, e3))
       ],
-      
+
       -- Running the same agent twice with the same evidence produces the same result
       agent_idempotence: forall [agent e ->
         let action = agent_action(agent, e) in
@@ -264,7 +264,7 @@
     -- Combine evidence e1 and e2, taking the stronger conclusion if available
     {
       net: e1.net,  -- Assume both refer to the same net
-      terminating: 
+      terminating:
         if e1.terminating == ?Some(true) or e2.terminating == ?Some(true) then
           ?Some(true)
         else if e1.terminating == ?Some(false) or e2.terminating == ?Some(false) then
@@ -291,7 +291,7 @@
     -- Intersection of evidence, taking only what both agree on
     {
       net: e1.net,  -- Assume both refer to the same net
-      terminating: 
+      terminating:
         if e1.terminating == e2.terminating then
           e1.terminating
         else
@@ -340,7 +340,7 @@
   run_multiple_agents: [Agent] * Evidence -> AnalysisStep [agents evidence ->
     let results = agents |> map [agent -> run_agent(agent, evidence)] in
     let combined_evidence = results |> map [step -> step.output_evidence] |> fold combine_evidence evidence in
-    
+
     {
       input_evidence: evidence,
       output_evidence: combined_evidence,
@@ -375,7 +375,7 @@
       matched_patterns: [],
       visited_states: [net]
     } in
-    
+
     -- Create analysis agents
     let agents = [
       {
@@ -400,19 +400,19 @@
         specialization: "pattern"
       }
     ] in
-    
+
     -- Run the analysis
     let start_time = current_time_ms() in
     let steps = run_analysis(initial, agents, []) in
     let end_time = current_time_ms() in
-    
+
     -- Gather final evidence
     let final_evidence = if steps |> length > 0 then
       last(steps).output_evidence
     else
       initial
     in
-    
+
     {
       initial_evidence: initial,
       steps: steps,
@@ -435,10 +435,10 @@
     else
       -- Select the most promising agent
       let agent = select_best_agent(agents, evidence) in
-      
+
       -- Run the agent
       let step = run_agent(agent, evidence) in
-      
+
       -- Continue analysis with updated evidence
       run_analysis(step.output_evidence, agents, steps + [step])
   ]
@@ -459,7 +459,7 @@
     -- Size is the number of agents plus the number of connections
     let agents = @INet.agents(net) in
     let connections = @INet.connections(net) in
-    
+
     length(agents) + length(connections)
   ]
 

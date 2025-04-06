@@ -183,16 +183,16 @@
   --------------------------------------------------
   -- Structure Mapping to Type Universe Category
   --------------------------------------------------
-  
+
   --[[
     Structure mapping that establishes @T as a universe category.
-    
+
     In this categorical structure:
     - Objects are types in the universe
     - Morphisms are functions between types (and subtyping relations)
     - Identity is the identity function on a type
     - Composition is function composition
-    
+
     This categorical structure captures the rich structure of types, including:
     - Subtyping as a partial order
     - Product and sum types as categorical products and coproducts
@@ -204,66 +204,66 @@
     -- Map T to a category
     objects: T,
     morphisms: [a b -> a -> b],
-    
+
     -- Base category structure
     dom: [f -> Prim.domain(f)],
     cod: [f -> Prim.codomain(f)],
     id: [t -> [x -> x]],
     compose: [f g -> [x -> g(f(x))]],
-    
+
     -- Type-specific structure
     subtype: [a b -> a <:: b],
     equivalent: [a b -> a teq b],
-    
+
     -- Type constructors as categorical operations
     product: [a b -> a * b],                  -- Categorical product
     coproduct: [a b -> a + b],                -- Categorical coproduct
     exponential: [a b -> a -> b],             -- Internal hom (closed structure)
-    
+
     -- Universe hierarchy
     universe_level: [t -> universe_of(t)],
     universe_inclusion: [u1 u2 -> universe_of(u1) <:: universe_of(u2)],
-    
+
     -- Type operations with categorical meaning
     terminal: Any,                            -- Terminal object (top type)
     initial: Void,                            -- Initial object (bottom type)
     intersection: [a b -> a <:> b],           -- Meets in subtyping lattice
     union: [a b -> a |+| b],                  -- Joins in subtyping lattice
-    
+
     -- Dependent type structure
     dependent_product: Pi,                    -- Dependent product (Pi types)
     dependent_sum: Sigma,                     -- Dependent sum (Sigma types)
-    
+
     -- Resource tracking structure
     linear: [t -> !t],                        -- Linear type constructor
     linear_morphism: [a b -> a ->+ b],        -- Resource-tracking morphism
-    
+
     -- Category laws
     laws: {
       -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
       associativity: forall [f g h ->
         compose(compose(f, g), h) == compose(f, compose(g, h))
       ],
-      
+
       -- Identity: id ∘ f = f = f ∘ id
       identity: forall [f ->
         compose(id(dom(f)), f) == f && compose(f, id(cod(f))) == f
       ],
-      
+
       -- Subtyping forms a partial order (reflexive, transitive, antisymmetric)
       subtype_partial_order: (
         forall [t -> subtype(t, t)] &&                                 -- Reflexivity
         forall [a b c -> subtype(a, b) && subtype(b, c) -> subtype(a, c)] && -- Transitivity
         forall [a b -> subtype(a, b) && subtype(b, a) -> equivalent(a, b)]   -- Antisymmetry
       ),
-      
+
       -- Type equivalence forms an equivalence relation
       type_equivalence: (
         forall [t -> equivalent(t, t)] &&                              -- Reflexivity
         forall [a b -> equivalent(a, b) -> equivalent(b, a)] &&        -- Symmetry
         forall [a b c -> equivalent(a, b) && equivalent(b, c) -> equivalent(a, c)] -- Transitivity
       ),
-      
+
       -- Product laws (universal property of products)
       product_universal: forall [a b c f g ->
         let proj1 = [p -> p.1] in
@@ -271,7 +271,7 @@
         let h = [x -> (f(x), g(x))] in
         compose(h, proj1) == f && compose(h, proj2) == g
       ],
-      
+
       -- Coproduct laws (universal property of coproducts)
       coproduct_universal: forall [a b c f g ->
         let inj1 = [x -> Prim.left(x)] in
@@ -282,7 +282,7 @@
         ]] in
         compose(inj1, h) == f && compose(inj2, h) == g
       ],
-      
+
       -- Universe hierarchy is well-founded
       universe_well_founded: (
         universe_level(Type_0) <:: universe_level(Type_1) &&

@@ -10,7 +10,7 @@
   typ: {
     -- Transformation types
     LinearTransformation Functor Natural Isomorphism
-    
+
     -- Specific transformations
     TheoryTransform WireTransform INetTransform
   }
@@ -18,7 +18,7 @@
   op: {
     -- Transformation operators
     ==> <== <=> ~~
-    
+
     -- Linear operators (re-exported from Linear)
     -o>: @Linear.-o>,
     o*: @Linear.o*,
@@ -30,10 +30,10 @@
     to_theory from_theory
     to_wire from_wire
     to_inet from_inet
-    
+
     -- Object and morphism mappings
     map_objects map_morphisms map_laws
-    
+
     -- Transformation utilities
     compose identity invert
   }
@@ -66,19 +66,19 @@
     for obj in @Linear.objects(linear_cat) do
       @Cata.Theory.add_object(cat, obj)
     end
-    
+
     -- Map morphisms
     for morph in @Linear.morphisms(linear_cat) do
       @Cata.Theory.add_morphism(cat, morph, @Linear.dom(morph), @Linear.cod(morph))
     end
-    
+
     -- Map monoidal structure if present
     if @Linear.MonoidalLinear?(linear_cat) then
-      @Cata.Theory.add_monoidal_structure(cat, 
+      @Cata.Theory.add_monoidal_structure(cat,
         @Linear.tensor, @Linear.unit, @Linear.braiding
       )
     end
-    
+
     cat
   ]
 
@@ -88,37 +88,37 @@
   ]]--
   from_theory: @Cata.Theory.Category -> @Linear.LinearCategory [theory_cat ->
     let linear_cat = @Linear.LinearCategory.new() in
-    
+
     -- Map objects
     for obj in @Cata.Theory.objects(theory_cat) do
       @Linear.add_object(linear_cat, obj)
     end
-    
+
     -- Map morphisms
     for morph in @Cata.Theory.morphisms(theory_cat) do
       let dom = @Cata.Theory.dom(morph) in
       let cod = @Cata.Theory.cod(morph) in
       @Linear.add_morphism(linear_cat, morph, dom, cod)
     end
-    
+
     linear_cat
   ]
 
   --------------------------------------------------
   -- Linear-Wire Category Mappings
   --------------------------------------------------
-  
+
   --[[
     Maps from the linear category to the wiring diagram domain
   ]]--
   to_wire: @Linear.LinearCategory -> @Wire.Category [linear_cat ->
     let wire_cat = @Wire.new() in
-    
+
     -- Map objects (types become boxes)
     let wire_with_objects = linear_cat.objects |> fold [cat obj ->
       @Wire.add_box(cat, {type: obj})
     ] wire_cat in
-    
+
     -- Map morphisms (linear functions become wiring connections)
     let wire_with_morphisms = linear_cat.morphisms |> fold [cat morph ->
       let dom_box = @Wire.get_box_by_type(cat, @Linear.dom(morph)) in
@@ -127,17 +127,17 @@
       let port_out = @Wire.add_port(cod_box, :out) in
       @Wire.connect(cat, port_out, port_in)
     ] wire_with_objects in
-    
+
     wire_with_morphisms
   ]
-  
+
   --[[
     Creates a linear category from a wiring diagram
   ]]--
   from_wire: @Wire.Category -> @Linear.LinearCategory [wire_cat ->
     {
       objects: wire_cat |> @Wire.get_boxes |> map [b -> b.type] |> linear_type_from,
-      morphisms: wire_cat |> @Wire.get_connections |> map [c -> 
+      morphisms: wire_cat |> @Wire.get_connections |> map [c ->
         let in_box = @Wire.box(c.in_port) in
         let out_box = @Wire.box(c.out_port) in
         linear_morphism_from(in_box.type, out_box.type)
@@ -145,14 +145,14 @@
       dom: [f -> f |> linear_morphism_to |> @Wire.connection_dom |> box_type],
       cod: [f -> f |> linear_morphism_to |> @Wire.connection_cod |> box_type],
       id: [a -> a |> [a -> a |> @Wire.id_connection] |> linear_morphism_from],
-      compose: [f g -> 
+      compose: [f g ->
         f |> linear_morphism_to |> @Wire.compose(g |> linear_morphism_to) |> linear_morphism_from
       ],
       unit: wire_cat |> @Wire.get_unit_box |> box_type |> linear_type_from,
-      tensor: [a b -> 
+      tensor: [a b ->
         a |> linear_type_to |> @Wire.tensor(b |> linear_type_to) |> linear_type_from
       ],
-      linear_arrow: [a b -> 
+      linear_arrow: [a b ->
         a |> linear_type_to |> @Wire.function_box(b |> linear_type_to) |> box_type |> linear_type_from
       ],
       laws: wire_cat.laws
@@ -162,60 +162,60 @@
   --------------------------------------------------
   -- Linear-INet Category Mappings
   --------------------------------------------------
-  
+
   --[[
     Maps from the linear category to the interaction net domain
   ]]--
   to_inet: @Linear.LinearCategory -> @INet.Category [linear_cat ->
     let inet_cat = @INet.new() in
-    
+
     -- Map linear types to agent symbols
     let inet_with_types = linear_cat.objects |> fold [cat obj ->
       @INet.add_symbol(cat, {name: obj |> to_string, arity: 2})
     ] inet_cat in
-    
+
     -- Map linear functions to agents with connections
     let inet_with_agents = linear_cat.morphisms |> fold [cat morph ->
       let dom_type = @Linear.dom(morph) in
       let cod_type = @Linear.cod(morph) in
-      
+
       -- Create an agent for this function
       let dom_symbol = @INet.get_symbol_by_name(cat, dom_type |> to_string) in
       let cod_symbol = @INet.get_symbol_by_name(cat, cod_type |> to_string) in
-      
+
       let agent = @INet.new_agent({
         symbol: {name: "LinearFn", arity: 2},
         ports: [{principal: true}, {principal: false}]
       }) in
-      
+
       -- Add and connect it
-      @INet.add_agent(cat, agent) |> 
+      @INet.add_agent(cat, agent) |>
       [cat -> @INet.connect(cat, agent.ports[0], dom_symbol.ports[0]) |>
               [cat -> @INet.connect(cat, agent.ports[1], cod_symbol.ports[0])]
       ]
     ] inet_with_types in
-    
+
     inet_with_agents
   ]
-  
+
   --[[
     Creates a linear category from an interaction net
   ]]--
   from_inet: @INet.Category -> @Linear.LinearCategory [inet_cat ->
     {
-      objects: inet_cat |> @INet.get_symbols |> map [s -> 
+      objects: inet_cat |> @INet.get_symbols |> map [s ->
         linear_type_from(s.name)
       ],
-      morphisms: inet_cat |> @INet.get_agents |> map [a -> 
+      morphisms: inet_cat |> @INet.get_agents |> map [a ->
         -- Find connected symbols through ports
         let domain = @INet.connected_port(inet_cat, a.ports[0]) |>
                     [p -> @INet.agent_of(inet_cat, p).symbol.name] |>
                     linear_type_from in
-        
+
         let codomain = @INet.connected_port(inet_cat, a.ports[1]) |>
                        [p -> @INet.agent_of(inet_cat, p).symbol.name] |>
                        linear_type_from in
-                       
+
         -- Create linear function
         linear_morphism_from(domain, codomain)
       ],
@@ -243,9 +243,9 @@
     cod: @Linear.cod,
     id: @Linear.id,
     compose: @Linear.compose,
-    
+
     tensor: @Linear.tensor,
     linear_arrow: @Linear.linear_arrow,
     laws: @Linear.LinearCategory.laws
   }
-} 
+}

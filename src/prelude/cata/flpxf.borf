@@ -10,10 +10,10 @@
   typ: {
     -- Transformation types
     LinearTransformation Functor Natural Isomorphism
-    
+
     -- Specific transformations
     ResultTransform ErrorTransform LinearResultTransform
-    
+
     -- Structure transformations
     LinearFunctorTransform ResourceTrackingTransform
   }
@@ -21,7 +21,7 @@
   op: {
     -- Transformation operators
     ==> <== <=> ~~
-    
+
     -- Flp operators
     ?
   }
@@ -32,21 +32,21 @@
     to_option from_option
     to_either from_either
     to_io from_io
-    
+
     -- Linear transformations
     to_linear from_linear
     to_linear_functor from_linear_functor
-    
+
     -- Error handling transformations
     to_error from_error
     map_error translate_error
-    
+
     -- Object and morphism mappings
     map_result map_objects map_morphisms
-    
+
     -- Resource tracking transformations
     track_resources untrack_resources
-    
+
     -- Transformation utilities
     compose identity invert
   }
@@ -75,20 +75,20 @@
   ]]--
   to_theory: @Flp.!Result -> @Cata.Theory.LinearCategory [result_linear ->
     let linear_cat = @Cata.Theory.new_linear_category() in
-    
+
     -- Map the linear morphism structure
     @Cata.Theory.add_linear_morphisms(linear_cat, {
       objects: T.Type_0,
       id: [a -> [!x -o> x]],
       compose: [f g -> [!x -o> x |> f |> g]]
     }) |>
-    
+
     -- Add tensor structure
     [cat -> @Cata.Theory.add_tensor_structure(cat, {
       tensor: [a b -> (!a * !b)],
       unit: T.Unit
     })] |>
-    
+
     -- Add result operations
     [cat -> @Cata.Theory.add_result_operations(cat, {
       ok: @Flp.ok,
@@ -117,7 +117,7 @@
   --------------------------------------------------
   -- Flp to Linear Module Transformations
   --------------------------------------------------
-  
+
   --[[
     to_linear transforms a Flp Result into a Linear module structure,
     preserving the linearity guarantees.
@@ -128,7 +128,7 @@
       [error -o> @Linear.error(error.message)]
     )
   ]
-  
+
   --[[
     from_linear transforms a Linear type into a Result structure,
     preserving resource tracking.
@@ -144,7 +144,7 @@
   --------------------------------------------------
   -- Flp to Option/Maybe Transformations
   --------------------------------------------------
-  
+
   --[[
     to_option transforms a Result into an Option/Maybe structure,
     mapping success to Some and error to None.
@@ -155,7 +155,7 @@
       [error -o> @T.none]            -- Error case: None
     )
   ]
-  
+
   --[[
     from_option transforms an Option/Maybe into a Result,
     with a default error for None.
@@ -167,7 +167,7 @@
   --------------------------------------------------
   -- Flp to Either/Result Transformations
   --------------------------------------------------
-  
+
   --[[
     to_either transforms a Result into an Either structure,
     (used by languages like Haskell, Rust, etc.)
@@ -178,13 +178,13 @@
       [error -o> Left(error)]
     )
   ]
-  
+
   --[[
     from_either transforms an Either into a Result
   ]]--
   from_either: Either(e, a) -o> @Flp.!Result(a) [either ->
     either |> [
-      Left(e) -> @Flp.err(e), 
+      Left(e) -> @Flp.err(e),
       Right(a) -> @Flp.ok(a)
     ]
   ]
@@ -192,7 +192,7 @@
   --------------------------------------------------
   -- Flp to IO Transformations
   --------------------------------------------------
-  
+
   --[[
     to_io transforms a Result into an IO operation
   ]]--
@@ -202,7 +202,7 @@
       [error -o> @IO.fail(error)]
     )
   ]
-  
+
   --[[
     from_io transforms an IO operation into a Result
   ]]--
@@ -218,7 +218,7 @@
   --------------------------------------------------
   -- Linear Functor Transformations
   --------------------------------------------------
-  
+
   --[[
     to_linear_functor extracts the linear functor structure from the Result type
   ]]--
@@ -228,12 +228,12 @@
       objects: T.Type_0,
       laws: {
         identity: [!fa -o> @Flp.map(fa, [!x -o> x]) teq fa],
-        composition: [!fa -o> [f g -> @Flp.map(fa, [!x -o> g(f(x))]) teq 
+        composition: [!fa -o> [f g -> @Flp.map(fa, [!x -o> g(f(x))]) teq
                                      @Flp.map(@Flp.map(fa, f), g)]]
       }
     }
   ]
-  
+
   --[[
     from_linear_functor creates a Result from a linear functor structure
   ]]--
@@ -242,7 +242,7 @@
       map: [!r -o> !f -o> functor.fmap(f)(r)],
       ok: ok,
       err: err,
-      and_then: [!r -o> !f -o> 
+      and_then: [!r -o> !f -o>
         r |> functor.fmap(f) |> @Cata.Linear.join
       ],
       match: [!r -o> !ok_handler -o> !err_handler -o>
@@ -254,14 +254,14 @@
   --------------------------------------------------
   -- Resource Tracking Transformations
   --------------------------------------------------
-  
+
   --[[
     track_resources adds explicit resource tracking to values
   ]]--
   track_resources: a -o> @Flp.!Result(a) [value ->
     @Flp.ok(value)
   ]
-  
+
   --[[
     untrack_resources removes resource tracking, potentially unsafe
   ]]--
@@ -275,7 +275,7 @@
   --------------------------------------------------
   -- Result Manipulation Utilities
   --------------------------------------------------
-  
+
   --[[
     map_result applies a transformation to a Result
   ]]--
@@ -285,44 +285,44 @@
       [error -o> error |> map_error |> @Flp.err]
     )
   ]
-  
+
   --[[
     map_objects applies a function to all object types in a Result
   ]]--
   map_objects: (@Flp.!Result(a) -o> @Flp.!Result(b)) * ![a] -o> [b] [transform objects ->
-    objects |> fold [acc obj -> 
+    objects |> fold [acc obj ->
       acc |> cons(@Flp.ok(obj) |> transform |> @Flp.unwrap_or_throw)
     ] []
   ]
-  
+
   --[[
     map_morphisms applies a function to all morphism types in a Result
   ]]--
   map_morphisms: (@Flp.!Result(!a -o> b) -o> @Flp.!Result(!c -o> d)) * ![!a -o> b] -o> [!c -o> d] [transform morphisms ->
-    morphisms |> fold [acc morph -> 
+    morphisms |> fold [acc morph ->
       acc |> cons(@Flp.ok(morph) |> transform |> @Flp.unwrap_or_throw)
     ] []
   ]
-  
+
   --[[
     compose composes two Result transformations, preserving linearity
   ]]--
   compose: (!a -o> @Flp.!Result(b)) * (!b -o> @Flp.!Result(c)) -o> (!a -o> @Flp.!Result(c)) [f g ->
     [!x -o> f(x) |> @Flp.and_then(g)]
   ]
-  
+
   --[[
     identity creates an identity transformation for Results
   ]]--
   identity: !a -o> @Flp.!Result(a) [!x ->
     @Flp.ok(x)
   ]
-  
+
   --[[
     invert attempts to invert a Result transformation when possible
   ]]--
   invert: (!a -o> @Flp.!Result(b)) -o> (!b -o> @Flp.!Result(a)) [!f ->
-    [!y -o> 
+    [!y -o>
       -- Note: True inversion is generally not possible for arbitrary functions
       -- This provides a "best effort" inverse that may fail
       @Flp.err({

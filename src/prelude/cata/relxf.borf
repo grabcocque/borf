@@ -9,7 +9,7 @@
   typ: {
     -- Transformation types
     RelationTransformation Functor Natural Isomorphism
-    
+
     -- Specific transformations
     GraphTransform CategoryTransform SetTransform
   }
@@ -17,7 +17,7 @@
   op: {
     -- Transformation operators
     ==> <== <=> ~~
-    
+
     -- Relation operators
     veq: @R.veq,
     seq: @R.seq,
@@ -31,10 +31,10 @@
     to_category from_category
     to_set from_set
     to_preorder from_preorder
-    
+
     -- Mapping functions
     map_relation map_elements map_properties
-    
+
     -- Transformation utilities
     compose identity invert
   }
@@ -63,12 +63,12 @@
   ]]--
   to_graph: @R.R * {a} -> @Graph.Graph [relation domain ->
     let graph = @Graph.new_graph() in
-    
+
     -- Create nodes for all elements in the domain
     for elem in domain do
       @Graph.add_node(graph, elem)
     end
-    
+
     -- Create edges for all related pairs
     for a in domain do
       for b in domain do
@@ -77,7 +77,7 @@
         end
       end
     end
-    
+
     graph
   ]
 
@@ -87,17 +87,17 @@
   ]]--
   from_graph: @Graph.Graph -> (@R.R * {a}) [graph ->
     let domain = {} in
-    
+
     -- Extract all nodes as domain elements
     for node in @Graph.nodes(graph) do
       domain := domain cup {node}
     end
-    
+
     -- Create relation function based on edges
     let relation = [a b ->
       @Graph.has_edge(graph, a, b)
     ] in
-    
+
     (relation, domain)
   ]
 
@@ -111,12 +111,12 @@
   ]]--
   to_category: @R.R * {a} -> @Theory.Category [relation domain ->
     let cat = @Cata.Theory.new_category() in
-    
+
     -- Create objects for all elements in the domain
     for elem in domain do
       @Theory.add_object(cat, elem)
     end
-    
+
     -- Create morphisms for all related pairs
     let morph_id = 0 in
     for a in domain do
@@ -128,13 +128,13 @@
             domain: a,
             codomain: b
           } in
-          
+
           @Theory.add_morphism(cat, morph, a, b)
           morph_id := morph_id + 1
         end
       end
     end
-    
+
     -- If relation is transitive, add appropriate compositions
     if @R.is_transitive(relation, domain) then
       for a in domain do
@@ -150,7 +150,7 @@
                   domain: a,
                   codomain: c
                 } in
-                
+
                 @Theory.add_morphism(cat, composed_morph, a, c)
                 morph_id := morph_id + 1
               end
@@ -159,7 +159,7 @@
         end
       end
     end
-    
+
     cat
   ]
 
@@ -169,18 +169,18 @@
   ]]--
   from_category: @Theory.Category -> (@R.R * {a}) [cat ->
     let domain = {} in
-    
+
     -- Extract all objects as domain elements
     for obj in @Theory.objects(cat) do
       domain := domain cup {obj}
     end
-    
+
     -- Create relation function based on the existence of morphisms
     let relation = [a b ->
       let morphs = @Theory.get_morphisms(cat, a, b) in
       morphs.size() > 0
     ] in
-    
+
     (relation, domain)
   ]
 
@@ -194,7 +194,7 @@
   ]]--
   to_set: @R.R * {a} -> {a * a} [relation domain ->
     let pairs = {} in
-    
+
     -- Create the set of all pairs in the relation
     for a in domain do
       for b in domain do
@@ -203,7 +203,7 @@
         end
       end
     end
-    
+
     pairs
   ]
 
@@ -212,17 +212,17 @@
   ]]--
   from_set: {a * a} -> (@R.R * {a}) [pairs ->
     let domain = {} in
-    
+
     -- Extract the domain from the pairs
     for (a, b) in pairs do
       domain := domain cup {a, b}
     end
-    
+
     -- Create relation function based on pair membership
     let relation = [a b ->
       (a, b) in pairs
     ] in
-    
+
     (relation, domain)
   ]
 
@@ -241,19 +241,19 @@
     else
       @R.reflexive_closure(relation)
     end in
-    
+
     -- Ensure the relation is transitive
     let preorder_rel = if @R.is_transitive(reflexive_rel, domain) then
       reflexive_rel
     else
       @R.transitive_closure(reflexive_rel)
     end in
-    
+
     -- Create the preorder structure
     {
       domain: domain,
       relation: preorder_rel,
-      compare: [a b -> 
+      compare: [a b ->
         if preorder_rel(a, b) then
           if preorder_rel(b, a) then 0 else -1
         else
@@ -269,4 +269,4 @@
   from_preorder: @R.PreOrder -> (@R.R * {a}) [preorder ->
     (preorder.relation, preorder.domain)
   ]
-} 
+}

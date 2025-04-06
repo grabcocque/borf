@@ -11,10 +11,10 @@
   typ: {
     -- Transformation types
     ModuleTransformation ResourceTransform DependencyTransform
-    
+
     -- Specific transformations
     ModuleToCategory ContextTransform ComponentTransform
-    
+
     -- Structure transformations
     LinearResourceCategory DependencyGraph ModuleDAG
   }
@@ -22,7 +22,7 @@
   op: {
     -- Transformation operators
     ==> <== <=> ~~
-    
+
     -- Module operators
     => # <> |>
   }
@@ -32,26 +32,26 @@
     to_theory from_theory
     to_graph from_graph
     to_inet from_inet
-    
+
     -- Dependency transformations
     to_dependency_graph from_dependency_graph
     dependency_to_category dependency_from_category
-    
+
     -- Component transformations
     components_to_set components_from_set
     export_to_interface import_from_interface
-    
+
     -- Resource transformations
     to_resource from_resource
     track_module untrack_module
-    
+
     -- Module lifecycle transformations
     init_transform finalize_transform
     with_module_resource with_component_resource
-    
+
     -- Object and morphism mappings
     map_module map_objects map_morphisms
-    
+
     -- Transformation utilities
     compose identity load_transform unload_transform
   }
@@ -81,27 +81,27 @@
   ]]--
   to_theory: @Mod.!Module -> @Cata.Theory.LinearResourceCategory [module_system ->
     let resource_cat = @Cata.Theory.new_linear_resource_category() in
-    
+
     -- Map the linear morphism structure
     @Cata.Theory.add_linear_morphisms(resource_cat, {
       objects: T.Type_0,
       id: [a -> [!x -o> !x]],
       compose: [f g -> [!x -o> x |> f |> g]]
     }) |>
-    
+
     -- Add monoidal structure
     [cat -> @Cata.Theory.add_monoidal_structure(cat, {
       tensor: [a b -> (!a * !b)],
       unit: T.Unit
     })] |>
-    
+
     -- Add resource structure
     [cat -> @Cata.Theory.add_resource_structure(cat, {
       acquire: @Mod.load,
       release: @Mod.unload,
       with_resource: @Mod.with_resource
     })] |>
-    
+
     -- Add module-specific operations
     [cat -> @Cata.Theory.add_module_operations(cat, {
       import: @Mod.import,
@@ -130,37 +130,37 @@
   --------------------------------------------------
   -- Module to Graph Transformations
   --------------------------------------------------
-  
+
   --[[
     to_graph transforms a Module system into a Graph structure,
     where modules are nodes and dependencies are edges.
   ]]--
   to_graph: @Mod.!Module -> @Graph.!Graph [module ->
     let g = @Graph.empty() in
-    
+
     -- Add module as a node
     let g_with_module = @Graph.add_node(g, module.name) in
-    
+
     -- Add dependencies as nodes and edges
     module.dependencies |> fold [graph dep ->
       let g_with_dep = if @Graph.has_node(graph, dep.module.name)
                          then graph
                          else @Graph.add_node(graph, dep.module.name) in
-                         
+
       @Graph.add_edge(g_with_dep, module.name, dep.module.name, {
         constraint: dep.version_constraint,
         optional: dep.optional
       })
     ] g_with_module
   ]
-  
+
   --[[
     from_graph transforms a Graph into a Module dependency structure.
   ]]--
   from_graph: @Graph.!Graph -> @Mod.!Module [graph ->
     -- Create a base module
     let base_module = @Mod.new_module("root", "1.0.0") in
-    
+
     -- Add dependencies based on edges
     @Graph.get_edges(graph) |> fold [module edge ->
       let dep_ref = @Mod.!ModuleRef {
@@ -168,9 +168,9 @@
         name: edge.target,
         version: @Mod.version(1, 0, 0, null, null)
       } in
-      
+
       let constraint = edge.data?.constraint or "*" in
-      
+
       @Mod.add_dependency(module, dep_ref, constraint)
     ] base_module
   ]
@@ -178,23 +178,23 @@
   --------------------------------------------------
   -- Module to Interaction Net Transformations
   --------------------------------------------------
-  
+
   --[[
     to_inet transforms a Module system into an Interaction Net,
     where modules are agents and dependencies are connections.
   ]]--
   to_inet: @Mod.!Module -> @INet.!Net [module ->
     let net = @INet.empty_net() in
-    
+
     -- Create agent for this module
     let module_agent = @INet.new_agent({
       name: module.name,
       principal: true,
       ports: []
     }) in
-    
+
     let net_with_module = @INet.add_agent(net, module_agent) in
-    
+
     -- Add port for each component
     let net_with_ports = module.components |> fold [n comp ->
       let port = @INet.new_port({
@@ -203,7 +203,7 @@
       }) in
       @INet.add_port(n, module_agent, port)
     ] net_with_module in
-    
+
     -- Create dependency connections
     module.dependencies |> fold [n dep ->
       let dep_agent = @INet.new_agent({
@@ -211,27 +211,27 @@
         principal: false,
         ports: [{name: "depends_on", principal: true}]
       }) in
-      
+
       let n_with_dep = @INet.add_agent(n, dep_agent) in
-      
-      @INet.connect(n_with_dep, 
+
+      @INet.connect(n_with_dep,
         @INet.get_port(module_agent, "depends"),
         @INet.get_port(dep_agent, "depends_on")
       )
     ] net_with_ports
   ]
-  
+
   --[[
     from_inet transforms an Interaction Net into a Module structure.
   ]]--
   from_inet: @INet.!Net -> @Mod.!Module [net ->
     -- Find the principal agent (the module)
-    let module_agent = @INet.get_agents(net) 
+    let module_agent = @INet.get_agents(net)
                        |> find [a -> a.principal] in
-                       
+
     -- Create base module
     let base_module = @Mod.new_module(module_agent.name, "1.0.0") in
-    
+
     -- Add components from ports
     let module_with_components = @INet.get_ports(module_agent) |> fold [m port ->
       @Mod.add_component(m, {
@@ -241,19 +241,19 @@
         exported: port.data?.exported or false
       })
     ] base_module in
-    
+
     -- Add dependencies from connections
     @INet.get_connections(net) |> fold [m conn ->
       let source_agent = @INet.agent_of(conn.source_port) in
       let target_agent = @INet.agent_of(conn.target_port) in
-      
+
       if source_agent.name == module_agent.name then
         let dep_ref = @Mod.!ModuleRef {
           id: 0,  -- Placeholder id
           name: target_agent.name,
           version: @Mod.version(1, 0, 0, null, null)
         } in
-        
+
         @Mod.add_dependency(m, dep_ref, "*")
       else
         m
@@ -263,18 +263,18 @@
   --------------------------------------------------
   -- Dependency Graph Transformations
   --------------------------------------------------
-  
+
   --[[
     to_dependency_graph creates a graph representation of module dependencies
   ]]--
   to_dependency_graph: @Mod.!Context -> @Graph.!Graph [context ->
     let graph = @Graph.empty() in
-    
+
     -- Add all modules as nodes
     let graph_with_modules = context.modules |> fold [g m ->
       @Graph.add_node(g, m.name, {version: m.version})
     ] graph in
-    
+
     -- Add all dependencies as edges
     context.modules |> fold [g m ->
       m.dependencies |> fold [g_inner dep ->
@@ -285,27 +285,27 @@
       ] g
     ] graph_with_modules
   ]
-  
+
   --[[
     from_dependency_graph reconstructs modules and contexts from a dependency graph
   ]]--
   from_dependency_graph: @Graph.!Graph -> @Mod.!Context [graph ->
     let context = @Mod.new_context([]) in
-    
+
     -- Create modules from nodes
     @Graph.get_nodes(graph) |> fold [ctx node ->
       let module = @Mod.new_module(node.name, node.data?.version or "1.0.0") in
       let ctx_with_module = @Mod.add_module(ctx, module) in
-      
+
       -- Find outgoing edges for dependencies
       let deps = @Graph.get_edges_from(graph, node.name) in
-      
+
       deps |> fold [inner_ctx edge ->
         let module_with_dep = @Mod.get_module(inner_ctx, node.name) |> [m ->
           let dep_ref = @Mod.to_ref(@Mod.get_module(inner_ctx, edge.target)) in
           @Mod.add_dependency(m, dep_ref, edge.data?.constraint or "*")
         ] in
-        
+
         @Mod.update_module(inner_ctx, module_with_dep)
       ] ctx_with_module
     ] context
@@ -314,14 +314,14 @@
   --------------------------------------------------
   -- Component Transformations
   --------------------------------------------------
-  
+
   --[[
     components_to_set transforms module components to a set representation
   ]]--
   components_to_set: @Mod.!Module -> {@Mod.!Component} [module ->
     module.components
   ]
-  
+
   --[[
     components_from_set transforms a set of components into a module
   ]]--
@@ -329,14 +329,14 @@
     let base_module = @Mod.new_module("generated", "1.0.0") in
     @Mod.extend(base_module, components)
   ]
-  
+
   --[[
     export_to_interface creates an interface representation from module exports
   ]]--
   export_to_interface: @Mod.!Module -> @Mod.!ExportSet [module ->
     module.exports
   ]
-  
+
   --[[
     import_from_interface imports an interface into a module
   ]]--
@@ -345,17 +345,17 @@
     let module_with_types = interface.types |> fold [m t ->
       @Mod.import_component(m, t, :type)
     ] module in
-    
+
     -- Import operations
     let module_with_ops = interface.ops |> fold [m op ->
       @Mod.import_component(m, op, :op)
     ] module_with_types in
-    
+
     -- Import functions
     let module_with_fns = interface.fns |> fold [m fn ->
       @Mod.import_component(m, fn, :fn)
     ] module_with_ops in
-    
+
     -- Import modules
     interface.modules |> fold [m mod_ref ->
       @Mod.import_module(m, mod_ref)
@@ -365,7 +365,7 @@
   --------------------------------------------------
   -- Resource Transformations
   --------------------------------------------------
-  
+
   --[[
     to_resource extracts the resource component from a module
   ]]--
@@ -375,7 +375,7 @@
       release: [!m -o> @Mod.finalize(m)]
     }
   ]
-  
+
   --[[
     from_resource creates a module from a resource representation
   ]]--
@@ -383,7 +383,7 @@
     let uninit_module = resource.acquire(()) in
     @Mod.init(uninit_module).module  -- Return the initialized module
   ]
-  
+
   --[[
     track_module adds explicit resource tracking to a module
   ]]--
@@ -396,14 +396,14 @@
       finalizer: [!m -o> @Mod.finalize(m)]
     })
   ]
-  
+
   --[[
     untrack_module removes resource tracking from a module
   ]]--
   untrack_module: @Mod.!Module -> @Mod.!Module [module ->
     -- Remove resource tracking metadata
-    @Mod.restrict(module, [name -> name != "tracked" and 
-                                  name != "track_id" and 
+    @Mod.restrict(module, [name -> name != "tracked" and
+                                  name != "track_id" and
                                   name != "acquire_time" and
                                   name != "finalizer"])
   ]
@@ -411,7 +411,7 @@
   --------------------------------------------------
   -- Module Lifecycle Transformations
   --------------------------------------------------
-  
+
   --[[
     init_transform transforms the module initialization process
   ]]--
@@ -422,10 +422,10 @@
         state: :pre_initializing,
         init_start_time: Prim.current_time()
       }) in
-      
+
       -- Call the original init function
       let result = init_fn(pre_init_module) in
-      
+
       -- Custom post-initialization logic
       if result.success then
         @Mod.extend(result.module, {
@@ -436,7 +436,7 @@
         result
     ]
   ]
-  
+
   --[[
     finalize_transform transforms the module finalization process
   ]]--
@@ -447,15 +447,15 @@
         state: :finalizing,
         finalize_start_time: Prim.current_time()
       }) in
-      
+
       -- Call the original finalize function
       let result = finalize_fn(pre_final_module) in
-      
+
       -- Note: module is consumed by finalization, so we can't extend it after
       result
     ]
   ]
-  
+
   --[[
     with_module_resource safely manages a module as a resource
   ]]--
@@ -463,36 +463,36 @@
     [!module -o>
       -- Initialize the module
       let init_result = init(module) in
-      
+
       if init_result.success then
         -- Use the module
         let initialized_module = init_result.module in
         let result = use(initialized_module) in
-        
+
         -- Finalize the module (consumed)
         finalize(initialized_module);
-        
+
         -- Return the result
         result
       else
         error(init_result.errors |> join("\n"))
     ]
   ]
-  
+
   --[[
     with_component_resource safely manages a module component as a resource
   ]]--
   with_component_resource: @Mod.!Module * S * (Any -o> a) * (a -o> ()) -> a [module component_name use cleanup ->
     -- Get the component
     let {module: updated_module, component: ?component} = @Mod.get_component(module, component_name) in
-    
+
     if component then
       -- Use the component
       let result = use(component.value) in
-      
+
       -- Cleanup
       cleanup(result);
-      
+
       -- Return the result
       result
     else
@@ -502,42 +502,42 @@
   --------------------------------------------------
   -- Transformation Utilities
   --------------------------------------------------
-  
+
   --[[
     map_module applies a transformation to a module
   ]]--
   map_module: @Mod.!Module * (@Mod.!Module -o> @Mod.!Module) -> @Mod.!Module [module transform ->
     transform(module)
   ]
-  
+
   --[[
     map_objects applies a function to all objects in a module
   ]]--
   map_objects: (@Mod.!Module -o> @Mod.!Module) * [@Mod.!Module] -> [@Mod.!Module] [transform modules ->
     modules |> [ms -> map [m -> transform(m)] ms]
   ]
-  
+
   --[[
     map_morphisms applies a function to all morphisms between modules
   ]]--
   map_morphisms: ((@Mod.!Module * @Mod.!Module) -o> (@Mod.!Module * @Mod.!Module)) * [(@Mod.!Module * @Mod.!Module)] -> [(@Mod.!Module * @Mod.!Module)] [transform morphisms ->
     morphisms |> [ms -> map [pair -> transform(pair)] ms]
   ]
-  
+
   --[[
     compose composes two module transformations
   ]]--
   compose: (@Mod.!Module -o> @Mod.!Module) * (@Mod.!Module -o> @Mod.!Module) -> (@Mod.!Module -o> @Mod.!Module) [f g ->
     [!m -o> f(m) |> g]
   ]
-  
+
   --[[
     identity creates an identity transformation for modules
   ]]--
   identity: @Mod.!Module -o> @Mod.!Module [!m ->
     m
   ]
-  
+
   --[[
     load_transform transforms the module loading process
   ]]--
@@ -548,20 +548,20 @@
         load_start_time: Prim.current_time(),
         current_path: path
       }) in
-      
+
       -- Call the original load function
       let {context: post_ctx, result: load_result} = load_fn(pre_ctx, path) in
-      
+
       -- Post-load logic
       let final_ctx = @Mod.extend_context(post_ctx, {
         load_end_time: Prim.current_time(),
         load_duration: Prim.current_time() - pre_ctx.load_start_time
       }) in
-      
+
       (final_ctx, load_result)
     ]
   ]
-  
+
   --[[
     unload_transform transforms the module unloading process
   ]]--
@@ -572,10 +572,10 @@
         unload_start_time: Prim.current_time(),
         unloading_module: module.name
       }) in
-      
+
       -- Call the original unload function
       let post_ctx = unload_fn(pre_ctx, module) in
-      
+
       -- Post-unload logic
       @Mod.extend_context(post_ctx, {
         unload_end_time: Prim.current_time(),

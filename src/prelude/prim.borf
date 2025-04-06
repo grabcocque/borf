@@ -104,94 +104,80 @@
   --------------------------------------------------
   -- Structure Mapping to Computational Category
   --------------------------------------------------
-  
+
   --[[
-    Structure mapping that establishes @Prim as a computational 
-    category with resource tracking capabilities. This mapping 
-    connects the primitive operations of Borf to categorical 
+    Structure mapping that establishes @Prim as a computational
+    category with resource tracking capabilities. This mapping
+    connects the primitive operations of Borf to categorical
     concepts, providing a mathematical foundation for the language's
     computational model.
-    
+
     This forms a symmetric monoidal closed category with additional
     structure for linear types and resource management.
   ]]--
   structure: {
     -- Map Prim to a computational category
-    objects: T.Type_0,
+    objects: @T.T,
     morphisms: [a b -> (a -> b)],
     linear_morphisms: [a b -> (a -o> b)],
-    
+
     -- Base category structure
-    dom: [f -> f.domain],
-    cod: [f -> f.codomain],
+    dom: [f -> @T.domain(f)],
+    cod: [f -> @T.codomain(f)],
     id: [a -> [x -> x]],
-    compose: [f g -> compose(f, g)],
-    
-    -- Monoidal structure (for product types)
+    compose: [f g -> [x -> g(f(x))]],
+
+    -- Monoidal structure (for products)
     tensor: [a b -> (a * b)],
-    unit: Unit,
-    tensor_morphism: [f g -> [pair -> (f(pair.0), g(pair.1))]],
-    
+    unit: (),
+    tensor_morphism: [f g -> [(a, b) -> (f(a), g(b))]],
+    associator: [a b c -> [((a, b), c) -> (a, (b, c))]],
+    left_unitor: [a -> [((), a) -> a]],
+    right_unitor: [a -> [(a, ()) -> a]],
+
     -- Closed structure (for function types)
     internal_hom: [a b -> (a -> b)],
-    eval: [(a -> b) * a -> b],
-    curry: [(a * b -> c) -> (a -> (b -> c))],
-    
-    -- Linear structure (for resource types)
-    linear_type: [a -> !a],
-    consume_morphism: consume,
-    clone_morphism: clone,
-    
-    -- Special structures for Borf primitives
-    collection_functors: {
-      list: [a -> [a]],
-      sequence: [a -> Seq(a)],
-      set: [a -> {a}],
-      map: [k v -> (k:-> v)]
-    },
-    
-    -- Natural transformations between structures
-    natural_transformations: {
-      list_to_seq: [a -> ([a] -> Seq(a))],
-      seq_to_list: [a -> (Seq(a) -> [a])],
-      list_to_set: [a -> ([a] -> {a})]
-    },
-    
-    -- Categorical laws
+    eval: [a b -> [(f, x) -> f(x)]],
+    curry: [a b c f -> [a -> [b -> f((a, b))]]],
+
+    -- Linear structure (for resource tracking)
+    linear_tensor: [a b -> (a × b)],
+    linear_internal_hom: [a b -> (a -o> b)],
+    linear_eval: [a b -> [(f, x) -> f -o> x]],
+    linear_curry: [a b c f -> [a -> [b -o> f((a, b))]]],
+
+    -- Resource operations
+    clone: [a -> [x -> (x, x)]],
+    drop: [a -> [x -> ()]],
+    linear_use: [a -> [x -> consume(x)]],
+
+    -- Laws for the category
     laws: {
       -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
       associativity: forall [f g h ->
         compose(compose(f, g), h) == compose(f, compose(g, h))
       ],
-      
+
       -- Identity: id ∘ f = f = f ∘ id
       identity: forall [f ->
-        compose(id, f) == f && compose(f, id) == f
+        compose(id(dom(f)), f) == f && compose(f, id(cod(f))) == f
       ],
-      
-      -- Linear composition preserves resources
+
+      -- Functoriality of tensor
+      tensor_functorial: forall [f1 g1 f2 g2 ->
+        tensor_morphism(compose(f1, f2), compose(g1, g2)) ==
+        compose(tensor_morphism(f1, g1), tensor_morphism(f2, g2))
+      ],
+
+      -- Linear resource laws
+      linear_once: forall [f x ->
+        f is linear_morphisms implies uses_exactly_once(f, x)
+      ],
+
+      -- Preservation of linearity under composition
       linear_composition: forall [f g ->
-        let f_lin = f is (a -o> b) in
-        let g_lin = g is (b -o> c) in
-        f_lin && g_lin implies (compose(f, g) is (a -o> c))
-      ],
-      
-      -- Monoidal coherence laws
-      tensor_associativity: forall [a b c ->
-        ((a * b) * c) =~ (a * (b * c))
-      ],
-      
-      tensor_identity: forall [a ->
-        (a * Unit) =~ a && (Unit * a) =~ a
-      ],
-      
-      -- Resource tracking laws
-      consume_linear: forall [a ->
-        (consume is (!a -o> Unit))
-      ],
-      
-      clone_non_linear: forall [a ->
-        not (a is !b) implies (clone is (a -> a))
+        f is linear_morphisms && g is linear_morphisms implies
+        compose(f, g) is linear_morphisms
       ]
     }
   }

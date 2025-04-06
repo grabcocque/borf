@@ -37,12 +37,12 @@
   --------------------------------------------------
   -- Structure Mapping to Linear Category
   --------------------------------------------------
-  
+
   --[[
-    Structure mapping that explicitly connects the Flp module to the 
+    Structure mapping that explicitly connects the Flp module to the
     categorical framework as a Linear Category. This mapping establishes
     @Flp.Result as a linear type constructor with resource tracking guarantees.
-    
+
     Instead of using monadic structure, we use linear morphisms where inputs
     are consumed exactly once and cannot be duplicated or discarded.
   ]]--
@@ -50,41 +50,41 @@
     -- Map Flp to LinearCategory
     objects: T.Type_0,
     morphisms: [a b -> (!a -o> b)],
-    
+
     -- Base category structure
     dom: [f -> f.domain],
     cod: [f -> f.codomain],
     id: [a -> [!x -o> x]],
     compose: [f g -> [!x -o> x |> f |> g]],
-    
+
     -- Symmetric monoidal structure (for pairing values linearly)
     tensor: [a b -> (!a * !b)],
     unit: T.Unit,
-    
+
     -- Result as a functor in linear category
     result_obj: [a -> !Result(a)],
     result_map: [f -> [!r -o> r |> map(f)]],
-    
+
     -- Linear operations on Result
     ok_linear: [a -> (!a -o> !Result(a))],
     err_linear: [a -> (!Error -o> !Result(a))],
-    
+
     -- Linear combinators that consume their inputs
     and_then_linear: [a b -> (!Result(a) * (!a -o> !Result(b)) -o> !Result(b))],
     or_else_linear: [a -> (!Result(a) * (!Error -o> !Result(a)) -o> !Result(a))],
     map_linear: [a b -> (!Result(a) * (!a -o> b) -o> !Result(b))],
-    
+
     -- Linear pattern matching that consumes the result
     match_linear: [a b -> (!Result(a) * (!a -o> b) * (!Error -o> b) -o> b)],
-    
+
     -- Linear resource consumption laws
     laws: {
       -- Each result is consumed exactly once
       linear_consumption: forall [r f -> let !x = r in f(!x) |> resource_consumed_exactly_once],
-      
+
       -- Results can't be duplicated
       no_copy: forall [r -> let !x = r in {!x, !x} |> type_error],
-      
+
       -- Results can't be discarded
       no_discard: forall [r -> let !x = r in unit |> type_error]
     }

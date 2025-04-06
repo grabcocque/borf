@@ -12,18 +12,18 @@
     TypeTransform
     SubtypeTransform
     EquivalenceTransform
-    
+
     -- Framework transformations
     TypeToLogic
     TypeToSet
     TypeToProof
     TypeToComputation
-    
+
     -- Universe transformations
     UniverseShift
     UniverseEmbedding
     UniverseLift
-    
+
     -- Specialized transformations
     DependentTransform
     LinearTransform
@@ -33,10 +33,10 @@
   op: {
     -- Transformation operators
     ==> <== <=> ~~  -- Transformation directions and equivalences
-    
+
     -- Composition operators
     >>> <<< +++ &&& -- Sequential and parallel composition
-    
+
     -- Special operators
     ^^ ## $$ @@     -- Universe operations, lifting, and substitution
   }
@@ -44,30 +44,30 @@
   fn: {
     -- Type transformations
     to_logic from_logic
-    to_set from_set  
+    to_set from_set
     to_proof from_proof
     to_computation from_computation
-    
+
     -- Subtyping transformations
     subtype_to_inclusion inclusion_to_subtype
     subtype_to_impl impl_to_subtype
-    
+
     -- Universe transformations
     shift_universe lift_universe embed_universe
     cumulative_universe non_cumulative_universe
-    
+
     -- Polymorphic transformations
     forall_to_intersection exists_to_union
     parametric_to_ad_hoc
-    
+
     -- Dependent type transformations
     pi_to_universal sigma_to_existential
     dependent_to_simple simple_to_dependent
-    
+
     -- Linear type transformations
     linear_to_monad monad_to_linear
     linear_to_indexed indexed_to_linear
-    
+
     -- Specialized transformations
     curry uncurry
     church_encode church_decode
@@ -95,14 +95,14 @@
   --[[
     to_logic transforms a type system into a logical framework using
     the Curry-Howard correspondence.
-    
+
     Types become propositions, and terms (values) become proofs.
     Function types become implications, products become conjunctions,
     sums become disjunctions, and dependent types become quantifiers.
   ]]--
   to_logic: @T -> @Logic.System [type_system ->
     let logic_system = @Logic.new_system() in
-    
+
     -- Map basic types to propositions
     @Logic.add_propositions(logic_system, {
       -- Basic types
@@ -110,11 +110,11 @@
       [@T.Z, @Logic.atom("IsInteger")],
       [@T.R, @Logic.atom("IsReal")],
       [@T.S, @Logic.atom("IsString")],
-      
+
       -- Special types
       [@T.Any, @Logic.top],
       [@T.Void, @Logic.bottom],
-      
+
       -- Type constructors
       ["a * b", @Logic.and(@Logic.prop("a"), @Logic.prop("b"))],
       ["a + b", @Logic.or(@Logic.prop("a"), @Logic.prop("b"))],
@@ -122,15 +122,15 @@
       ["!a", @Logic.linear(@Logic.prop("a"))],
       ["?a", @Logic.maybe(@Logic.prop("a"))]
     }) |>
-    
+
     -- Map subtyping to logical entailment
     [sys -> @Logic.add_rules(sys, {
       subtyping: [a b -> @T.subtype(a, b) <=> @Logic.entails(@Logic.prop(a), @Logic.prop(b))],
-      
+
       -- Map type operations to logical operations
       intersection: [a b -> @T.intersection(a, b) <=> @Logic.and(@Logic.prop(a), @Logic.prop(b))],
       union: [a b -> @T.union(a, b) <=> @Logic.or(@Logic.prop(a), @Logic.prop(b))],
-      
+
       -- Map dependent types to quantifiers
       pi: [a b -> @T.Pi(a, b) <=> @Logic.forall(a, [x -> @Logic.prop(b(x))])],
       sigma: [a b -> @T.Sigma(a, b) <=> @Logic.exists(a, [x -> @Logic.prop(b(x))])]
@@ -140,42 +140,42 @@
   --[[
     from_logic transforms a logical framework back into a type system
     using the Curry-Howard correspondence in reverse.
-    
+
     Propositions become types, and proofs become terms (values).
     Implications become function types, conjunctions become products,
     disjunctions become sums, and quantifiers become dependent types.
   ]]--
   from_logic: @Logic.System -> @T [logic_system ->
     let type_system = {} in
-    
+
     -- Map propositions to types
     type_system |> @T.add_types({
       -- Logical constants
       [@Logic.top, @T.Any],
       [@Logic.bottom, @T.Void],
-      
+
       -- Logical connectives
       ["a && b", @T.product(@T.type_of("a"), @T.type_of("b"))],
       ["a || b", @T.coproduct(@T.type_of("a"), @T.type_of("b"))],
       ["a => b", @T.exponential(@T.type_of("a"), @T.type_of("b"))],
-      
+
       -- Modalities
       ["◇a", @T.optional(@T.type_of("a"))],
       ["□a", @T.linear(@T.type_of("a"))],
-      
+
       -- Quantifiers
       ["∀x:A. P(x)", @T.Pi("x", @T.type_of("A"), [x -> @T.type_of("P(x)")])],
       ["∃x:A. P(x)", @T.Sigma("x", @T.type_of("A"), [x -> @T.type_of("P(x)")])]
     }) |>
-    
+
     -- Map logical entailment to subtyping
     [sys -> @T.add_rules(sys, {
       entailment: [a b -> @Logic.entails(a, b) <=> @T.subtype(@T.type_of(a), @T.type_of(b))],
-      
+
       -- Map logical operations to type operations
       conjunction: [a b -> @Logic.and(a, b) <=> @T.intersection(@T.type_of(a), @T.type_of(b))],
       disjunction: [a b -> @Logic.or(a, b) <=> @T.union(@T.type_of(a), @T.type_of(b))],
-      
+
       -- Map quantifiers to dependent types
       universal: [a p -> @Logic.forall(a, p) <=> @T.Pi("x", @T.type_of(a), [x -> @T.type_of(p(x))])],
       existential: [a p -> @Logic.exists(a, p) <=> @T.Sigma("x", @T.type_of(a), [x -> @T.type_of(p(x))])]
@@ -193,7 +193,7 @@
   ]]--
   to_set: @T -> @Set.System [type_system ->
     let set_system = @Set.new_system() in
-    
+
     -- Map basic types to sets
     @Set.add_sets(set_system, {
       -- Basic types
@@ -201,11 +201,11 @@
       [@T.Z, @Set.countable_set("Z")],
       [@T.R, @Set.uncountable_set("R")],
       [@T.S, @Set.countable_set("S")],
-      
+
       -- Special types
       [@T.Any, @Set.universal_set],
       [@T.Void, @Set.empty_set],
-      
+
       -- Type constructors as set operations
       ["a * b", @Set.cartesian_product(@Set.of("a"), @Set.of("b"))],
       ["a + b", @Set.disjoint_union(@Set.of("a"), @Set.of("b"))],
@@ -213,15 +213,15 @@
       ["!a", @Set.linear_space(@Set.of("a"))],
       ["?a", @Set.option_space(@Set.of("a"))]
     }) |>
-    
+
     -- Map type operations to set operations
     [sys -> @Set.add_operations(sys, {
       subtyping: [a b -> @T.subtype(a, b) <=> @Set.subset(@Set.of(a), @Set.of(b))],
-      
+
       -- Set-theoretic operations
       intersection: [a b -> @T.intersection(a, b) <=> @Set.intersection(@Set.of(a), @Set.of(b))],
       union: [a b -> @T.union(a, b) <=> @Set.union(@Set.of(a), @Set.of(b))],
-      
+
       -- Advanced type features
       dependent_product: [a b -> @T.Pi(a, b) <=> @Set.dependent_product(@Set.of(a), [x -> @Set.of(b(x))])],
       dependent_sum: [a b -> @T.Sigma(a, b) <=> @Set.dependent_sum(@Set.of(a), [x -> @Set.of(b(x))])]
@@ -235,32 +235,32 @@
   ]]--
   from_set: @Set.System -> @T [set_system ->
     let type_system = {} in
-    
+
     -- Map sets to types
     type_system |> @T.add_types({
       -- Basic sets
       [@Set.empty_set, @T.Void],
       [@Set.universal_set, @T.Any],
       [@Set.finite_set([true, false]), @T.B],
-      
+
       -- Set operations
       ["A × B", @T.product(@T.type_of("A"), @T.type_of("B"))],
       ["A ⊎ B", @T.coproduct(@T.type_of("A"), @T.type_of("B"))],
       ["A → B", @T.exponential(@T.type_of("A"), @T.type_of("B"))],
-      
+
       -- Advanced set constructions
       ["ΠA∈U. B(A)", @T.Pi("A", @T.type_of("U"), [A -> @T.type_of("B(A)")])],
       ["ΣA∈U. B(A)", @T.Sigma("A", @T.type_of("U"), [A -> @T.type_of("B(A)")])]
     }) |>
-    
+
     -- Map set relations to type relations
     [sys -> @T.add_rules(sys, {
       subset: [a b -> @Set.subset(a, b) <=> @T.subtype(@T.type_of(a), @T.type_of(b))],
-      
+
       -- Set-theoretic operations
       intersection: [a b -> @Set.intersection(a, b) <=> @T.intersection(@T.type_of(a), @T.type_of(b))],
       union: [a b -> @Set.union(a, b) <=> @T.union(@T.type_of(a), @T.type_of(b))],
-      
+
       -- Advanced set operations
       dependent_product: [a b -> @Set.dependent_product(a, b) <=> @T.Pi("x", @T.type_of(a), [x -> @T.type_of(b(x))])],
       dependent_sum: [a b -> @Set.dependent_sum(a, b) <=> @T.Sigma("x", @T.type_of(a), [x -> @T.type_of(b(x))])]
@@ -378,7 +378,7 @@
     --   |          |
     --   v          v
     --  F(A) -F(f)-> F(B)
-    
+
     true  -- In a real implementation, would check all required conditions
   ]
 
@@ -400,4 +400,4 @@
   to_logic_proof: (@T.T -> @T.T) -> (@Logic.Proposition -> @Logic.Proof) [f ->
     [p -> @Logic.intro_proof(p, "Type function application")]
   ]
-} 
+}

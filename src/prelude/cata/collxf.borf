@@ -1,0 +1,477 @@
+--[[
+  Collection Transformations
+
+  This module defines transformations between collection types and other categorical
+  frameworks, enabling rigorous reasoning about collections, their transformations,
+  and the preservation of structural properties across different representations.
+]]--
+
+@CollXf: {
+  typ: {
+    -- Core transformation types
+    CollectionTransform
+    CollectionNaturalTransform
+    CollectionFunctor
+    
+    -- Specific transformations
+    MapTransform
+    ListTransform
+    SetTransform
+    QueueTransform
+    
+    -- Collection adjunctions
+    ListSetAdjunction
+    MapSetAdjunction
+    
+    -- Structural transformations
+    MonoidalTransform
+    TracedTransform
+    ResourceTransform
+  }
+
+  op: {
+    -- Transformation operators
+    ==> <== <=> ~~  -- Transformation directions and equivalences
+    
+    -- Composition operators
+    >>> <<< +++ &&& -- Sequential and parallel composition
+    
+    -- Linear type operators
+    -o> ! % ×      -- Linear function, linear type, resource splitting, tensor product
+  }
+
+  fn: {
+    -- Core transformation functions
+    to_list from_list
+    to_set from_set
+    to_map from_map
+    to_queue from_queue
+    
+    -- Natural transformations
+    map_to_set set_to_map
+    list_to_set set_to_list
+    map_to_list list_to_map
+    list_to_queue queue_to_list
+    
+    -- Functorial operations
+    map_functor list_functor set_functor queue_functor
+    
+    -- Linear-focused operations (replacing monadic operations)
+    linear_singleton linear_flatten linear_chain
+    linear_map_values linear_set_elements
+    linear_list_elements linear_queue_elements
+    
+    -- Resource-aware transformations
+    linear_transform persistent_transform
+    
+    -- Parallel and sequential transformations
+    parallel_transform sequential_transform
+    
+    -- Advanced transformations
+    memoize_collection index_collection
+    observe_collection lazy_collection
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@CollXf, @T, true),           -- Add dependency on Type system
+    (@CollXf, @Coll, true),        -- Add dependency on Collection module
+    (@CollXf, @Cata.Theory, true), -- Add dependency on Category theory
+    (@CollXf, @Prim, true),        -- Add dependency on Primitives
+    (@CollXf, @Seq, true)          -- Add dependency on Sequence module
+  }
+
+  --------------------------------------------------
+  -- Collection Transformations
+  --------------------------------------------------
+
+  --[[
+    CollectionTransform defines a transformation between collection types,
+    preserving the appropriate structure while changing representation.
+  ]]--
+  CollectionTransform: {
+    source_type: @T.T,               -- Source collection type
+    target_type: @T.T,               -- Target collection type
+    transform: (a -o> a),            -- Transformation function
+    preserves_structure: Bool,       -- Whether the transformation preserves structure
+    linear: Bool                     -- Whether the transformation is resource-aware
+  }
+
+  --[[
+    List to Set transformation
+    
+    Transforms a list into a set, removing duplicates.
+    This forms a classic adjunction with set_to_list.
+  ]]--
+  list_to_set: ![a] -o> @Coll.Set._map_type[a] [xs ->
+    xs |> @Coll.Set.from_list
+  ]
+
+  --[[
+    Set to List transformation
+    
+    Transforms a set into a list. The order is not specified.
+    This forms the right adjoint to list_to_set.
+  ]]--
+  set_to_list: !@Coll.Set._map_type[a] -o> [a] [s ->
+    s |> @Coll.Set.to_list
+  ]
+
+  --[[
+    Map to Set transformation of keys
+    
+    Extracts the keys from a map as a set.
+  ]]--
+  map_to_set: !(k:-> v) -o> @Coll.Set._map_type[k] [m ->
+    m |> @Coll.Map.keys |> @Coll.Set.from_list
+  ]
+
+  --[[
+    Map to List transformation
+    
+    Transforms a map into a list of key-value pairs.
+  ]]--
+  map_to_list: !(k:-> v) -o> [(k * v)] [m ->
+    m |> @Coll.Map.entries
+  ]
+
+  --[[
+    List to Map transformation
+    
+    Transforms a list of key-value pairs into a map.
+  ]]--
+  list_to_map: ![(k * v)] -o> (k:-> v) [entries ->
+    entries |> @Coll.List.fold [m (k, v) -> m k v |> @Coll.Map.insert] (@Coll.Map.empty)
+  ]
+
+  --[[
+    List to Queue transformation
+    
+    Transforms a list into a queue with the same elements.
+  ]]--
+  list_to_queue: ![a] -o> @Coll.Queue._list_type[a] [xs ->
+    -- Queue is already implemented as a list internally
+    xs
+  ]
+
+  --[[
+    Queue to List transformation
+    
+    Transforms a queue into a list with the same elements.
+  ]]--
+  queue_to_list: !@Coll.Queue._list_type[a] -o> [a] [q ->
+    -- Queue is already implemented as a list internally
+    q
+  ]
+
+  --------------------------------------------------
+  -- Functorial Structure of Collections
+  --------------------------------------------------
+
+  --[[
+    List functor maps a function over each element of a list,
+    preserving the list structure.
+  ]]--
+  list_functor: (a -o> b) -o> ([a] -o> [b]) [f ->
+    [xs -> xs |> @Coll.List.map(f)]
+  ]
+
+  --[[
+    Set functor maps a function over each element of a set,
+    preserving the set structure (uniqueness of elements).
+  ]]--
+  set_functor: (a -o> b) -o> (@Coll.Set._map_type[a] -o> @Coll.Set._map_type[b]) [f ->
+    [s -> s |> @Coll.Set.to_list |> @Coll.List.map(f) |> @Coll.Set.from_list]
+  ]
+
+  --[[
+    Map functor maps a function over each value in a map,
+    preserving the map structure (keys and associations).
+  ]]--
+  map_functor: (v1 -o> v2) -o> ((k:-> v1) -o> (k:-> v2)) [f ->
+    [m -> 
+      m |> @Coll.Map.entries 
+        |> @Coll.List.map [(k, v) -> (k, f(v))] 
+        |> list_to_map
+    ]
+  ]
+
+  --[[
+    Queue functor maps a function over each element of a queue,
+    preserving the queue structure (order of elements).
+  ]]--
+  queue_functor: (a -o> b) -o> (@Coll.Queue._list_type[a] -o> @Coll.Queue._list_type[b]) [f ->
+    [q -> q |> @Coll.List.map(f)]
+  ]
+
+  --------------------------------------------------
+  -- Collection Natural Transformations
+  --------------------------------------------------
+
+  --[[
+    CollectionNaturalTransform defines a natural transformation between
+    collection functors, ensuring that the order of mapping and transforming
+    doesn't matter (commutativity of the diagram).
+  ]]--
+  CollectionNaturalTransform: {
+    source_functor: CollectionFunctor,
+    target_functor: CollectionFunctor,
+    components: (a -o> a),
+    naturality: Bool
+  }
+
+  --[[
+    Collection functor encapsulates the functorial nature of collections,
+    with mapping operations that preserve structure.
+  ]]--
+  CollectionFunctor: {
+    map: (a -o> b) -o> (c -o> d),  -- The mapping operation for this collection type
+    identity_preservation: Bool,    -- F(id) = id
+    composition_preservation: Bool, -- F(f ∘ g) = F(f) ∘ F(g)
+    linearity_preservation: Bool    -- Whether the functor preserves linearity constraints
+  }
+
+  --[[
+    Natural transformation from List functor to Set functor.
+    This transformation commutes with the functor mapping operations.
+  ]]--
+  list_set_natural_transform: CollectionNaturalTransform [
+    {
+      source_functor: {
+        map: list_functor,
+        identity_preservation: true,
+        composition_preservation: true,
+        linearity_preservation: true
+      },
+      target_functor: {
+        map: set_functor,
+        identity_preservation: true,
+        composition_preservation: true,
+        linearity_preservation: true
+      },
+      components: list_to_set,
+      naturality: true  -- In a real implementation, would prove this
+    }
+  ]
+
+  --------------------------------------------------
+  -- Resource-Aware Transformations
+  --------------------------------------------------
+
+  --[[
+    Linear transform maintains resource linearity across transformations,
+    ensuring that a resource is consumed exactly once.
+  ]]--
+  linear_transform: (a -o> b) -> (a -o> b) [f ->
+    [x -> @Prim.linear_use(x, f)]
+  ]
+
+  --[[
+    Persistent transform allows a resource to be used multiple times,
+    by copying it internally.
+  ]]--
+  persistent_transform: (a -> b) -> (a -> b) [f ->
+    [x -> f(@Prim.copy(x))]
+  ]
+
+  --------------------------------------------------
+  -- Advanced Collection Transformations
+  --------------------------------------------------
+
+  --[[
+    Memoizes a collection transformation to avoid repeated computations.
+  ]]--
+  memoize_collection: (a -o> b) -o> (a -o> b) [f ->
+    -- In a real implementation, would use a memoization table
+    f
+  ]
+
+  --[[
+    Adds indexing capabilities to a collection transformation.
+  ]]--
+  index_collection: (a -o> b) -o> (a -o> (Z:-> b)) [f ->
+    [x -> 
+      let result = f(x) in
+      -- In a real implementation, would build an indexed map
+      @Coll.Map.empty
+    ]
+  ]
+
+  --[[
+    Adds observation capabilities to a collection transformation.
+  ]]--
+  observe_collection: (a -o> b) -o> (a -o> (b * [(S * Any)])) [f ->
+    [x ->
+      -- In a real implementation, would track operations
+      (f(x), [])
+    ]
+  ]
+
+  --[[
+    Transforms an eager collection operation into a lazy one.
+  ]]--
+  lazy_collection: (a -o> b) -o> (a -o> @Seq.a) [f ->
+    [x -> @Seq.delay [-> f(x)]]
+  ]
+
+  --------------------------------------------------
+  -- Transformation Composition
+  --------------------------------------------------
+
+  --[[
+    Sequential composition of two collection transformations.
+  ]]--
+  sequential_transform: (a -o> b) * (b -o> c) -o> (a -o> c) [f g ->
+    [x -> x |> f |> g]
+  ]
+
+  --[[
+    Parallel composition of two collection transformations.
+  ]]--
+  parallel_transform: (a -o> b) * (c -o> d) -o> ((a * c) -o> (b * d)) [f g ->
+    [(x, y) -> (f(x), g(y))]
+  ]
+
+  --------------------------------------------------
+  -- Category Theory Connections
+  --------------------------------------------------
+
+  --[[
+    Adjunction between List and Set collections.
+    list_to_set is left adjoint to set_to_list.
+  ]]--
+  ListSetAdjunction: {
+    left_functor: list_functor,
+    right_functor: set_functor,
+    left_adjoint: list_to_set,
+    right_adjoint: set_to_list,
+    unit: [xs -> xs |> list_to_set |> set_to_list],
+    counit: [s -> s |> set_to_list |> list_to_set],
+    adjunction_law: [
+      xs set -> @Coll.Set.subset(
+        (xs |> list_to_set),
+        set
+      ) == @Coll.List.subset(
+        xs,
+        (set |> set_to_list)
+      )
+    ]
+  }
+
+  --[[
+    Establishes a monoidal structure for collection transformations,
+    allowing collections to be combined and transformed together.
+  ]]--
+  MonoidalTransform: {
+    tensor_product: (a -o> b) * (c -o> d) -o> ((a * c) -o> (b * d)) [f g ->
+      parallel_transform(f, g)
+    ],
+    associator: [(((a * b) * c), ((a * (b * c)))) -> 
+      ((a * b) * c) |> [(x, c) -> let (a, b) = x in ((a, (b, c)))]
+    ],
+    left_unitor: [((Any * a) -> a) -> [(u, x) -> x]],
+    right_unitor: [((a * Any) -> a) -> [(x, u) -> x]],
+    braiding: [((a * b) -> (b * a)) -> [(x, y) -> (y, x)]]
+  }
+
+  --------------------------------------------------
+  -- Linear-Focused Collection Operations
+  --------------------------------------------------
+
+  --[[
+    Creates a singleton collection containing one element.
+    This is a linear operation that consumes the element.
+    Analogous to the monadic "return" but with explicit resource handling.
+  ]]--
+  linear_singleton: a -o> ![a] [x -> [x]]
+
+  --[[
+    Flattens a nested collection by consuming the outer collection.
+    Analogous to "join" in monads but with explicit resource tracking.
+  ]]--
+  linear_flatten: ![[a]] -o> ![a] [xss -> 
+    xss |> @Coll.List.fold(@Coll.List.concat, @Coll.List.empty)
+  ]
+
+  --[[
+    Chains a linear transformation through a collection, preserving linearity.
+    Each element is consumed exactly once, and the resulting collection 
+    preserves the resource constraints of the original.
+    
+    This replaces the monadic "bind" with explicit resource handling.
+  ]]--
+  linear_chain: ![a] * (a -o> ![b]) -o> ![b] [xs f ->
+    xs |> @Coll.List.map(f) |> linear_flatten
+  ]
+
+  --[[
+    Applies a linear transformation to the values in a map while preserving keys.
+    Each value is consumed exactly once.
+  ]]--
+  linear_map_values: !(k:-> v1) * (v1 -o> v2) -o> (k:-> v2) [m f ->
+    m |> @Coll.Map.entries
+      |> @Coll.List.fold(
+          [acc (k, v) -> acc k (f(v)) |> @Coll.Map.insert],
+          @Coll.Map.empty
+        )
+  ]
+
+  --[[
+    Applies a linear transformation to each element in a set.
+    Each element is consumed exactly once, and a new set is produced.
+  ]]--
+  linear_set_elements: !@Coll.Set._map_type[a] * (a -o> b) -o> @Coll.Set._map_type[b] [s f ->
+    s |> @Coll.Set.to_list |> @Coll.List.map(f) |> @Coll.Set.from_list
+  ]
+
+  --[[
+    Applies a linear transformation to each element in a list.
+    Each element is consumed exactly once, and a new list is produced.
+    
+    This is similar to @Coll.List.map but with stronger guarantees
+    about resource usage that align better with interaction nets.
+  ]]--
+  linear_list_elements: ![a] * (a -o> b) -o> ![b] [xs f ->
+    xs |> @Coll.List.map(f)
+  ]
+
+  --[[
+    Applies a linear transformation to each element in a queue.
+    Each element is consumed exactly once, preserving FIFO order.
+  ]]--
+  linear_queue_elements: !@Coll.Queue._list_type[a] * (a -o> b) -o> @Coll.Queue._list_type[b] [q f ->
+    q |> @Coll.List.map(f)
+  ]
+
+  --[[
+    Transforms a value that must be used exactly once.
+    This operation makes the resource constraints explicit,
+    which is a better match for interaction nets than monadic approaches.
+  ]]--
+  linear_once: !a * (a -o> b) -o> b [x f -> f(x)]
+
+  --[[
+    Splits a value that must be used exactly once into two parts.
+    This operation partitions resources, which is a fundamental
+    operation in interaction nets and linear logic.
+  ]]--
+  linear_split: !a -o> (!b * !c) [x -> 
+    -- In a real implementation, would split the resource
+    (@Prim.linear_part1(x), @Prim.linear_part2(x))
+  ]
+
+  --[[
+    Joins two linear resources into one.
+    This operation combines resources, which is the dual of splitting
+    and essential for interaction net transformations.
+  ]]--
+  linear_join: (!a * !b) -o> !c [(x, y) -> 
+    -- In a real implementation, would join the resources
+    @Prim.linear_join(x, y)
+  ]
+} 

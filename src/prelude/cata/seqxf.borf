@@ -44,7 +44,7 @@
 
   --[[
     SeqRep: Structural representation of sequences
-    
+
     This provides a structural mapping interface for sequence operations,
     allowing sequences to participate in structural subtyping relationships.
   ]]--
@@ -88,7 +88,7 @@
 
   --[[
     Sequence-Graph Structural Mapping
-    
+
     Establishes a direct structural correspondence between sequences and graphs,
     showing how a sequence can be viewed as a specific kind of graph.
   ]]--
@@ -96,13 +96,13 @@
     -- Object mappings
     Seq.a = Graph.!Node,               -- Sequence elements are graph nodes
     Seq = Graph.!Grph,                 -- A sequence is a special case of a graph
-    
+
     -- Structural mappings
     Seq.empty = Graph.new_graph,       -- Empty sequence is an empty graph
-    Seq.cons = [x xs -> 
+    Seq.cons = [x xs ->
       let g = xs |> seq_to_graph in
       let {graph, node} = Graph.add_node(g, x) in
-      
+
       -- Connect to previous node in sequence
       let node_count = Prim.graph_node_count(graph) in
       if node_count > 1 {
@@ -121,10 +121,10 @@
   ]]--
   seq_to_graph: !(Seq a) -o> Graph.!Grph [xs ->
     let g = Graph.new_graph() in
-    xs |> fold [graph item idx -> 
+    xs |> fold [graph item idx ->
       -- Add node for current item
       let {graph1, node} = Graph.add_node(graph, item) in
-      
+
       -- Connect to previous node if not first
       if idx > 0 {
         let {graph2, nodes} = Prim.get_graph_nodes(graph1) in
@@ -143,17 +143,17 @@
   graph_to_seq: !Graph.!Grph -o> (Seq a) [g ->
     -- Convert graph to sequence by traversing edges
     let {graph, nodes} = Prim.get_graph_nodes(g) in
-    
+
     -- Find starting node (no incoming edges)
-    let start_node = nodes |> filter [n -> 
+    let start_node = nodes |> filter [n ->
       Prim.incoming_edges(graph, n) |> length == 0
     ] |> head in
-    
+
     -- Build sequence by following next edges
     let build_seq = [node acc ->
       let label = Graph.get_node_label(graph, node) in
       let next_seq = Seq.cons(label, acc) in
-      
+
       let out_edges = Prim.outgoing_edges(graph, node) in
       if out_edges |> length > 0 {
         let next_edge = out_edges |> head in
@@ -163,7 +163,7 @@
         next_seq
       }
     ] in
-    
+
     build_seq(start_node, Seq.empty) |> Seq.reverse
   ]
 
@@ -173,7 +173,7 @@
 
   --[[
     Sequence-Wire Structural Mapping
-    
+
     Establishes a direct structural correspondence between sequences and wiring diagrams,
     allowing sequences to be represented and manipulated as wiring structures.
   ]]--
@@ -181,10 +181,10 @@
     -- Object mappings
     Seq.a = Wire.Box,                 -- Sequence elements are boxes in a wiring diagram
     Seq = Wire.Diagram,               -- A sequence is a specific kind of wiring diagram
-    
+
     -- Structural mappings
     Seq.empty = Wire.id,              -- Empty sequence is an identity diagram
-    Seq.cons = [x xs -> 
+    Seq.cons = [x xs ->
       let d = xs |> seq_to_wire in
       let b = Prim.create_box(x) in
       d |> Wire.compose(Wire.extract(b))
@@ -196,7 +196,7 @@
   ]]--
   seq_to_wire: !(Seq a) -o> Wire.Diagram [xs ->
     let d = Wire.id() in
-    xs |> fold [d x -> 
+    xs |> fold [d x ->
       let b = Prim.create_box(x) in
       d |> Wire.compose(Wire.extract(b))
     ] d
@@ -212,14 +212,14 @@
       Seq.cons(label, seq)
     ] Seq.empty
   ]
- 
+
   --------------------------------------------------
   -- Sequence-Net Transformations
   --------------------------------------------------
 
   --[[
     Sequence-Net Structural Mapping
-    
+
     Establishes a direct structural correspondence between sequences and interaction nets,
     allowing sequences to be represented as agent networks.
   ]]--
@@ -227,17 +227,17 @@
     -- Object mappings
     Seq.a = INet.!Agent,               -- Sequence elements are agents in a net
     Seq = INet.!Net,                   -- A sequence is a specific kind of interaction net
-    
+
     -- Structural mappings
     Seq.empty = INet.empty_net,        -- Empty sequence is an empty net
-    Seq.cons = [x xs -> 
+    Seq.cons = [x xs ->
       let n = xs |> seq_to_net in
       let sym = {name: "Element", arity: 2} in
       let a = INet.new_agent(sym) in
-      
+
       -- Store element value in agent
       let labeled_net = Prim.label_agent(n, a, x) in
-      
+
       -- Connect if not the first element
       let {net, agents} = INet.get_agents(labeled_net) in
       if agents |> length > 1 {
@@ -254,11 +254,11 @@
   ]]--
   seq_to_net: !(Seq a) -o> INet.!Net [xs ->
     let net = INet.empty_net() in
-    xs |> fold [n x -> 
+    xs |> fold [n x ->
       let sym = {name: "Element", arity: 2} in
       let a = INet.new_agent(sym) in
       let {net1, agent} = INet.agent_of(Prim.label_agent(n, a, x), a.id) in
-      
+
       -- Link to previous agent if exists
       let {net2, agents} = INet.get_agents(net1) in
       if agents |> length > 1 {
@@ -287,7 +287,7 @@
 
   --[[
     Sequence-Functor Structural Correspondence
-    
+
     Establishes that sequences form a functor category, providing a structure-preserving
     mapping from the category of types to the category of sequences.
   ]]--
@@ -297,16 +297,16 @@
     target = Seq.Category,
     object_map = [a -> Seq a],
     morphism_map = [f -> [seq -> seq |> Seq.map(f)]],
-    
+
     -- Verify functor laws
-    preserve_id = [a -> 
+    preserve_id = [a ->
       Seq a |> forall [seq -> seq |> Seq.map([x -> x]) teq seq]
     ],
-    preserve_comp = [f g -> 
-      Seq a |> forall [seq -> 
+    preserve_comp = [f g ->
+      Seq a |> forall [seq ->
         seq |> Seq.map(f) |> Seq.map(g) teq
         seq |> Seq.map([x -> g(f(x))])
       ]
     ]
   }
-} 
+}

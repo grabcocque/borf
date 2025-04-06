@@ -61,20 +61,20 @@
   tau: T.tau
 
   vis: E |> [e -> true]
-  
+
   deps: {
     (@INet, @Grph, true),  -- Add dependency on Graph module
     (@INet, @Theory, true),   -- Add dependency on Theory module
     (@INet, @Wire, true)   -- Add dependency on Wire module
   }
-  
+
   --------------------------------------------------
   -- Direct Structural Mappings
   --------------------------------------------------
-  
+
   --[[
     Net Category Structure
-    
+
     Defines the categorical structure of interaction nets,
     establishing objects, morphisms, composition, and laws.
   ]]--
@@ -90,40 +90,40 @@
       let {_, prin2} = principal(a2) in
       connect(a1, aux1[0], a2, prin2)
     ],
-    
+
     -- Additional structures
     tensor = INet.parallel,              -- Tensor product is parallel composition
     unit = new_net({name: "Empty", arity: 0}),  -- Unit is empty net
-    
+
     -- Laws
     law.identity = [a ->               -- Identity law
       let id_agent = id(a.symbol) in
       compose(a, id_agent) == a and compose(id_agent, a) == a
     ],
-    
+
     law.associativity = [a b c ->      -- Associativity law
       compose(compose(a, b), c) == compose(a, compose(b, c))
     ],
-    
+
     -- Reduction structure
     reduce = INet.reduce_once,           -- Reduction step
     normalize = INet.normalize,          -- Full reduction
-    
+
     -- Reduction laws
     law.confluence = [n r1 r2 ->       -- Confluence law (Church-Rosser)
       let n1 = reduce(n, r1) in
       let n2 = reduce(n, r2) in
       exists [n3 -> reduce(n1, r2) == n3 and reduce(n2, r1) == n3]
     ],
-    
+
     law.termination = [n ->            -- Termination law
       exists [n1 -> normalize(n) == n1 and is_normal_form(n1)]
     ]
   }
-  
+
   --[[
     Net-Graph Structural Mapping
-    
+
     Establishes a direct structural correspondence between interaction nets and graphs,
     showing how an interaction net can be represented as a graph structure.
   ]]--
@@ -133,31 +133,31 @@
     INet.!Port = Grph.!Node,             -- Ports are also graph nodes (auxiliary nodes)
     INet.!Connection = Grph.!Edge,       -- Connections are graph edges
     INet.!Net = Grph.!Grph,              -- A net is a graph
-    
+
     -- Structural mappings
     INet.connect = Grph.connect,         -- Connecting ports creates an edge
     INet.agent_of = Grph.get_node,       -- Getting an agent by ID gets a node
-    
+
     -- Linear transformation functions
     to_graph = [!n -o>
       let g = Grph.new_graph() in
-      
+
       -- First add all agents as nodes
       let {n1, agents} = INet.get_agents(n) in
       let g_with_agents = agents |> fold [g agent ->
         let label = {:agent, agent.symbol, agent.id} in
         Grph.add_node(g, label).0
       ] g in
-      
+
       -- Then add all ports as nodes and connect them to their agents
       let g_with_ports = agents |> fold [g agent ->
         let agent_node = Grph.get_node_by_label(g, {:agent, agent.symbol, agent.id}).1 in
-        
+
         -- Add ports for this agent and connect them
         agent.ports |> fold [g port ->
           let port_label = {:port, port.id, port.principal} in
           let {g1, port_node} = Grph.add_node(g, port_label) in
-          
+
           -- Connect port to its agent (direction based on principal status)
           if port.principal {
             Grph.add_edge(g1, agent_node, port_node, :principal_port).0
@@ -166,21 +166,21 @@
           }
         ] g
       ] g_with_agents in
-      
+
       -- Finally add edges between connected ports
       let {n2, connections} = INet.get_connections(n1) in
       connections |> fold [g conn ->
         let port1_node = Grph.get_node_by_label(g, {:port, conn.port1, false}).1 in
         let port2_node = Grph.get_node_by_label(g, {:port, conn.port2, false}).1 in
-        
+
         -- Connect the ports bidirectionally
         Grph.add_edge(g, port1_node, port2_node, :connection).0
       ] g_with_ports
     ],
-    
+
     from_graph = [!g -o>
       let n = INet.empty_net() in
-      
+
       -- First identify and extract agent nodes
       let {g1, nodes} = Prim.get_graph_nodes(g) in
       let agent_nodes = nodes |> filter [n ->
@@ -189,42 +189,42 @@
           _ -> false
         )
       ] in
-      
+
       -- Create agents for each agent node
       let n_with_agents = agent_nodes |> fold [n node ->
         let {:agent, symbol, id} = Grph.get_node_label(g1, node).1 in
         let agent = INet.new_agent(symbol) in
-        
+
         -- Agent created with default ports, set the ID
         agent.id = id in
         INet.add_agent(n, agent).0
       ] n in
-      
+
       -- Connect ports based on graph connections
       let connection_edges = Prim.get_graph_edges(g1) |> filter [e ->
         Grph.get_edge_label(g1, e).1 == :connection
       ] in
-      
+
       connection_edges |> fold [n edge ->
         let src_node = Grph.src(g1, edge).1 in
         let tgt_node = Grph.tgt(g1, edge).1 in
-        
+
         let {:port, port1_id, _} = Grph.get_node_label(g1, src_node).1 in
         let {:port, port2_id, _} = Grph.get_node_label(g1, tgt_node).1 in
-        
+
         -- Find the agents these ports belong to
         let port1_agent_id = Prim.find_agent_with_port(n, port1_id) in
         let port2_agent_id = Prim.find_agent_with_port(n, port2_id) in
-        
+
         -- Connect the ports
         INet.connect(n, {id: port1_id, agent: port1_agent_id}, {id: port2_id, agent: port2_agent_id})
       ] n_with_agents
     ]
   }
-  
+
   --[[
     Net-Wire Structural Mapping
-    
+
     Establishes a direct structural correspondence between interaction nets and wiring diagrams,
     showing how an interaction net can be represented as a wiring diagram.
   ]]--
@@ -234,51 +234,51 @@
     INet.!Port = Wire.Port,               -- Ports are wiring ports
     INet.!Connection = Wire.Connection,   -- Connections are wiring connections
     INet.!Net = Wire.Diagram,             -- A net is a wiring diagram
-    
+
     -- Structural mappings
     INet.connect = Wire.connect,          -- Connecting ports creates a wire
     INet.principal = Wire.in_ports,       -- Principal port is an input port
     INet.auxiliary = Wire.out_ports,      -- Auxiliary ports are output ports
-    
+
     -- Linear transformation functions
     to_wire = [!n -o>
       let d = Wire.id() in
-      
+
       -- First add all agents as boxes
       let {n1, agents} = INet.get_agents(n) in
       let d_with_boxes = agents |> fold [d agent ->
         -- Create a box for this agent
         let box = Prim.create_box({symbol: agent.symbol, id: agent.id}) in
-        
+
         -- Add ports to the box based on agent ports
         let box_with_ports = agent.ports |> fold [box port ->
           let dir = if port.principal { :in } else { :out } in
           let wire_port = Prim.create_port(box, dir, port.id) in
           Prim.add_port_to_box(box, wire_port)
         ] box in
-        
+
         Prim.add_box_to_diagram(d, box_with_ports)
       ] d in
-      
+
       -- Connect ports based on net connections
       let {n2, connections} = INet.get_connections(n1) in
       connections |> fold [d conn ->
         -- Find the boxes these ports belong to
         let box1 = Prim.find_box_by_port(d, conn.port1) in
         let box2 = Prim.find_box_by_port(d, conn.port2) in
-        
+
         -- Find the actual ports
         let port1 = Wire.ports(box1) |> find [p -> p.id == conn.port1] in
         let port2 = Wire.ports(box2) |> find [p -> p.id == conn.port2] in
-        
+
         -- Connect the ports
         Wire.connect(d, port1, port2)
       ] d_with_boxes
     ],
-    
+
     from_wire = [!d -o>
       let n = INet.empty_net() in
-      
+
       -- First add all boxes as agents
       let boxes = Prim.get_boxes(d) in
       let n_with_agents = boxes |> fold [n box ->
@@ -287,47 +287,47 @@
           {symbol: s, id: _} -> s,
           _ -> {name: "Box", arity: Wire.ports(box) |> length}
         ) in
-        
+
         -- Create agent
         let agent = INet.new_agent(symbol) in
-        
+
         -- Get box ports
         let in_ports = Wire.in_ports(box) in
         let out_ports = Wire.out_ports(box) in
-        
+
         -- Update agent's ports to match box ports
-        let updated_agent = 
+        let updated_agent =
           agent.ports = (in_ports |> map [p -> {id: p.id, principal: true, connected: false}]) ++
                         (out_ports |> map [p -> {id: p.id, principal: false, connected: false}])
         in
-        
+
         INet.add_agent(n, updated_agent).0
       ] n in
-      
+
       -- Connect ports based on wiring connections
       let connections = Prim.get_connections(d) in
       connections |> fold [n conn ->
         let port1 = conn.0 in
         let port2 = conn.1 in
-        let box1 = Wire.owner(port1) in 
+        let box1 = Wire.owner(port1) in
         let box2 = Wire.owner(port2) in
-        
+
         -- Find the agents these boxes correspond to
         let {n1, agents} = INet.get_agents(n) in
         let agent1 = agents |> find [a -> a.id == Prim.get_box_id(box1)] in
         let agent2 = agents |> find [a -> a.id == Prim.get_box_id(box2)] in
-        
+
         -- Connect the ports
-        INet.connect(n1, 
-          {id: port1.id, agent: agent1.id}, 
+        INet.connect(n1,
+          {id: port1.id, agent: agent1.id},
           {id: port2.id, agent: agent2.id})
       ] n_with_agents
     ]
   }
-  
+
   --[[
     Net-Category Structural Mapping
-    
+
     Establishes a direct structural correspondence between interaction nets and categories,
     showing how interaction nets can be viewed through a categorical lens.
   ]]--
@@ -336,33 +336,33 @@
     INet.!Symbol = Theory.O,                 -- Symbols (agent types) are objects
     INet.!Agent = Theory.M,                  -- Agents are morphisms
     INet.!Rule = Theory.Natural,             -- Rules are natural transformations
-    
+
     -- Structural mappings
     INet.empty_net = Theory.initial,         -- Empty net is the initial object
     INet.parallel = Theory.product,          -- Parallel composition is the categorical product
     INet.compose = Theory.compose,           -- Sequential composition is morphism composition
-    
+
     -- Linear transformation functions
     to_category = [!n -o>
       let cat = Theory.new({}, {}) in
-      
+
       -- First add all symbols as objects
       let {n1, agents} = INet.get_agents(n) in
       let symbols = agents |> map [a -> a.symbol] |> unique in
-      
+
       let cat_with_objs = symbols |> fold [c sym ->
         Theory.add_object(c, sym)
       ] cat in
-      
+
       -- Then add all agents as morphisms
       let cat_with_morphs = agents |> fold [c agent ->
         -- Calculate domain and codomain based on ports
         let domain_ports = agent.ports |> filter [p -> p.principal] in
         let codomain_ports = agent.ports |> filter [p -> not p.principal] in
-        
+
         let domain = domain_ports |> map [p -> agent.symbol] in
         let codomain = codomain_ports |> map [p -> agent.symbol] in
-        
+
         Theory.add_morphism(c, {
           id: agent.id,
           domain: domain,
@@ -370,7 +370,7 @@
           agent: agent
         })
       ] cat_with_objs in
-      
+
       -- Finally add all rules as natural transformations
       let rules = Prim.get_rules(n) in
       rules |> fold [c rule ->
@@ -381,14 +381,14 @@
         })
       ] cat_with_morphs
     ],
-    
+
     from_category = [!c -o>
       -- Only works for categories that are interaction net categories
       let n = INet.empty_net() in
-      
+
       -- First find all objects that can be interpreted as symbols
       let objects = Theory.get_objects(c) in
-      
+
       -- Then add all morphisms as agents
       let morphisms = Theory.get_morphisms(c) in
       let n_with_agents = morphisms |> fold [n m ->
@@ -403,25 +403,25 @@
           INet.add_agent(n, agent).0
         }
       ] n in
-      
+
       -- Add connections based on category structure
       let compositions = Theory.get_compositions(c) in
       compositions |> fold [n comp ->
         let m1 = comp.0 in
         let m2 = comp.1 in
-        
+
         -- Find corresponding agents
         let {n1, agents} = INet.get_agents(n) in
         let agent1 = agents |> find [a -> a.id == m1.id] in
         let agent2 = agents |> find [a -> a.id == m2.id] in
-        
+
         -- Connect output ports of agent1 to input ports of agent2
         let connections = Prim.zip(agent1.ports |> filter [p -> not p.principal],
                                agent2.ports |> filter [p -> p.principal]) in
-        
+
         connections |> fold [n [p1, p2] ->
-          INet.connect(n, 
-            {id: p1.id, agent: agent1.id}, 
+          INet.connect(n,
+            {id: p1.id, agent: agent1.id},
             {id: p2.id, agent: agent2.id})
         ] n1
       ] n_with_agents
@@ -1146,7 +1146,7 @@
 
     -- Try to find a matching pair
     let result = net1;  -- Default to unchanged
-    
+
     for pair in active_pairs {
       let {_, _, matches} = match_rule(rule, pair);
       if matches {
@@ -1154,7 +1154,7 @@
         break;  -- Apply to the first matching pair only
       }
     }
-    
+
     result
   ]
 

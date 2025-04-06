@@ -43,16 +43,16 @@
   --------------------------------------------------
   -- Structure Mapping to Functor Category
   --------------------------------------------------
-  
+
   --[[
     Structure mapping that establishes @Xf as a category of functors.
-    
+
     This mapping defines a functor category where:
     - Objects are categories (representational domains like String, Net, Graph)
     - Morphisms are functors (transformations that preserve structure)
     - Composition is functor composition
     - Identity morphisms are identity functors on each category
-    
+
     This categorical structure formalizes the semantics of transformations
     between different representations, ensuring that structural properties
     are preserved across translations between domains.
@@ -61,44 +61,44 @@
     -- Map Xf to a functor category (Cat→Cat)
     objects: @Cat.Category,
     morphisms: [C D -> (C -> D)],  -- Functors between categories
-    
+
     -- Base category structure
     dom: [F -> F.source_category],
     cod: [F -> F.target_category],
     id: [C -> [x -> x]],  -- Identity functor
     compose: [F G -> [x -> G(F(x))]],  -- Functor composition
-    
+
     -- Functor-specific structure
     map_obj: [F A -> F.map_obj(A)],     -- Object mapping component
     map_morph: [F f -> F.map_morph(f)], -- Morphism mapping component
-    
+
     -- Special functor constructors
     forgetful: [C props -> create_forgetful_functor(C, props)],
     free: [C -> create_free_functor(C)],
     representable: [C a -> create_representable_functor(C, a)],
-    
+
     -- Functor transformations
     to_graph: [string_to_net],
     to_net: [wire_to_net],
     to_string: [net_to_string],
-    
+
     -- Category laws
     laws: {
       -- Functors preserve identities: F(id_A) = id_F(A)
       preserve_id: forall [F A ->
         F.map_morph(id(A)) == id(F.map_obj(A))
       ],
-      
+
       -- Functors preserve composition: F(g ∘ f) = F(g) ∘ F(f)
       preserve_compose: forall [F f g ->
         F.map_morph(compose(f, g)) == compose(F.map_morph(f), F.map_morph(g))
       ],
-      
+
       -- Functor composition is associative: (F ∘ G) ∘ H = F ∘ (G ∘ H)
       composition_associativity: forall [F G H ->
         compose(compose(F, G), H) == compose(F, compose(G, H))
       ],
-      
+
       -- Identity functor laws: id ∘ F = F = F ∘ id
       identity: forall [F ->
         compose(id, F) == F && compose(F, id) == F

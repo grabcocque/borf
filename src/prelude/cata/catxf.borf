@@ -1,39 +1,50 @@
 --[[
-  Category Theory Transformations
+  Category Theory Foundations and Transformations
 
-  This module defines transformations between categories and other structures,
-  allowing for rigorous mappings between different categorical frameworks.
+  This module defines both the foundational concepts of category theory and
+  transformations between categorical structures and other representations,
+  providing a unified framework for categorical reasoning in Borf.
 ]]--
 
 @CatXf: {
   typ: {
+    -- Core category theory types
+    Category Functor NaturalTransformation Isomorphism Adjunction
+    Monoidal Cartesian Bicartesian Closed
+
     -- Transformation types
-    CategoryTransformation Functor Natural Isomorphism
-    
+    CategoryTransformation Natural
+
     -- Specific transformations
     GraphTransform WireTransform INetTransform
   }
 
   op: {
+    -- Categorical operators
+    * . --> <-- tensor product unit counit
+
     -- Transformation operators
     ==> <== <=> ~~
-    
-    -- Categorical operators
-    .: @Theory..,
-    *: @Theory.*,
-    tensor: @Theory.tensor,
-    product: @Theory.product
   }
 
   fn: {
+    -- Core category theory functions
+    functor natural_transformation isomorphism adjunction
+    compose id unit counit tensor product
+
+    -- Laws and theorems
+    law.functor_composition law.functor_identity
+    law.natural_transformation_coherence law.adjunction_unit_counit
+    law.iso_inverse law.lens_laws law.prism_laws
+
     -- Category transformations
     to_graph from_graph
     to_wire from_wire
     to_inet from_inet
-    
+
     -- Object and morphism mappings
     map_objects map_morphisms map_laws
-    
+
     -- Transformation utilities
     compose identity invert
   }
@@ -45,12 +56,358 @@
   vis: E |> [e -> true]
 
   deps: {
-    (@CatXf, @T, true),        -- Add dependency on Type system
-    (@CatXf, @Theory, true),   -- Add dependency on Category Theory module
-    (@CatXf, @Cata.Theory, true), -- Add dependency on Categorical theory module
-    (@CatXf, @Graph, true),    -- Add dependency on Graph module
-    (@CatXf, @Wire, true),     -- Add dependency on Wire module
-    (@CatXf, @INet, true)      -- Add dependency on Interaction Net module
+    (@CatXf, @T, true),       -- Add dependency on Type system
+    (@CatXf, @Graph, true),   -- Add dependency on Graph module
+    (@CatXf, @Wire, true),    -- Add dependency on Wire module
+    (@CatXf, @INet, true)     -- Add dependency on Interaction Net module
+  }
+
+  --------------------------------------------------
+  -- Category Theory Foundations
+  --------------------------------------------------
+
+  --[[
+    Category: Mathematical structure with objects and morphisms
+  ]]--
+  Category: T.Type_0
+
+  --[[
+    Functor: Structure-preserving mapping between categories
+  ]]--
+  Functor: Category -> Category -> T.Type_0
+
+  --[[
+    Natural Transformation: Family of morphisms between functors
+  ]]--
+  NaturalTransformation: Functor -> Functor -> T.Type_0
+
+  --[[
+    Isomorphism: Invertible transformation between structures
+  ]]--
+  Isomorphism: T.Type_0 -> T.Type_0 -> T.Type_0
+
+  --[[
+    Adjunction: Pair of functors that are adjoint to each other
+  ]]--
+  Adjunction: Functor -> Functor -> T.Type_0
+
+  --[[
+    Functor law: F(g . f) = F(g) . F(f)
+
+    For all functors F and morphisms f: A -> B, g: B -> C,
+    F(g >>> f) is equivalent to F(g) >>> F(f)
+  ]]--
+  law.functor_composition: Functor |> forall [F ->
+    forall [A B C f g ->
+      -- A, B, C are objects in the source category
+      -- f: A -> B, g: B -> C are morphisms
+      F(g >>> f) teq F(g) >>> F(f)
+    ]
+  ]
+
+  --[[
+    Functor law: F(id) = id
+
+    For all functors F and objects A, F(id A) is equivalent to id(F A)
+  ]]--
+  law.functor_identity: Functor |> forall [F ->
+    forall [A ->
+      -- A is an object in the source category
+      F(id A) teq id(F A)
+    ]
+  ]
+
+  --[[
+    Natural transformation coherence law:
+    For every morphism f: A -> B, F(f) . alpha_A = alpha_B . G(f)
+
+    For all natural transformations alpha: F => G, objects A, B, and morphism f: A -> B,
+    (F f) >>> (alpha B) is equivalent to (alpha A) >>> (G f)
+  ]]--
+  law.natural_transformation_coherence:
+    NaturalTransformation |> forall [alpha F G ->
+      forall [A B f ->
+        -- alpha is a natural transformation from F to G
+        -- A, B are objects in the source category
+        -- f: A -> B is a morphism
+        (F f) >>> (alpha B) teq (alpha A) >>> (G f)
+      ]
+    ]
+
+  --[[
+    Adjunction unit-counit law:
+    (id_F) = (F epsilon) . (eta F) and (id_G) = (eta G) . (G epsilon)
+
+    For all adjunctions between functors F and G, with unit eta and counit epsilon,
+    these equations must hold for all objects A in the source category and B in the target
+  ]]--
+  law.adjunction_unit_counit: Adjunction |> forall [adj F G ->
+    forall [A ->
+      -- F is a functor from category C to D
+      -- G is a functor from category D to C
+      -- A is an object in C
+      -- unit_F is F applied to the unit at A
+      -- unit is the unit natural transformation
+      (F(unit A)) >>> unit_F teq id(F A)
+    ] and
+    forall [B ->
+      -- B is an object in D
+      -- counit_G is G applied to the counit at B
+      -- counit is the counit natural transformation
+      counit_G >>> (G(counit B)) teq id(G B)
+    ]
+  ]
+
+  --[[
+    Isomorphism inverse law: f . f^{-1} = id and f^{-1} . f = id
+
+    For all isomorphisms between types A and B, composing the forward and reverse
+    mappings gives the identity in both directions
+  ]]--
+  law.iso_inverse: Isomorphism |> forall [iso A B ->
+    -- iso.forward: A -> B is the forward mapping
+    -- iso.reverse: B -> A is the reverse mapping
+    (iso.forward >>> iso.reverse) teq id(A) and
+    (iso.reverse >>> iso.forward) teq id(B)
+  ]
+
+  --[[
+    Lens laws: get-put, put-get, put-put
+
+    For all lenses focusing on a component A of a structure S:
+  ]]--
+  law.lens_laws: T.Type_0 |> forall [lens S A ->
+    -- get-put: get (put s a) = a
+    forall [s a ->
+      -- s is a source structure
+      -- a is a value for the focus
+      lens.get(lens.put(s a)) teq a
+    ] and
+
+    -- put-get: put s (get s) = s
+    forall [s ->
+      lens.put(s lens.get(s)) teq s
+    ] and
+
+    -- put-put: put (put s a) a' = put s a'
+    forall [s a aprime ->
+      lens.put(lens.put(s a) aprime) teq lens.put(s aprime)
+    ]
+  ]
+
+  --[[
+    Prism laws: match-build, build-match
+
+    For all prisms focusing on a case A of a sum type S:
+  ]]--
+  law.prism_laws: T.Type_0 |> forall [prism S A ->
+    -- match-build: match (build a) = Some a
+    forall [a ->
+      prism.match(prism.build(a)) teq ?a
+    ] and
+
+    -- build-match: s = build(match(s).value) when match(s) is Some
+    forall [s ->
+      prism.match(s) |> [ma ->
+        ma.exists |> [a -> prism.build(a) teq s] |> T.default true
+      ]
+    ]
+  ]
+
+  --[[
+    Generic transformation function with enhanced typing
+  ]]--
+  Cata: forall(A: T.Type_0 B: T.Type_0) -> A -> B
+
+  --[[
+    Functor: Structure-preserving mapping
+  ]]--
+  functor: forall(A: Category B: Category) -> (A -> B) -> Functor A B
+
+  --[[
+    Natural Transformation: Morphism between functors
+  ]]--
+  natural_transformation:
+    forall(A: Category B: Category F: Functor A B G: Functor A B) ->
+    (forall(X: A) -> F X -> G X) ->
+    NaturalTransformation F G
+
+  --[[
+    Isomorphism: Invertible transformation
+  ]]--
+  isomorphism:
+    forall(A: T.Type_0 B: T.Type_0) ->
+    (A -> B) -> (B -> A) ->
+    Isomorphism A B
+
+  --[[
+    Adjunction: Pair of adjoint functors
+  ]]--
+  adjunction:
+    forall(A: Category B: Category F: Functor A B G: Functor B A) ->
+    (forall(X: A Y: B) -> (F X -> Y) -> (X -> G Y)) ->
+    Adjunction F G
+
+  --[[
+    Category composition
+  ]]--
+  compose: forall(A: T.Type_0 B: T.Type_0 C: T.Type_0) ->
+           (B -> C) -> (A -> B) -> (A -> C)
+
+  --[[
+    Categorical identity
+  ]]--
+  id: forall(A: T.Type_0) -> A -> A
+
+  --[[
+    Monoidal tensor product
+  ]]--
+  tensor: forall(A: T.Type_0 B: T.Type_0 C: T.Type_0 D: T.Type_0) ->
+          (A -> C) -> (B -> D) -> (A * B -> C * D)
+
+  --[[
+    Monoidal unit
+  ]]--
+  unit: forall(A: Category) -> A
+
+  --[[
+    Adjunction counit
+  ]]--
+  counit: forall(A: Category B: Category F: Functor A B G: Functor B A) ->
+          NaturalTransformation (F >>> G) (id B)
+
+  --[[
+    Category product
+  ]]--
+  product: forall(A: T.Type_0 B: T.Type_0 C: T.Type_0) ->
+           (C -> A) -> (C -> B) -> (C -> A * B)
+
+  --------------------------------------------------
+  -- Structure Mapping to 2-Category of Categories
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @CatXf as a 2-category of categories.
+
+    In this categorical structure:
+    - Objects are categories
+    - 1-Morphisms are functors between categories
+    - 2-Morphisms are natural transformations between functors
+    - Composition is functor composition
+    - 2-Composition is vertical composition of natural transformations
+
+    This rich structure captures the essence of categorical transformations
+    and provides a formal framework for reasoning about them.
+  ]]--
+  structure: {
+    -- Map CatXf to a 2-category
+    objects: Category,
+    morphisms: [cat1 cat2 -> Functor cat1 cat2],
+    2morphisms: [F G -> NaturalTransformation F G],
+
+    -- Base category structure
+    dom: [F -> F.source_category],
+    cod: [F -> F.target_category],
+    id: [cat -> functor(cat, cat)([x -> x], [f -> f])],
+    compose: [F G -> functor(dom(F), cod(G))([x -> G(F(x))], [f -> G(F(f))])],
+
+    -- 2-category structure
+    horizontal_compose: [alpha beta ->
+      let F1 = alpha.source_functor in
+      let G1 = alpha.target_functor in
+      let F2 = beta.source_functor in
+      let G2 = beta.target_functor in
+
+      natural_transformation(
+        compose(F1, F2),
+        compose(G1, G2),
+        [x -> G2(alpha.components(x)) >>> beta.components(G1(x))]
+      )
+    ],
+
+    vertical_compose: [alpha beta ->
+      -- Assuming alpha: F -> G and beta: G -> H
+      let F = alpha.source_functor in
+      let G = alpha.target_functor in
+      let H = beta.target_functor in
+
+      natural_transformation(
+        F, H,
+        [x -> alpha.components(x) >>> beta.components(x)]
+      )
+    ],
+
+    -- Higher-order structure
+    whisker_left: [F alpha ->
+      -- Left whiskering: F ◁ alpha, where alpha: G -> H
+      let G = alpha.source_functor in
+      let H = alpha.target_functor in
+
+      natural_transformation(
+        compose(F, G),
+        compose(F, H),
+        [x -> alpha.components(F(x))]
+      )
+    ],
+
+    whisker_right: [alpha F ->
+      -- Right whiskering: alpha ▷ F, where alpha: G -> H
+      let G = alpha.source_functor in
+      let H = alpha.target_functor in
+
+      natural_transformation(
+        compose(G, F),
+        compose(H, F),
+        [x -> F(alpha.components(x))]
+      )
+    ],
+
+    -- Adjunction structure
+    adjunction: [F G unit counit ->
+      {
+        left_functor: F,
+        right_functor: G,
+        unit: unit,
+        counit: counit,
+        adjunction_law: [
+          [A -> (F(unit(A))) >>> unit(F(A)) == id(F(A))] and
+          [B -> counit(G(B)) >>> (G(counit(B))) == id(G(B))]
+        ]
+      }
+    ],
+
+    -- Categories with additional structure
+    monoidal: [cat tensor unit ->
+      {
+        category: cat,
+        tensor: tensor,
+        unit: unit,
+        associator: [
+          ((a × b) × c) -> (a × (b × c))
+        ],
+        left_unitor: [(unit × a) -> a],
+        right_unitor: [(a × unit) -> a]
+      }
+    ],
+
+    -- Category laws
+    laws: {
+      -- Functor laws
+      functor_composition: law.functor_composition,
+      functor_identity: law.functor_identity,
+
+      -- Natural transformation laws
+      natural_transformation_coherence: law.natural_transformation_coherence,
+
+      -- Adjunction laws
+      adjunction_unit_counit: law.adjunction_unit_counit,
+
+      -- 2-category exchange law
+      exchange: forall [alpha beta gamma delta ->
+        horizontal_compose(vertical_compose(alpha, beta), vertical_compose(gamma, delta)) ==
+        vertical_compose(horizontal_compose(alpha, gamma), horizontal_compose(beta, delta))
+      ]
+    }
   }
 
   --------------------------------------------------
@@ -61,21 +418,21 @@
     to_graph transforms a Category into a Graph structure,
     where objects become nodes and morphisms become edges.
   ]]--
-  to_graph: @Theory.Category -> @Graph.Graph [cat ->
+  to_graph: Category -> @Graph.Graph [cat ->
     let graph = @Graph.new_graph() in
-    
+
     -- Map objects to nodes
-    for obj in @Theory.objects(cat) do
+    for obj in objects(cat) do
       @Graph.add_node(graph, obj)
     end
-    
+
     -- Map morphisms to edges
-    for morph in @Theory.morphisms(cat) do
-      let dom = @Theory.dom(morph) in
-      let cod = @Theory.cod(morph) in
+    for morph in morphisms(cat) do
+      let dom = dom(morph) in
+      let cod = cod(morph) in
       @Graph.add_edge(graph, dom, cod, morph)
     end
-    
+
     graph
   ]
 
@@ -83,21 +440,21 @@
     from_graph transforms a Graph into a Category structure,
     inferring categorical structure from the graph topology.
   ]]--
-  from_graph: @Graph.Graph -> @Theory.Category [graph ->
-    let cat = @Cata.Theory.new_category() in
-    
+  from_graph: @Graph.Graph -> Category [graph ->
+    let cat = new_category() in
+
     -- Map nodes to objects
     for node in @Graph.nodes(graph) do
-      @Theory.add_object(cat, node)
+      add_object(cat, node)
     end
-    
+
     -- Map edges to morphisms
     for edge in @Graph.edges(graph) do
       let src = @Graph.source(graph, edge) in
       let tgt = @Graph.target(graph, edge) in
-      @Theory.add_morphism(cat, edge, src, tgt)
+      add_morphism(cat, edge, src, tgt)
     end
-    
+
     -- Add composition structure
     -- This creates composition by connecting paths in the graph
     for src in @Graph.nodes(graph) do
@@ -105,15 +462,15 @@
         for tgt in @Graph.nodes(graph) do
           let e1 = @Graph.get_edge(graph, src, mid) in
           let e2 = @Graph.get_edge(graph, mid, tgt) in
-          
+
           if e1 != null and e2 != null then
-            let comp = @Theory.create_composite_morphism(e1, e2) in
-            @Theory.add_morphism(cat, comp, src, tgt)
+            let comp = create_composite_morphism(e1, e2) in
+            add_morphism(cat, comp, src, tgt)
           end
         end
       end
     end
-    
+
     cat
   ]
 
@@ -125,29 +482,29 @@
     to_wire transforms a Category into a Wiring Diagram,
     where objects become boxes and morphisms become wires.
   ]]--
-  to_wire: @Theory.Category -> @Wire.Diagram [cat ->
+  to_wire: Category -> @Wire.Diagram [cat ->
     let diagram = @Wire.new_diagram() in
-    
+
     -- Map objects to boxes
-    for obj in @Theory.objects(cat) do
+    for obj in objects(cat) do
       let box = @Wire.create_box(obj) in
       -- Add standard input and output ports
       let box_with_ports = @Wire.add_ports(box, ["in", "out"]) in
       @Wire.add_box(diagram, box_with_ports)
     end
-    
+
     -- Map morphisms to wires
-    for morph in @Theory.morphisms(cat) do
-      let dom_box = @Wire.get_box_by_type(diagram, @Theory.dom(morph)) in
-      let cod_box = @Wire.get_box_by_type(diagram, @Theory.cod(morph)) in
-      
+    for morph in morphisms(cat) do
+      let dom_box = @Wire.get_box_by_type(diagram, dom(morph)) in
+      let cod_box = @Wire.get_box_by_type(diagram, cod(morph)) in
+
       -- Connect output port of domain to input port of codomain
       let dom_port = @Wire.get_port(dom_box, "out") in
       let cod_port = @Wire.get_port(cod_box, "in") in
-      
+
       @Wire.connect(diagram, dom_port, cod_port, morph)
     end
-    
+
     diagram
   ]
 
@@ -155,25 +512,25 @@
     from_wire transforms a Wiring Diagram into a Category,
     reconstructing categorical structure from the wiring layout.
   ]]--
-  from_wire: @Wire.Diagram -> @Theory.Category [diagram ->
-    let cat = @Cata.Theory.new_category() in
-    
+  from_wire: @Wire.Diagram -> Category [diagram ->
+    let cat = new_category() in
+
     -- Map boxes to objects
     for box in @Wire.boxes(diagram) do
-      @Theory.add_object(cat, box)
+      add_object(cat, box)
     end
-    
+
     -- Map wires to morphisms
     for wire in @Wire.wires(diagram) do
       let src_port = @Wire.source_port(wire) in
       let tgt_port = @Wire.target_port(wire) in
-      
+
       let src_box = @Wire.get_box_for_port(diagram, src_port) in
       let tgt_box = @Wire.get_box_for_port(diagram, tgt_port) in
-      
-      @Theory.add_morphism(cat, wire, src_box, tgt_box)
+
+      add_morphism(cat, wire, src_box, tgt_box)
     end
-    
+
     cat
   ]
 
@@ -185,26 +542,26 @@
     to_inet transforms a Category into an Interaction Net,
     representing categorical composition as interaction net reduction.
   ]]--
-  to_inet: @Theory.Category -> @INet.Net [cat ->
+  to_inet: Category -> @INet.Net [cat ->
     let net = @INet.new_net() in
-    
+
     -- Map objects to agent types
-    for obj in @Theory.objects(cat) do
+    for obj in objects(cat) do
       @INet.add_agent_type(net, obj.name, 2)  -- Each object gets input/output
     end
-    
+
     -- Map morphisms to interaction rules
-    for morph in @Theory.morphisms(cat) do
-      let dom = @Theory.dom(morph) in
-      let cod = @Theory.cod(morph) in
-      
+    for morph in morphisms(cat) do
+      let dom = dom(morph) in
+      let cod = cod(morph) in
+
       -- Create an agent representing this morphism
       let agent_type = morph.name in
       @INet.add_agent_type(net, agent_type, 2)  -- Input and output ports
-      
+
       -- Add the agent to the net
       let agent = @INet.create_agent(net, agent_type) in
-      
+
       -- Create appropriate connection rules for composition
       @INet.add_rule(net, dom.name, agent_type, (port_pattern, active_pair) -> {
         -- When domain object connects with this morphism,
@@ -213,7 +570,7 @@
         @INet.connect(net, result, active_pair.right)
       })
     end
-    
+
     net
   ]
 
@@ -221,35 +578,124 @@
     from_inet transforms an Interaction Net into a Category,
     extracting categorical structure from interaction rules.
   ]]--
-  from_inet: @INet.Net -> @Theory.Category [net ->
-    let cat = @Cata.Theory.new_category() in
-    
+  from_inet: @INet.Net -> Category [net ->
+    let cat = new_category() in
+
     -- Map agent types with arity 2 to objects (input/output)
     for agent_type in @INet.agent_types(net) do
       if @INet.arity(agent_type) == 2 then
-        @Theory.add_object(cat, {name: agent_type})
+        add_object(cat, {name: agent_type})
       end
     end
-    
+
     -- Map interaction rules to morphisms
     for rule in @INet.rules(net) do
       let src_type = rule.left_agent_type in
       let tgt_type = rule.right_agent_type in
-      
+
       -- Find corresponding objects
-      let src = @Theory.get_object(cat, {name: src_type}) in
-      let tgt = @Theory.get_object(cat, {name: tgt_type}) in
-      
+      let src = get_object(cat, {name: src_type}) in
+      let tgt = get_object(cat, {name: tgt_type}) in
+
       -- Create morphism from the rule
       let morph = {
         name: src_type + "_to_" + tgt_type,
         domain: src,
         codomain: tgt
       } in
-      
-      @Theory.add_morphism(cat, morph, src, tgt)
+
+      add_morphism(cat, morph, src, tgt)
     end
-    
+
     cat
   ]
-} 
+
+  --------------------------------------------------
+  -- Utility Functions for Categorical Manipulations
+  --------------------------------------------------
+
+  --[[
+    Helper function to create a new category
+  ]]--
+  new_category: () -> Category [->
+    {
+      objects: [],
+      morphisms: [],
+      id_morphisms: {},
+      compositions: {}
+    }
+  ]
+
+  --[[
+    Helper function to add an object to a category
+  ]]--
+  add_object: Category * Any -> Category [cat obj ->
+    cat.objects = cat.objects + [obj]
+
+    -- Create an identity morphism for this object
+    let id_morph = {
+      name: "id_" + obj.name,
+      domain: obj,
+      codomain: obj
+    } in
+
+    cat.morphisms = cat.morphisms + [id_morph]
+    cat.id_morphisms[obj] = id_morph
+
+    cat
+  ]
+
+  --[[
+    Helper function to add a morphism to a category
+  ]]--
+  add_morphism: Category * Any * Any * Any -> Category [cat morph src tgt ->
+    let full_morph = {
+      name: morph.name or "morph_" + src.name + "_to_" + tgt.name,
+      domain: src,
+      codomain: tgt
+    } in
+
+    cat.morphisms = cat.morphisms + [full_morph]
+
+    cat
+  ]
+
+  --[[
+    Helper function to create a composite morphism
+  ]]--
+  create_composite_morphism: Any * Any -> Any [(f, g) ->
+    {
+      name: g.name + "_after_" + f.name,
+      domain: f.domain,
+      codomain: g.codomain,
+      components: [f, g]
+    }
+  ]
+
+  --[[
+    Helper function to get all objects in a category
+  ]]--
+  objects: Category -> [Any] [cat -> cat.objects]
+
+  --[[
+    Helper function to get all morphisms in a category
+  ]]--
+  morphisms: Category -> [Any] [cat -> cat.morphisms]
+
+  --[[
+    Helper function to get domain of a morphism
+  ]]--
+  dom: Any -> Any [morph -> morph.domain]
+
+  --[[
+    Helper function to get codomain of a morphism
+  ]]--
+  cod: Any -> Any [morph -> morph.codomain]
+
+  --[[
+    Helper function to get object in a category by name
+  ]]--
+  get_object: Category * {name: S} -> Any [cat criteria ->
+    cat.objects |> Prim.find [obj -> obj.name == criteria.name]
+  ]
+}

@@ -5,11 +5,11 @@ repl_input = { SOI ~ (declaration | expr) ~ EOI }
 file = { SOI ~ (COMMENT | MULTILINE_COMMENT | WHITESPACE)* ~ module_decl ~ EOI }
 
 // Add this rule to catch illegal commas
-ILLEGAL_COMMA = _{ 
-  !list_literal ~ !map_literal ~ !set_literal ~ 
-  !list_pattern ~ !map_pattern ~ !set_pattern ~ 
-  !COMMENT ~ !MULTILINE_COMMENT ~ 
-  "," ~ PUSH("illegal_comma") 
+ILLEGAL_COMMA = _{
+  !list_literal ~ !map_literal ~ !set_literal ~
+  !list_pattern ~ !map_pattern ~ !set_pattern ~
+  !COMMENT ~ !MULTILINE_COMMENT ~
+  "," ~ PUSH("illegal_comma")
 }
 CATCH_ERROR = @{ ILLEGAL_COMMA }
 

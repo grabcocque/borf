@@ -67,17 +67,17 @@
   --------------------------------------------------
   -- Structure Mapping to Rewrite Category
   --------------------------------------------------
-  
+
   --[[
     Structure mapping that establishes @RW as a category of rewrite systems.
-    
+
     This mapping defines a category where:
     - Objects are interaction net configurations (states)
     - Morphisms are sequences of rewrite rule applications that transform
       one state into another
     - Composition is sequential application of rewrite sequences
     - Identity morphisms are "no-op" transformations (empty rule sequences)
-    
+
     This categorical structure formalizes the semantics of interaction net
     rewriting and provides a theoretical foundation for proving properties like
     confluence, termination, and correctness of transformations.
@@ -86,20 +86,20 @@
     -- Map RW to a category
     objects: !Net,
     morphisms: [n1 n2 -> [rs -> transform(rs, n1) veq n2]],
-    
+
     -- Base category structure
     dom: [f -> f.domain],
     cod: [f -> f.codomain],
     id: [n -> [rs -> rs |> Prim.rho veq 0]],  -- No rewrites = identity
     compose: [f g -> [rs1 rs2 -> compose_rulesets(rs1, rs2)]],
-    
+
     -- Rewrite-specific structure
     rule_morphism: [(alpha * rho) -> [net -> apply((alpha, rho), net)]],
-    
+
     -- Special morphism constructors
     critical_pairs: [rs -> find_critical_pairs(rs)],
     confluence_check: [rs -> rs |> find_critical_pairs |> forall commute],
-    
+
     -- Category laws
     laws: {
       -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
@@ -107,33 +107,33 @@
         let rs1 = f.rules in
         let rs2 = g.rules in
         let rs3 = h.rules in
-        
+
         let comp1 = compose_rulesets(compose_rulesets(rs1, rs2), rs3) in
         let comp2 = compose_rulesets(rs1, compose_rulesets(rs2, rs3)) in
-        
+
         transform(comp1, n) veq transform(comp2, n)
       ],
-      
+
       -- Identity: id ∘ f = f = f ∘ id
       identity: forall [f n ->
         let rs = f.rules in
         let empty = [] in
-        
+
         transform(rs, n) veq transform(compose_rulesets(empty, rs), n) &&
         transform(rs, n) veq transform(compose_rulesets(rs, empty), n)
       ],
-      
+
       -- Preservation: Rewriting preserves graph consistency
       consistency: forall [rule net ->
         consistent(apply(rule, net))
       ],
-      
+
       -- Locality: Rewriting only affects the matched subgraph
       locality: forall [rule net ->
         let matched = find_match(rule.0, net) in
         let unmatched = complement(net, matched) in
         let result = apply(rule, net) in
-        
+
         subgraph_isomorphic(unmatched, result)
       ]
     }

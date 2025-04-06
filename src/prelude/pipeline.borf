@@ -32,25 +32,25 @@
   fn: {
     -- Pipeline creation and execution
     create execute run process chain combine
-    
+
     -- Pipeline configuration
     configure with_config optimize profile
-    
+
     -- Flow control
     fork join split merge filter map
-    
+
     -- Error handling
     handle_error retry recover fallback
-    
+
     -- Pipeline transformers
     transform transform_all transform_with
-    
+
     -- Pipeline types
     sequential parallel hierarchical incremental
-    
+
     -- Pipeline utilities
     measure trace log cache benchmark
-    
+
     -- High-level pipelines
     process_files safe_pipeline full_pipeline
     incremental_transform cached_transform syntax_pipeline
@@ -73,13 +73,13 @@
   --------------------------------------------------
   -- Structure Mapping to Sequential Category
   --------------------------------------------------
-  
+
   --[[
-    Structure mapping that explicitly connects the Pipeline module to the 
+    Structure mapping that explicitly connects the Pipeline module to the
     categorical framework as a Sequential Category. This mapping establishes
-    @Pipeline.Pipeline as a composable dataflow processing structure with 
+    @Pipeline.Pipeline as a composable dataflow processing structure with
     proper associativity and identity guarantees.
-    
+
     Pipeline transformations are morphisms that compose sequentially, with
     well-defined error propagation and resource management behaviors.
   ]]--
@@ -87,41 +87,41 @@
     -- Map Pipeline to SequentialCategory
     objects: T.Type_0,
     morphisms: [a b -> (a -> b)],
-    
+
     -- Base category structure
     dom: [f -> f.domain],
     cod: [f -> f.codomain],
     id: [a -> [x -> x]],
     compose: [f g -> [x -> x |> f |> g]],
-    
+
     -- Sequential structure for pipelines
     sequential_compose: [f g -> f >>> g],
     parallel_compose: [f g -> f ||| g],
     fanout_compose: [f g -> f &&& g],
-    
+
     -- Pipeline-specific operations
     fork_morph: [n -> [pipeline -> pipeline |> fork n]],
     join_morph: [n -> [pipeline -> pipeline |> join n]],
     filter_morph: [pred -> [pipeline -> pipeline |> filter pred]],
     map_morph: [f -> [pipeline -> pipeline |> map f]],
-    
+
     -- Pipeline laws
     laws: {
       -- Associativity: (f >>> g) >>> h = f >>> (g >>> h)
       associativity: forall [f g h ->
         ((f >>> g) >>> h) == (f >>> (g >>> h))
       ],
-      
+
       -- Identity: id >>> f = f = f >>> id
       identity: forall [f ->
         (id >>> f) == f && (f >>> id) == f
       ],
-      
+
       -- Composition: (f >>> g)(x) = g(f(x))
       composition: forall [f g x ->
         (f >>> g)(x) == g(f(x))
       ],
-      
+
       -- Error propagation: if f fails, (f >>> g) fails
       error_propagation: forall [f g x ->
         (f(x) is Failure) ==> ((f >>> g)(x) is Failure)
@@ -339,4 +339,4 @@
   incremental_transform: a * (a -> b) * (a -> a -> Bool) * (b -> b -> b) * b -> b
   cached_transform: (a -> b) * (a -> a -> Bool) -> (a -> b)
   syntax_pipeline: S * (Any -> Any) -> Result(Any)
-} 
+}

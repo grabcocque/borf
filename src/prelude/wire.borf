@@ -1,76 +1,64 @@
 --[[
-  Wiring Diagram (Categorical Interaction Network)
+  Wire Diagrams
 
-  This module defines the structure of wiring diagrams as a categorical model
-  of interaction networks. It formalizes the compositional aspects of diagrams
-  while supporting hierarchical structures, diagram operations, and advanced
-  typing constraints. This formulation connects to monoidal categories in
-  category theory.
+  This module defines string diagrams (wire diagrams) for visualizing categorical structures,
+  providing a graphical language for categorical computations that is especially well-suited
+  for monoidal categories and their variants (symmetric, braided, compact closed, etc.).
 ]]--
 
 @Wire: {
   typ: {
-    -- Core types
-    Wire Box Port
+    -- Core wire diagram types
+    WireDiagram Box Wire
 
-    -- Diagram compositions
-    Diagram Composition Parallel Sequential Trace
+    -- Box types
+    Identity Composite Sequential Parallel
+    Tensor Braiding Trace Cap Cup
 
-    -- Wiring patterns
-    Identity Swap Copy Delete Merge Create Loop
+    -- Wire types
+    ObjectWire LinearWire Labeled
 
-    -- Mathematical structures
-    MonoidalStructure BraidedStructure SymmetricStructure TracedStructure
-
-    -- Port and box classifications
-    Principal Auxiliary Input Output Internal Interface
+    -- Style and layout types
+    Style Layout Color Position
+    Grid FlowLayout ForceLayout
   }
 
   op: {
-    -- Type assignments
-    tauP tauB
+    -- Diagram composition operators
+    -> * ; ⊗ id
 
-    -- Diagram operators
-    seq par trace
+    -- Wire connection operators
+    ~> => ==> -->
 
-    -- Connection operators
-    -> <-> <=> >-<
+    -- Box operators
+    [] [| |] [:] @[]
 
-    -- Wiring pattern operators
-    id swap copy delete merge create loop
-
-    -- Tensor product for parallel composition
-    tensor
+    -- Layout operators
+    ## $$ <|> <-> ^^ vv
   }
 
   fn: {
-    -- Basic structure functions
-    box ports owner w in_ports out_ports internal_ports interface
+    -- Core diagram functions
+    create_diagram create_box create_wire connect
 
-    -- Signature and typing functions
-    sig port_type box_type compatible connection_type
+    -- Box constructors
+    identity tensor compose parallel
+    braiding cap cup trace
 
-    -- Composition functions
-    compose connect tensor_compose trace_compose
+    -- Wire constructors
+    object_wire linear_wire labeled_wire
 
-    -- Core laws
-    law.wiring_involution law.port_unique_owner law.wiring_type_compat
-    law.ports_in_signature law.interface_disjoint law.typing_preservation
+    -- Style functions
+    set_style set_color set_position auto_layout
 
-    -- Category theory laws
-    law.composition_associativity law.identity_unit
-    law.tensor_bifunctor law.braiding_naturality
-    law.symmetric_involution law.tensor_associativity
-    law.trace_sliding law.trace_vanishing law.trace_superposing
+    -- Export functions
+    to_svg to_dot to_ascii to_latex
 
-    -- Operations
-    subdiagram zoom extract rewire transform optimize instantiate
+    -- Computation functions
+    evaluate simplify normalize
 
-    -- Verification
-    verify_acyclic verify_connected verify_well_typed verify_well_formed
-
-    -- Structural mapping functions
-    to_graph from_graph to_net from_net to_category from_category
+    -- Verification functions
+    check_well_formed check_types check_connections
   }
 
   E: typ cup op cup fn
@@ -80,785 +68,861 @@
   vis: E |> [e -> true]
 
   deps: {
-    (@Wire, @Grph, true),  -- Add dependency on Graph module
-    (@Wire, @Theory, true),   -- Add dependency on Theory module
-    (@Wire, @INet, true)    -- Add dependency on INet module
+    (@Wire, @T, true),     -- Add dependency on Type system
+    (@Wire, @CatXf, true), -- Add dependency on Category theory
+    (@Wire, @Prim, true)   -- Add dependency on Primitives
   }
 
   --------------------------------------------------
-  -- Direct Structural Mappings
+  -- Core Wire Diagram Types
   --------------------------------------------------
 
   --[[
-    Wire-Graph Structural Mapping
-
-    Establishes a direct structural correspondence between wiring diagrams and graphs,
-    showing how a wiring diagram can be represented as a graph structure.
+    WireDiagram: A complete wire diagram representing a categorical morphism
   ]]--
-  wire_graph_mapping: {
-    -- Object mappings
-    Wire.Box = Grph.!Node,             -- Boxes are graph nodes
-    Wire.Port = Grph.!Node,            -- Ports are also graph nodes
-    Wire.Diagram = Grph.!Grph,         -- A wiring diagram is a bipartite graph
-
-    -- Structural mappings
-    Wire.connect = Grph.add_edge,      -- Connecting ports is adding an edge
-    Wire.sig = Grph.neighbors,         -- Signature is the neighbors of a node
-
-    -- Linear transformation functions
-    to_graph = [!d -o>
-      let g = Grph.new_graph() in
-
-      -- First add all boxes as nodes
-      let boxes = Prim.get_boxes(d) in
-      let g_with_boxes = boxes |> fold [g box ->
-        let label = Prim.get_box_label(box) in
-        Grph.add_node(g, {:box, label}).0
-      ] g in
-
-      -- Then add all ports as nodes
-      let g_with_ports = boxes |> fold [g box ->
-        let ports_in = Wire.in_ports(box) in
-        let ports_out = Wire.out_ports(box) in
-        let box_node = Grph.get_node_by_label(g, {:box, Prim.get_box_label(box)}).1 in
-
-        -- Add input ports as nodes and connect to box
-        let g1 = ports_in |> fold [g port ->
-          let {g1, port_node} = Grph.add_node(g, {:port, :in, port.id}) in
-          Grph.add_edge(g1, port_node, box_node, :in_port).0
-        ] g in
-
-        -- Add output ports as nodes and connect to box
-        ports_out |> fold [g port ->
-          let {g1, port_node} = Grph.add_node(g, {:port, :out, port.id}) in
-          Grph.add_edge(g1, box_node, port_node, :out_port).0
-        ] g1
-      ] g_with_boxes in
-
-      -- Finally add edges between connected ports
-      let connections = Prim.get_connections(d) in
-      connections |> fold [g conn ->
-        let port1 = conn.0 in
-        let port2 = conn.1 in
-        let port1_node = Grph.get_node_by_label(g, {:port, port1.direction, port1.id}).1 in
-        let port2_node = Grph.get_node_by_label(g, {:port, port2.direction, port2.id}).1 in
-
-        -- Connect the ports
-        Grph.add_edge(g, port1_node, port2_node, :connection).0
-      ] g_with_ports
-    ],
-
-    from_graph = [!g -o>
-      -- Initialize empty diagram
-      let d = Wire.id() in
-
-      -- First extract all box nodes
-      let {g1, nodes} = Prim.get_graph_nodes(g) in
-      let box_nodes = nodes |> filter [n ->
-        match (Grph.get_node_label(g1, n).1,
-          {:box, _} -> true,
-          _ -> false
-        )
-      ] in
-
-      -- Create boxes for each box node
-      let d_with_boxes = box_nodes |> fold [d node ->
-        let {:box, label} = Grph.get_node_label(g1, node).1 in
-        let box = Prim.create_box(label) in
-        Prim.add_box_to_diagram(d, box)
-      ] d in
-
-      -- Extract port nodes
-      let port_nodes = nodes |> filter [n ->
-        match (Grph.get_node_label(g1, n).1,
-          {:port, _, _} -> true,
-          _ -> false
-        )
-      ] in
-
-      -- Create ports for each port node and find their boxes
-      let d_with_ports = port_nodes |> fold [d node ->
-        let {:port, direction, id} = Grph.get_node_label(g1, node).1 in
-
-        -- Find which box this port connects to
-        let box_edges = if direction == :in {
-          -- Input ports have incoming edges from boxes
-          Grph.incoming(g1, node).1 |> filter [e ->
-            let source = Grph.src(g1, e).1 in
-            match (Grph.get_node_label(g1, source).1,
-              {:box, _} -> true,
-              _ -> false
-            )
-          ]
-        } else {
-          -- Output ports have outgoing edges to boxes
-          Grph.outgoing(g1, node).1 |> filter [e ->
-            let target = Grph.tgt(g1, e).1 in
-            match (Grph.get_node_label(g1, target).1,
-              {:box, _} -> true,
-              _ -> false
-            )
-          ]
-        } in
-
-        -- Create port on the appropriate box
-        let box_edge = box_edges |> head in
-        let box_node = if direction == :in {
-          Grph.src(g1, box_edge).1
-        } else {
-          Grph.tgt(g1, box_edge).1
-        } in
-
-        let {:box, box_label} = Grph.get_node_label(g1, box_node).1 in
-        let box = Prim.find_box_by_label(d, box_label) in
-
-        -- Create port on the box
-        let port = Prim.create_port(box, direction, id) in
-        Prim.add_port_to_box(d, box, port)
-      ] d_with_boxes in
-
-      -- Connect ports
-      let connection_edges = Prim.get_graph_edges(g1) |> filter [e ->
-        Grph.get_edge_label(g1, e).1 == :connection
-      ] in
-
-      connection_edges |> fold [d edge ->
-        let src_node = Grph.src(g1, edge).1 in
-        let tgt_node = Grph.tgt(g1, edge).1 in
-        let {:port, src_dir, src_id} = Grph.get_node_label(g1, src_node).1 in
-        let {:port, tgt_dir, tgt_id} = Grph.get_node_label(g1, tgt_node).1 in
-
-        -- Find ports
-        let src_port = Prim.find_port(d, src_id) in
-        let tgt_port = Prim.find_port(d, tgt_id) in
-
-        -- Connect ports
-        Wire.connect(d, src_port, tgt_port)
-      ] d_with_ports
-    ]
+  WireDiagram: {
+    boxes: [Box],
+    wires: [Wire],
+    input_wires: [Wire],
+    output_wires: [Wire],
+    style: ?Style
   }
 
   --[[
-    Wire-Net Structural Mapping
-
-    Establishes a direct structural correspondence between wiring diagrams and interaction nets,
-    showing how a wiring diagram can be represented as an interaction net.
+    Box: A node in a wire diagram representing a morphism
   ]]--
-  wire_net_mapping: {
-    -- Object mappings
-    Wire.Box = Net.!Agent,             -- Boxes are agents
-    Wire.Port = Net.!Port,             -- Ports are agent ports
-    Wire.Diagram = Net.!Net,           -- A wiring diagram is an interaction net
+  Box: Identity | Composite | Sequential | Parallel | Tensor | Braiding | Trace | Cap | Cup
 
-    -- Linear transformation functions
-    to_net = [!d -o>
-      let n = Net.empty_net() in
-
-      -- First add all boxes as agents
-      let boxes = Prim.get_boxes(d) in
-      let n_with_agents = boxes |> fold [n box ->
-        let label = Prim.get_box_label(box) in
-        let ports_in = Wire.in_ports(box) in
-        let ports_out = Wire.out_ports(box) in
-        let arity = (ports_in |> length) + (ports_out |> length) in
-
-        -- Create agent
-        let agent = Net.new_agent({name: "Box", arity: arity}) in
-        Prim.label_agent(Net.add_agent(n, agent).0, agent, {:box, label})
-      ] n in
-
-      -- Connect ports according to the wiring
-      let connections = Prim.get_connections(d) in
-      connections |> fold [n conn ->
-        let port1 = conn.0 in
-        let port2 = conn.1 in
-        let box1 = Wire.owner(port1) in
-        let box2 = Wire.owner(port2) in
-
-        -- Find corresponding agents
-        let {n1, agents} = Net.get_agents(n) in
-        let agent1 = agents |> find [a ->
-          match (Prim.get_agent_label(a),
-            {:box, box_label} -> box_label == Prim.get_box_label(box1),
-            _ -> false
-          )
-        ] in
-        let agent2 = agents |> find [a ->
-          match (Prim.get_agent_label(a),
-            {:box, box_label} -> box_label == Prim.get_box_label(box2),
-            _ -> false
-          )
-        ] in
-
-        -- Determine port indices
-        let port1_idx = Prim.get_port_index(box1, port1) in
-        let port2_idx = Prim.get_port_index(box2, port2) in
-
-        -- Connect the ports
-        Net.connect(n1, agent1.ports[port1_idx], agent2.ports[port2_idx])
-      ] n_with_agents
-    ],
-
-    from_net = [!n -o>
-      let d = Wire.id() in
-
-      -- First add all agents as boxes
-      let {n1, agents} = Net.get_agents(n) in
-      let d_with_boxes = agents |> fold [d agent ->
-        let label = Prim.get_agent_label(agent) in
-        let box = match (label,
-          {:box, box_label} -> Prim.create_box(box_label),
-          _ -> Prim.create_box(label)
-        ) in
-
-        -- Add ports based on agent arity
-        let box_with_ports = (0..agent.arity) |> fold [box i ->
-          let is_principal = (i == 0) in
-          let port_dir = if is_principal { :in } else { :out } in
-          let port = Prim.create_port(box, port_dir, Prim.fresh_id()) in
-          Prim.add_port_to_box(box, port)
-        ] box in
-
-        Prim.add_box_to_diagram(d, box_with_ports)
-      ] d in
-
-      -- Connect wires based on agent connections
-      let {n2, connections} = Net.get_connections(n1) in
-      connections |> fold [d conn ->
-        let port1 = Prim.get_port(n2, conn.port1) in
-        let port2 = Prim.get_port(n2, conn.port2) in
-        let agent1 = Prim.get_agent(n2, conn.agent1) in
-        let agent2 = Prim.get_agent(n2, conn.agent2) in
-
-        -- Find corresponding boxes
-        let box1 = Prim.find_box_by_label(d, match (Prim.get_agent_label(agent1),
-          {:box, box_label} -> box_label,
-          label -> label
-        )) in
-
-        let box2 = Prim.find_box_by_label(d, match (Prim.get_agent_label(agent2),
-          {:box, box_label} -> box_label,
-          label -> label
-        )) in
-
-        -- Find corresponding ports
-        let port1_idx = Prim.index_of(agent1.ports, port1) in
-        let port2_idx = Prim.index_of(agent2.ports, port2) in
-        let wire_port1 = Wire.ports(box1)[port1_idx] in
-        let wire_port2 = Wire.ports(box2)[port2_idx] in
-
-        -- Connect the ports
-        Wire.connect(d, wire_port1, wire_port2)
-      ] d_with_boxes
-    ]
+  --[[
+    Identity: An identity morphism
+  ]]--
+  Identity: {
+    object: T.T,
+    position: ?Position,
+    style: ?Style
   }
 
   --[[
-    Wire-Category Structural Mapping
-
-    Establishes a direct structural correspondence between wiring diagrams and categories,
-    showing how wiring diagrams form a symmetric monoidal category.
+    Composite: A general morphism box
   ]]--
-  wire_category_mapping: {
-    -- Object mappings
-    Wire.Box = Theory.O,                  -- Boxes are objects
-    Wire.Diagram = Theory.M,              -- Diagrams are morphisms
-
-    -- Structural mappings
-    Wire.compose = Theory.compose,        -- Sequential composition is morphism composition
-    Wire.tensor_compose = Theory.tensor,  -- Parallel composition is tensor product
-    Wire.id = Theory.id,                  -- Identity wiring is identity morphism
-
-    -- Law mappings
-    Wire.law.composition_associativity = Theory.law.associativity,
-    Wire.law.identity_unit = Theory.law.id_right_neutral,
-    Wire.law.tensor_associativity = Theory.law.tensor_associativity,
-
-    -- Linear transformation functions
-    to_category = [!d -o>
-      -- Create a symmetric monoidal category
-      let cat = Cat.new({}, {}) in
-
-      -- Add all box types as objects
-      let boxes = Prim.get_boxes(d) in
-      let box_types = boxes |> map [b -> Wire.box_type(b)] |> unique in
-
-      let cat_with_objs = box_types |> fold [c t ->
-        Cat.add_object(c, t)
-      ] cat in
-
-      -- Add all diagrams as morphisms
-      let subdiagrams = Prim.get_subdiagrams(d) in
-      subdiagrams |> fold [c sd ->
-        let dom = Prim.diagram_domain(sd) in
-        let cod = Prim.diagram_codomain(sd) in
-        Cat.add_morphism(c, {
-          diagram: sd,
-          domain: dom,
-          codomain: cod
-        })
-      ] cat_with_objs
-    ],
-
-    from_category = [!c -o>
-      -- Only works for categories that are symmetric monoidal
-      -- and have the appropriate structure
-      let morphisms = Cat.get_morphisms(c) |> filter [m -> m.diagram |> Prim.is_valid] in
-
-      if morphisms |> is_empty {
-        -- Create a default empty diagram
-        Wire.id()
-      } else {
-        -- Return the first valid diagram
-        let m = morphisms |> head in
-        m.diagram
-      }
-    ]
+  Composite: {
+    name: S,
+    inputs: [Wire],
+    outputs: [Wire],
+    position: ?Position,
+    style: ?Style,
+    label: ?S
   }
 
   --[[
-    Box represents a component in the wiring diagram (agent/node)
+    Sequential: Sequential composition of boxes (g ∘ f)
   ]]--
-  Box: T.Type_0
+  Sequential: {
+    first: Box,
+    second: Box,
+    middle_wires: [Wire],
+    position: ?Position,
+    style: ?Style
+  }
 
   --[[
-    Port represents a connection point on a box
+    Parallel: Parallel composition of boxes (f ⊗ g)
   ]]--
-  Port: T.Type_0
+  Parallel: {
+    top: Box,
+    bottom: Box,
+    position: ?Position,
+    style: ?Style
+  }
 
   --[[
-    Diagram represents a complete wiring structure
+    Tensor: Tensor product box in monoidal categories
   ]]--
-  Diagram: T.Type_0
+  Tensor: {
+    object1: T.T,
+    object2: T.T,
+    position: ?Position,
+    style: ?Style
+  }
 
   --[[
-    Returns the box that owns a port
+    Braiding: Braiding/symmetry in a braided monoidal category
   ]]--
-  box: Port -> Box
+  Braiding: {
+    object1: T.T,
+    object2: T.T,
+    position: ?Position,
+    style: ?Style
+  }
 
   --[[
-    Returns all ports of a box
+    Trace: Trace/feedback loop in a traced monoidal category
   ]]--
-  ports: Box -> {Port}
+  Trace: {
+    box: Box,
+    trace_wire: Wire,
+    position: ?Position,
+    style: ?Style
+  }
 
   --[[
-    Returns the box that owns a port (inverse of ports)
+    Cap: Cap (unit of adjunction) for compact closed categories
   ]]--
-  owner: Port -> Box [p -> p |> box]
+  Cap: {
+    object: T.T,
+    position: ?Position,
+    style: ?Style
+  }
 
   --[[
-    Wiring function - connects ports together
-    w is an involution (w o w = id)
+    Cup: Cup (counit of adjunction) for compact closed categories
   ]]--
-  w: Port -> Port
+  Cup: {
+    object: T.T,
+    position: ?Position,
+    style: ?Style
+  }
 
   --[[
-    Returns the input ports of a box
+    Wire: A connection between boxes
   ]]--
-  in_ports: Box -> {Port}
+  Wire: ObjectWire | LinearWire | Labeled
 
   --[[
-    Returns the output ports of a box
+    ObjectWire: A wire representing a regular (non-linear) object
   ]]--
-  out_ports: Box -> {Port}
+  ObjectWire: {
+    object: T.T,
+    source: ?Box,
+    target: ?Box,
+    source_port: ?Z,
+    target_port: ?Z,
+    style: ?Style
+  }
 
   --[[
-    Returns the internal ports of a box (for hierarchical diagrams)
+    LinearWire: A wire representing a linear object (used exactly once)
   ]]--
-  internal_ports: Box -> {Port}
+  LinearWire: {
+    object: T.T,
+    source: ?Box,
+    target: ?Box,
+    source_port: ?Z,
+    target_port: ?Z,
+    style: ?Style
+  }
 
   --[[
-    Returns the interface ports of a diagram (exposed to external connections)
+    Labeled: A labeled wire
   ]]--
-  interface: Diagram -> {Port}
+  Labeled: {
+    wire: Wire,
+    label: S,
+    position: ?Position,
+    style: ?Style
+  }
 
   --[[
-    Port type function - assigns types to ports
+    Style: Visual styling for diagrams
   ]]--
-  tauP: Port -> T.T
+  Style: {
+    line_style: ?S,
+    line_width: ?Float,
+    fill_color: ?Color,
+    stroke_color: ?Color,
+    font: ?S,
+    font_size: ?Float,
+    opacity: ?Float
+  }
 
   --[[
-    Box type function - assigns types to boxes/agents
+    Color: RGB or named color
   ]]--
-  tauB: Box -> T.T
+  Color: {
+    r: ?Z,
+    g: ?Z,
+    b: ?Z,
+    name: ?S
+  }
 
   --[[
-    Returns the signature of a box as its input and output ports
+    Position: 2D coordinates for layout
   ]]--
-  sig: Box -> {in:{Port}, out:{Port}} [b -> {in: b |> in_ports, out: b |> out_ports}]
+  Position: {
+    x: Float,
+    y: Float
+  }
 
   --[[
-    Returns the type of a port
+    Layout: Layout algorithm configuration
   ]]--
-  port_type: Port -> T.T [p -> p |> tauP]
+  Layout: Grid | FlowLayout | ForceLayout
 
   --[[
-    Returns the type of a box
+    Grid: A grid-based layout
   ]]--
-  box_type: Box -> T.T [b -> b |> tauB]
+  Grid: {
+    rows: Z,
+    columns: Z,
+    cell_width: Float,
+    cell_height: Float
+  }
 
   --[[
-    Checks if two ports have compatible types for connection
+    FlowLayout: A flow-based layout (left-to-right or top-to-bottom)
   ]]--
-  compatible: Port * Port -> Bool [p1 p2 ->
-    -- Uses the enhanced type system for compatibility checking
-    p1 |> port_type |> T.refine [t -> t |> T.compatible_with (p2 |> port_type)]
+  FlowLayout: {
+    direction: S,  -- "horizontal" or "vertical"
+    spacing: Float
+  }
+
+  --[[
+    ForceLayout: Force-directed layout algorithm
+  ]]--
+  ForceLayout: {
+    spring_constant: Float,
+    repulsion_constant: Float,
+    damping: Float,
+    iterations: Z
+  }
+
+  --------------------------------------------------
+  -- Constructor Functions
+  --------------------------------------------------
+
+  --[[
+    create_diagram: Creates a new wire diagram
+  ]]--
+  create_diagram: [Box] * [Wire] * [Wire] * [Wire] * ?Style -> WireDiagram [boxes wires input_wires output_wires style ->
+    {
+      boxes: boxes,
+      wires: wires,
+      input_wires: input_wires,
+      output_wires: output_wires,
+      style: style
+    }
   ]
 
   --[[
-    Returns the type of a connection between ports
+    create_box: Creates a morphism box
   ]]--
-  connection_type: Port * Port -> T.T [p1 p2 ->
-    -- Connection type is derived from the joined types of ports
-    (p1 |> port_type) <:> (p2 |> port_type)
+  create_box: S * [Wire] * [Wire] * ?Position * ?Style -> Box [name inputs outputs position style ->
+    {
+      _type: "Composite",
+      name: name,
+      inputs: inputs,
+      outputs: outputs,
+      position: position,
+      style: style,
+      label: ?None
+    }
   ]
 
   --[[
-    Diagram nodes include both boxes and ports
+    identity: Creates an identity morphism box
   ]]--
-  N: Box cup Port
-
-  --[[
-    Edges represent wiring connections between ports
-  ]]--
-  E: Port |> [p -> (p, p |> w)] |> pairs
-
-  --[[
-    Source of an edge is the first port
-  ]]--
-  src: E |> [e -> e.0]
-
-  --[[
-    Target of an edge is the second port
-  ]]--
-  tgt: E |> [e -> e.1]
-
-  --[[
-    Node labeling based on whether the node is a box or port
-  ]]--
-  lambdaN: N |> [n ->
-    n |> tauB iff n |> in Box or_else n |> tauP
+  identity: T.T * ?Position * ?Style -> Box [object position style ->
+    {
+      _type: "Identity",
+      object: object,
+      position: position,
+      style: style
+    }
   ]
 
   --[[
-    Edge labeling based on the types of connected ports
+    compose: Creates a sequential composition box
   ]]--
-  lambdaE: E |> [e ->
-    (e |> src |> tauP, e |> tgt |> tauP)
+  compose: Box * Box * [Wire] * ?Position * ?Style -> Box [first second middle_wires position style ->
+    {
+      _type: "Sequential",
+      first: first,
+      second: second,
+      middle_wires: middle_wires,
+      position: position,
+      style: style
+    }
   ]
 
   --[[
-    Law: Wiring is an involution - connecting a port twice returns to the original port
+    parallel: Creates a parallel composition box
   ]]--
-  law.wiring_involution: Port |> forall [p -> p |> w |> w veq p]
-
-  --[[
-    Law: Every port has exactly one owner box
-  ]]--
-  law.port_unique_owner: Port |> forall [p -> Box |> exists_unique [b -> p |> box veq b]]
-
-  --[[
-    Law: Connected ports must have compatible types
-  ]]--
-  law.wiring_type_compat: Port * Port |> forall [p q -> p |> w veq q -> p |> compatible q]
-
-  --[[
-    Law: All ports of a box must be included in its signature
-  ]]--
-  law.ports_in_signature: Box * Port |> forall [b p -> p |> box veq b ->
-                  p |> in (b |> sig.in) or p |> in (b |> sig.out)]
-
-  --[[
-    Law: Input and output interfaces of a diagram must be disjoint
-  ]]--
-  law.interface_disjoint: Diagram |> forall [d ->
-    empty(d |> interface.in cap d |> interface.out)
+  parallel: Box * Box * ?Position * ?Style -> Box [top bottom position style ->
+    {
+      _type: "Parallel",
+      top: top,
+      bottom: bottom,
+      position: position,
+      style: style
+    }
   ]
 
   --[[
-    Law: Type preservation under composition
+    tensor: Creates a tensor product box
   ]]--
-  law.typing_preservation: Diagram * Diagram |> forall [d1 d2 ->
-    (d1 `seq` d2) |> interface.out |> port_type teq d2 |> interface.out |> port_type
+  tensor: T.T * T.T * ?Position * ?Style -> Box [object1 object2 position style ->
+    {
+      _type: "Tensor",
+      object1: object1,
+      object2: object2,
+      position: position,
+      style: style
+    }
   ]
 
   --[[
-    Law: Composition is associative
+    braiding: Creates a braiding box (crossing wires)
   ]]--
-  law.composition_associativity: Diagram * Diagram * Diagram |> forall [d1 d2 d3 ->
-    (d1 `seq` d2) `seq` d3 teq d1 `seq` (d2 `seq` d3)
+  braiding: T.T * T.T * ?Position * ?Style -> Box [object1 object2 position style ->
+    {
+      _type: "Braiding",
+      object1: object1,
+      object2: object2,
+      position: position,
+      style: style
+    }
   ]
 
   --[[
-    Law: Identity diagrams act as units for composition
+    trace: Creates a trace box (feedback loop)
   ]]--
-  law.identity_unit: Diagram |> forall [d ->
-    d `seq` id teq d and id `seq` d teq d
+  trace: Box * Wire * ?Position * ?Style -> Box [box trace_wire position style ->
+    {
+      _type: "Trace",
+      box: box,
+      trace_wire: trace_wire,
+      position: position,
+      style: style
+    }
   ]
 
   --[[
-    Law: Tensor product forms a bifunctor
+    cap: Creates a cap box (unit of adjunction)
   ]]--
-  law.tensor_bifunctor:
-    Diagram * Diagram * Diagram * Diagram |> forall [d1 d2 d3 d4 ->
-      (d1 `seq` d2) `tensor` (d3 `seq` d4) teq (d1 `tensor` d3) `seq` (d2 `tensor` d4)
+  cap: T.T * ?Position * ?Style -> Box [object position style ->
+    {
+      _type: "Cap",
+      object: object,
+      position: position,
+      style: style
+    }
+  ]
+
+  --[[
+    cup: Creates a cup box (counit of adjunction)
+  ]]--
+  cup: T.T * ?Position * ?Style -> Box [object position style ->
+    {
+      _type: "Cup",
+      object: object,
+      position: position,
+      style: style
+    }
+  ]
+
+  --[[
+    create_wire: Creates a basic wire between boxes
+  ]]--
+  create_wire: T.T * ?Box * ?Box * ?Z * ?Z * ?Style -> Wire [object source target source_port target_port style ->
+    {
+      _type: "ObjectWire",
+      object: object,
+      source: source,
+      target: target,
+      source_port: source_port,
+      target_port: target_port,
+      style: style
+    }
+  ]
+
+  --[[
+    linear_wire: Creates a linear wire between boxes
+  ]]--
+  linear_wire: T.T * ?Box * ?Box * ?Z * ?Z * ?Style -> Wire [object source target source_port target_port style ->
+    {
+      _type: "LinearWire",
+      object: object,
+      source: source,
+      target: target,
+      source_port: source_port,
+      target_port: target_port,
+      style: style
+    }
+  ]
+
+  --[[
+    labeled_wire: Creates a labeled wire
+  ]]--
+  labeled_wire: Wire * S * ?Position * ?Style -> Wire [wire label position style ->
+    {
+      _type: "Labeled",
+      wire: wire,
+      label: label,
+      position: position,
+      style: style
+    }
+  ]
+
+  --------------------------------------------------
+  -- Export Functions
+  --------------------------------------------------
+
+  --[[
+    to_svg: Exports a wire diagram to SVG format
+  ]]--
+  to_svg: WireDiagram * ?Layout -> S [diagram layout ->
+    -- Apply layout if not already positioned
+    let positioned_diagram = if needs_layout(diagram) then
+      match layout with
+        | ?Some(l) -> apply_layout(diagram, l)
+        | ?None -> apply_layout(diagram, default_layout())
+    else
+      diagram
+    in
+
+    -- In a real implementation, this would generate SVG
+    "<svg>...</svg>"
+  ]
+
+  --[[
+    to_dot: Exports a wire diagram to DOT format (for Graphviz)
+  ]]--
+  to_dot: WireDiagram * ?Layout -> S [diagram layout ->
+    -- Apply layout if not already positioned
+    let positioned_diagram = if needs_layout(diagram) then
+      match layout with
+        | ?Some(l) -> apply_layout(diagram, l)
+        | ?None -> apply_layout(diagram, default_layout())
+    else
+      diagram
+    in
+
+    -- In a real implementation, this would generate DOT
+    "digraph { ... }"
+  ]
+
+  --[[
+    to_ascii: Exports a wire diagram to ASCII art
+  ]]--
+  to_ascii: WireDiagram * ?Layout -> S [diagram layout ->
+    -- Apply layout if not already positioned
+    let positioned_diagram = if needs_layout(diagram) then
+      match layout with
+        | ?Some(l) -> apply_layout(diagram, l)
+        | ?None -> apply_layout(diagram, default_layout())
+    else
+      diagram
+    in
+
+    -- In a real implementation, this would generate ASCII art
+    "+---+   +---+\n|   |-->|   |\n+---+   +---+"
+  ]
+
+  --[[
+    to_latex: Exports a wire diagram to LaTeX (TikZ) format
+  ]]--
+  to_latex: WireDiagram * ?Layout -> S [diagram layout ->
+    -- Apply layout if not already positioned
+    let positioned_diagram = if needs_layout(diagram) then
+      match layout with
+        | ?Some(l) -> apply_layout(diagram, l)
+        | ?None -> apply_layout(diagram, default_layout())
+    else
+      diagram
+    in
+
+    -- In a real implementation, this would generate TikZ
+    "\\begin{tikzpicture}...\n\\end{tikzpicture}"
+  ]
+
+  --------------------------------------------------
+  -- Diagram Operations
+  --------------------------------------------------
+
+  --[[
+    connect: Connects two boxes with a wire
+  ]]--
+  connect: Box * Box * T.T * ?Z * ?Z * ?Bool * ?Style -> Wire [source target object source_port target_port is_linear style ->
+    if is_linear == ?Some(true) then
+      linear_wire(object, ?Some(source), ?Some(target), source_port, target_port, style)
+    else
+      create_wire(object, ?Some(source), ?Some(target), source_port, target_port, style)
+  ]
+
+  --[[
+    set_style: Sets the style for a diagram element
+  ]]--
+  set_style: WireDiagram * Style -> WireDiagram [diagram style ->
+    {
+      boxes: diagram.boxes,
+      wires: diagram.wires,
+      input_wires: diagram.input_wires,
+      output_wires: diagram.output_wires,
+      style: ?Some(style)
+    }
+  ]
+
+  --[[
+    auto_layout: Automatically lays out a wire diagram using the default layout
+  ]]--
+  auto_layout: WireDiagram -> WireDiagram [diagram ->
+    apply_layout(diagram, default_layout())
+  ]
+
+  --[[
+    apply_layout: Applies a specific layout to a wire diagram
+  ]]--
+  apply_layout: WireDiagram * Layout -> WireDiagram [diagram layout ->
+    match layout with
+      | { _type: "Grid", rows: r, columns: c, cell_width: w, cell_height: h } ->
+          apply_grid_layout(diagram, r, c, w, h)
+      | { _type: "FlowLayout", direction: d, spacing: s } ->
+          apply_flow_layout(diagram, d, s)
+      | { _type: "ForceLayout", spring_constant: k, repulsion_constant: r, damping: d, iterations: i } ->
+          apply_force_layout(diagram, k, r, d, i)
+      | _ ->
+          diagram  -- No changes if layout not recognized
+  ]
+
+  --[[
+    initial_layout: Creates an initial layout for a diagram based on its structure
+  ]]--
+  initial_layout: WireDiagram -> Layout [diagram ->
+    -- Determine appropriate layout based on diagram structure
+    let box_count = length(diagram.boxes) in
+
+    if box_count < 5 then
+      -- Small diagrams work well with flow layout
+      { _type: "FlowLayout", direction: "horizontal", spacing: 2.0 }
+    else if is_sequential(diagram) then
+      -- Sequential diagrams work well with flow layout
+      { _type: "FlowLayout", direction: "horizontal", spacing: 1.5 }
+    else if is_parallel(diagram) then
+      -- Parallel diagrams work well with flow layout in vertical direction
+      { _type: "FlowLayout", direction: "vertical", spacing: 1.5 }
+    else
+      -- Complex diagrams work better with force-directed layout
+      { _type: "ForceLayout", spring_constant: 0.1, repulsion_constant: 100.0, damping: 0.8, iterations: 100 }
+  ]
+
+  --[[
+    default_layout: Returns the default layout for wire diagrams
+  ]]--
+  default_layout: () -> Layout [->
+    { _type: "FlowLayout", direction: "horizontal", spacing: 2.0 }
+  ]
+
+  --[[
+    needs_layout: Checks if a diagram needs layout calculation
+  ]]--
+  needs_layout: WireDiagram -> Bool [diagram ->
+    -- Check if any boxes lack position information
+    diagram.boxes |> exists [box ->
+      match box with
+        | { position: ?None } -> true
+        | { position: ?Some(_) } -> false
+        | _ -> true  -- Default to needing layout if structure unknown
     ]
-
-  --[[
-    Law: Braiding is natural
-  ]]--
-  law.braiding_naturality:
-    Diagram * Diagram * Diagram * Diagram |> forall [d1 d2 d3 d4 ->
-      (d1 `seq` d2) `swap` (d3 `seq` d4) teq
-      (d1 `swap` d3) `seq` (d2 `swap` d4)
-    ]
-
-  --[[
-    Law: Symmetric structure means swap is an involution
-  ]]--
-  law.symmetric_involution:
-    Diagram * Diagram |> forall [d1 d2 ->
-      (d1 `swap` d2) `swap` teq d1 `tensor` d2
-    ]
-
-  --[[
-    Law: Tensor product is associative
-  ]]--
-  law.tensor_associativity:
-    Diagram * Diagram * Diagram |> forall [d1 d2 d3 ->
-      (d1 `tensor` d2) `tensor` d3 teq d1 `tensor` (d2 `tensor` d3)
-    ]
-
-  --[[
-    Law: Trace operation satisfies sliding
-  ]]--
-  law.trace_sliding:
-    Diagram * Diagram |> forall [d1 d2 ->
-      trace(d1 `seq` d2) teq d1 `seq` trace(d2) when d1 |> trace_compatible
-    ]
-
-  --[[
-    Law: Trace operation satisfies vanishing
-  ]]--
-  law.trace_vanishing:
-    Diagram |> forall [d ->
-      trace(trace(d)) teq trace(d)
-    ]
-
-  --[[
-    Law: Trace operation satisfies superposing
-  ]]--
-  law.trace_superposing:
-    Diagram * Diagram |> forall [d1 d2 ->
-      trace(d1) `tensor` d2 teq trace(d1 `tensor` d2) when d2 |> trace_independent
-    ]
-
-  --[[
-    Sequential composition of two diagrams
-  ]]--
-  compose: Diagram * Diagram -> Diagram [d1 d2 ->
-    -- Connect output interface of d1 to input interface of d2
-    -- and construct a new diagram with combined internal structure
-    Prim.compose_diagrams d1 d2
   ]
 
   --[[
-    Connect specific ports together
+    is_sequential: Checks if a diagram has a primarily sequential structure
   ]]--
-  connect: Port * Port -> Diagram [p1 p2 ->
-    -- Verify compatibility
-    p1 |> compatible p2 |> Prim.enforce "Incompatible port types"
-
-    -- Create a diagram with just this connection
-    Prim.connect_ports p1 p2
+  is_sequential: WireDiagram -> Bool [diagram ->
+    -- In a real implementation, this would analyze the diagram structure
+    -- to determine if it's primarily a sequence of steps
+    true
   ]
 
   --[[
-    Tensor product (parallel composition) of two diagrams
+    is_parallel: Checks if a diagram has a primarily parallel structure
   ]]--
-  tensor_compose: Diagram * Diagram -> Diagram [d1 d2 ->
-    -- Place diagrams side by side without connecting them
-    Prim.tensor_diagrams d1 d2
+  is_parallel: WireDiagram -> Bool [diagram ->
+    -- In a real implementation, this would analyze the diagram structure
+    -- to determine if it's primarily parallel operations
+    false
   ]
 
   --[[
-    Trace composition (feedback loop) of a diagram
+    apply_grid_layout: Applies a grid layout to a diagram
   ]]--
-  trace_compose: Diagram * Port * Port -> Diagram [d p1 p2 ->
-    -- Connect an output port back to an input port
-    p1 |> compatible p2 |> Prim.enforce "Incompatible ports for trace"
+  apply_grid_layout: WireDiagram * Z * Z * Float * Float -> WireDiagram [diagram rows cols width height ->
+    -- Place boxes in a grid pattern
+    let positioned_boxes = diagram.boxes |> mapi [i box ->
+      let row = i / cols in
+      let col = i % cols in
+      let x = col * width in
+      let y = row * height in
+      set_box_position(box, x, y)
+    ] in
 
-    Prim.trace_diagram d p1 p2
+    -- Update the diagram with positioned boxes
+    {
+      boxes: positioned_boxes,
+      wires: diagram.wires,
+      input_wires: diagram.input_wires,
+      output_wires: diagram.output_wires,
+      style: diagram.style
+    }
   ]
 
   --[[
-    Create a subdiagram from a subset of boxes
+    apply_flow_layout: Applies a flow layout to a diagram
   ]]--
-  subdiagram: Diagram * {Box} -> Diagram [d boxes ->
-    -- Extract a subdiagram containing only the specified boxes
-    -- and their internal connections
-    Prim.extract_subdiagram d boxes
+  apply_flow_layout: WireDiagram * S * Float -> WireDiagram [diagram direction spacing ->
+    -- Place boxes in a flow (horizontal or vertical)
+    let positioned_boxes = diagram.boxes |> mapi [i box ->
+      if direction == "horizontal" then
+        set_box_position(box, i * spacing, 0.0)
+      else  -- vertical
+        set_box_position(box, 0.0, i * spacing)
+    ] in
+
+    -- Update the diagram with positioned boxes
+    {
+      boxes: positioned_boxes,
+      wires: diagram.wires,
+      input_wires: diagram.input_wires,
+      output_wires: diagram.output_wires,
+      style: diagram.style
+    }
   ]
 
   --[[
-    Zoom into a hierarchical box, exposing its internal structure
+    apply_force_layout: Applies a force-directed layout to a diagram
   ]]--
-  zoom: Diagram * Box -> Diagram [d b ->
-    -- Expand a hierarchical box to show its internal structure
-    Prim.zoom_box d b
+  apply_force_layout: WireDiagram * Float * Float * Float * Z -> WireDiagram [diagram spring_k repulsion_k damping iterations ->
+    -- In a real implementation, this would run a force-directed layout algorithm
+    -- such as Fruchterman-Reingold
+
+    -- For now, we just place boxes randomly
+    let positioned_boxes = diagram.boxes |> map [box ->
+      let random_x = Prim.random() * 10.0 in
+      let random_y = Prim.random() * 10.0 in
+      set_box_position(box, random_x, random_y)
+    ] in
+
+    -- Update the diagram with positioned boxes
+    {
+      boxes: positioned_boxes,
+      wires: diagram.wires,
+      input_wires: diagram.input_wires,
+      output_wires: diagram.output_wires,
+      style: diagram.style
+    }
   ]
 
   --[[
-    Extract a box as a standalone diagram
+    set_box_position: Sets the position of a box
   ]]--
-  extract: Box -> Diagram [b ->
-    -- Convert a box to a diagram with the box's internal structure
-    Prim.box_to_diagram b
+  set_box_position: Box * Float * Float -> Box [box x y ->
+    match box with
+      | { _type: "Identity", object: o, style: s } ->
+          { _type: "Identity", object: o, position: ?Some({ x: x, y: y }), style: s }
+      | { _type: "Composite", name: n, inputs: i, outputs: o, style: s, label: l } ->
+          { _type: "Composite", name: n, inputs: i, outputs: o, position: ?Some({ x: x, y: y }), style: s, label: l }
+      | { _type: "Sequential", first: f, second: s, middle_wires: m, style: st } ->
+          { _type: "Sequential", first: f, second: s, middle_wires: m, position: ?Some({ x: x, y: y }), style: st }
+      | { _type: "Parallel", top: t, bottom: b, style: s } ->
+          { _type: "Parallel", top: t, bottom: b, position: ?Some({ x: x, y: y }), style: s }
+      | { _type: "Tensor", object1: o1, object2: o2, style: s } ->
+          { _type: "Tensor", object1: o1, object2: o2, position: ?Some({ x: x, y: y }), style: s }
+      | { _type: "Braiding", object1: o1, object2: o2, style: s } ->
+          { _type: "Braiding", object1: o1, object2: o2, position: ?Some({ x: x, y: y }), style: s }
+      | { _type: "Trace", box: b, trace_wire: w, style: s } ->
+          { _type: "Trace", box: b, trace_wire: w, position: ?Some({ x: x, y: y }), style: s }
+      | { _type: "Cap", object: o, style: s } ->
+          { _type: "Cap", object: o, position: ?Some({ x: x, y: y }), style: s }
+      | { _type: "Cup", object: o, style: s } ->
+          { _type: "Cup", object: o, position: ?Some({ x: x, y: y }), style: s }
+      | _ -> box  -- Return unchanged if type not recognized
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping to Monoidal Category
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @Wire as a symmetric monoidal category
+    with additional structure for visualizing categorical computations.
+
+    In this categorical structure:
+    - Objects are types/objects being visualized in the diagram
+    - Morphisms are boxes connected by wires
+    - Identity is the identity box
+    - Composition is sequential connection of boxes
+    - Tensor product is parallel composition
+    - The symmetric structure is realized through braiding/crossings
+  ]]--
+  structure: {
+    -- Map Wire to a symmetric monoidal category
+    objects: T.T,
+    morphisms: [a b -> [d | d is WireDiagram &&
+                           source_object(d) == a &&
+                           target_object(d) == b]],
+
+    -- Base category structure
+    dom: [f -> source_object(f)],
+    cod: [f -> target_object(f)],
+    id: [a -> create_id_diagram(a)],
+    compose: [f g -> sequential_compose(f, g)],
+
+    -- Monoidal structure
+    tensor_objects: [a b -> tensor_type(a, b)],
+    tensor_morphisms: [f g -> parallel_compose(f, g)],
+    associator: [a b c -> create_associator(a, b, c)],
+    left_unitor: [a -> create_left_unitor(a)],
+    right_unitor: [a -> create_right_unitor(a)],
+
+    -- Symmetric structure
+    braiding: [a b -> create_braiding(a, b)],
+
+    -- Extra structure for visualization
+    layout: [d -> auto_layout(d)],
+    render: [d -> to_svg(d)],
+
+    -- Category laws
+    laws: {
+      -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
+      associativity: forall [f g h ->
+        sequential_compose(sequential_compose(f, g), h) `diagram_equal`
+        sequential_compose(f, sequential_compose(g, h))
+      ],
+
+      -- Identity: id ∘ f = f = f ∘ id
+      identity: forall [f ->
+        sequential_compose(create_id_diagram(dom(f)), f) `diagram_equal` f &&
+        sequential_compose(f, create_id_diagram(cod(f))) `diagram_equal` f
+      ],
+
+      -- Functoriality of tensor
+      tensor_functorial: forall [f1 g1 f2 g2 ->
+        parallel_compose(sequential_compose(f1, g1), sequential_compose(f2, g2)) `diagram_equal`
+        sequential_compose(parallel_compose(f1, f2), parallel_compose(g1, g2))
+      ],
+
+      -- Symmetry of braiding
+      braiding_symmetry: forall [a b ->
+        sequential_compose(create_braiding(a, b), create_braiding(b, a)) `diagram_equal`
+        create_id_diagram(tensor_type(a, b))
+      ]
+    }
+  }
+
+  --[[
+    Helper function to create an identity diagram
+  ]]--
+  create_id_diagram: T.T -> WireDiagram [object ->
+    let id_box = identity(object) in
+    let wire = create_wire(object) in
+    create_diagram([id_box], [wire], [wire], [wire])
   ]
 
   --[[
-    Rewire a diagram according to a transformation function
+    Helper function to sequentially compose two diagrams
   ]]--
-  rewire: Diagram * (Port -> Port) -> Diagram [d f ->
-    -- Apply a transformation to the wiring pattern
-    Prim.transform_wiring d f
+  sequential_compose: WireDiagram * WireDiagram -> WireDiagram [f g ->
+    -- In a real implementation, this would connect the output wires of f to input wires of g
+    create_diagram(f.boxes + g.boxes, f.wires + g.wires, f.input_wires, g.output_wires)
   ]
 
   --[[
-    Transform a diagram by applying a function to each box
+    Helper function to create a parallel composition of two diagrams
   ]]--
-  transform: Diagram * (Box -> Box) -> Diagram [d f ->
-    -- Apply a transformation to each box in the diagram
-    Prim.transform_boxes d f
+  parallel_compose: WireDiagram * WireDiagram -> WireDiagram [f g ->
+    -- In a real implementation, this would place f and g side by side
+    create_diagram(f.boxes + g.boxes, f.wires + g.wires,
+                   f.input_wires + g.input_wires,
+                   f.output_wires + g.output_wires)
   ]
 
   --[[
-    Optimize a diagram by applying simplification rules
+    Helper function to create an associator diagram
   ]]--
-  optimize: Diagram * {Rule} -> Diagram [d rules ->
-    -- Apply optimization rules to simplify the diagram
-    Prim.optimize_diagram d rules
+  create_associator: T.T * T.T * T.T -> WireDiagram [a b c ->
+    -- This would create a diagram that witnesses (a ⊗ b) ⊗ c ≅ a ⊗ (b ⊗ c)
+    let tensor1 = tensor_type(tensor_type(a, b), c) in
+    let tensor2 = tensor_type(a, tensor_type(b, c)) in
+    let assoc_box = create_box("associator", [], [], ?None, ?None) in
+    create_diagram([assoc_box], [], [], [])
   ]
 
   --[[
-    Instantiate a diagram template with specific parameters
+    Helper function to create a left unitor diagram
   ]]--
-  instantiate: Diagram * {T.T} -> Diagram [d params ->
-    -- Create a concrete diagram from a parameterized template
-    Prim.instantiate_diagram d params
+  create_left_unitor: T.T -> WireDiagram [a ->
+    -- This would create a diagram that witnesses I ⊗ a ≅ a
+    let tensor = tensor_type(unit_type(), a) in
+    let unitor_box = create_box("left_unitor", [], [], ?None, ?None) in
+    create_diagram([unitor_box], [], [], [])
   ]
 
   --[[
-    Verify that a diagram has no cycles
+    Helper function to create a right unitor diagram
   ]]--
-  verify_acyclic: Diagram -> Bool [d ->
-    -- Check that the diagram has no feedback loops
-    Prim.is_acyclic d
+  create_right_unitor: T.T -> WireDiagram [a ->
+    -- This would create a diagram that witnesses a ⊗ I ≅ a
+    let tensor = tensor_type(a, unit_type()) in
+    let unitor_box = create_box("right_unitor", [], [], ?None, ?None) in
+    create_diagram([unitor_box], [], [], [])
   ]
 
   --[[
-    Verify that a diagram is fully connected
+    Helper function to create a braiding diagram
   ]]--
-  verify_connected: Diagram -> Bool [d ->
-    -- Check that the diagram has no disconnected components
-    Prim.is_connected d
+  create_braiding: T.T * T.T -> WireDiagram [a b ->
+    -- This would create a diagram that witnesses a ⊗ b ≅ b ⊗ a
+    let braid_box = braiding(a, b) in
+    let wire1 = create_wire(a) in
+    let wire2 = create_wire(b) in
+    create_diagram([braid_box], [wire1, wire2], [wire1, wire2], [wire2, wire1])
   ]
 
   --[[
-    Verify that a diagram is well-typed
+    Helper function to compute the tensor product of two types
   ]]--
-  verify_well_typed: Diagram -> Bool [d ->
-    -- Check that all connections have compatible types
-    Prim.is_well_typed d
+  tensor_type: T.T * T.T -> T.T [a b ->
+    a * b  -- Use the product type as tensor
   ]
 
   --[[
-    Verify that a diagram satisfies all structural constraints
+    Helper function to get the unit type
   ]]--
-  verify_well_formed: Diagram -> Bool [d ->
-    -- Check all diagram constraints
-    d |> verify_acyclic and
-    d |> verify_connected and
-    d |> verify_well_typed
+  unit_type: () -> T.T [->
+    ()  -- Unit type
   ]
 
   --[[
-    Alias for sequential composition
+    Helper function to get source object of a diagram
   ]]--
-  seq: Diagram * Diagram -> Diagram [d1 d2 -> d1 |> compose d2]
+  source_object: WireDiagram -> T.T [diagram ->
+    -- In a real implementation, this would combine the types of input wires
+    if diagram.input_wires == [] then
+      unit_type()
+    else if length(diagram.input_wires) == 1 then
+      diagram.input_wires[0].object
+    else
+      fold([w acc -> tensor_type(w.object, acc)], unit_type(), diagram.input_wires)
+  ]
 
   --[[
-    Alias for parallel composition
+    Helper function to get target object of a diagram
   ]]--
-  par: Diagram * Diagram -> Diagram [d1 d2 -> d1 |> tensor_compose d2]
+  target_object: WireDiagram -> T.T [diagram ->
+    -- In a real implementation, this would combine the types of output wires
+    if diagram.output_wires == [] then
+      unit_type()
+    else if length(diagram.output_wires) == 1 then
+      diagram.output_wires[0].object
+    else
+      fold([w acc -> tensor_type(w.object, acc)], unit_type(), diagram.output_wires)
+  ]
 
   --[[
-    Alias for trace composition
+    Helper function to compare diagrams for equality
   ]]--
-  trace: Diagram * Port * Port -> Diagram [d p1 p2 -> d |> trace_compose p1 p2]
-
-  --[[
-    Identity wiring pattern (no transformation)
-  ]]--
-  id: Diagram [-> Prim.identity_diagram]
-
-  --[[
-    Swap wiring pattern (crossing connections)
-  ]]--
-  swap: Diagram [-> Prim.swap_diagram]
-
-  --[[
-    Copy wiring pattern (duplicate a signal)
-  ]]--
-  copy: Diagram [-> Prim.copy_diagram]
-
-  --[[
-    Delete wiring pattern (terminate a signal)
-  ]]--
-  delete: Diagram [-> Prim.delete_diagram]
-
-  --[[
-    Merge wiring pattern (combine two signals)
-  ]]--
-  merge: Diagram [-> Prim.merge_diagram]
-
-  --[[
-    Create wiring pattern (generate a signal)
-  ]]--
-  create: Diagram [-> Prim.create_diagram]
-
-  --[[
-    Loop wiring pattern (feedback)
-  ]]--
-  loop: Diagram [-> Prim.loop_diagram]
-
-  --[[
-    Converts a wiring diagram to a graph
-  ]]--
-  to_graph: !Diagram -o> Grph.!Grph
-
-  --[[
-    Creates a wiring diagram from a graph
-  ]]--
-  from_graph: Grph.!Grph -o> !Diagram
-
-  --[[
-    Converts a wiring diagram to an interaction net
-  ]]--
-  to_net: !Diagram -o> Net.!Net
-
-  --[[
-    Creates a wiring diagram from an interaction net
-  ]]--
-  from_net: Net.!Net -o> !Diagram
-
-  --[[
-    Converts a wiring diagram to a category
-  ]]--
-  to_category: !Diagram -o> Cat.Cat
-
-  --[[
-    Creates a wiring diagram from a category
-  ]]--
-  from_category: Cat.Cat -o> !Diagram
+  diagram_equal: WireDiagram * WireDiagram -> Bool [d1 d2 ->
+    -- In a real implementation, this would compare the normalized forms
+    simplify(d1) == simplify(d2)
+  ]
 }

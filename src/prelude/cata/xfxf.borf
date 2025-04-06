@@ -11,10 +11,10 @@
   typ: {
     -- Transformation types
     NaturalTransformation Modification TwoCell FunctorComposition
-    
+
     -- Specific transformations
     FunctorTrans CategoryTrans RepresentationTrans
-    
+
     -- Higher transformations
     Adjunction Equivalence Monad Comonad
   }
@@ -22,10 +22,10 @@
   op: {
     -- Natural transformation operators
     => ==> <=== <=>
-    
+
     -- Composition operators
     o >>> <<< ||| &&&
-    
+
     -- 2-categorical operators
     *> <* ~> <~ +> <+
   }
@@ -33,26 +33,26 @@
   fn: {
     -- Natural transformation construction
     natural_transform between component_map
-    
+
     -- Verification functions
     verify_naturality verify_coherence verify_adjunction
-    
+
     -- Transformation operations
     vertical_compose horizontal_compose whisker_left whisker_right
-    
+
     -- Higher transformations
     to_adjunction from_adjunction adjoint_pair
     to_equivalence from_equivalence
     to_monad from_monad to_comonad from_comonad
-    
+
     -- Common natural transformations
     fmap_transform apply_transform join_transform
     strength costrength distributivity associativity
-    
+
     -- Transformation between transformation modules
     xf_to_theory theory_to_xf
     pipelinexf_to_rwxf rwxf_to_catxf
-    
+
     -- Higher-order transformations
     map_natural_transformation hoist_natural_transformation
     lift_transformation2 transform_functor
@@ -74,15 +74,15 @@
   --------------------------------------------------
   -- Structure Mapping to 2-Category
   --------------------------------------------------
-  
+
   --[[
     Structure mapping that establishes @XfXf as a 2-category.
-    
+
     This mapping defines a 2-category where:
     - 0-cells are categories (domains of representation)
     - 1-cells are functors (transformations between domains)
     - 2-cells are natural transformations (transformations between transformations)
-    
+
     This 2-categorical structure formalizes the semantics of transforming
     transformations, ensuring that higher-order structural properties
     are preserved across different transformation patterns.
@@ -92,26 +92,26 @@
     objects: @Cat.Category,                 -- 0-cells (categories)
     morphisms: [C D -> (C -> D)],           -- 1-cells (functors)
     two_cells: [F G -> NaturalTransformation F G], -- 2-cells (nat. transforms)
-    
+
     -- Base 2-category structure
     dom_0: [F -> F.source_category],        -- Domain of a 1-cell
     cod_0: [F -> F.target_category],        -- Codomain of a 1-cell
     dom_1: [alpha -> alpha.source_functor], -- Domain of a 2-cell
     cod_1: [alpha -> alpha.target_functor], -- Codomain of a 2-cell
-    
+
     -- Identity cells
     id_0: [C -> [x -> x]],                  -- Identity functor
     id_1: [F -> [c -> id_F_c(c)]],          -- Identity natural transformation
-    
+
     -- Compositions
     compose_0: [F G -> [x -> G(F(x))]],     -- Horizontal composition (functors)
     compose_1: [alpha beta -> vertical_compose(alpha, beta)], -- Vertical composition
     compose_01: [alpha beta -> horizontal_compose(alpha, beta)], -- Horizontal composition
-    
+
     -- Whiskering (composing natural transformations with functors)
     whisker_left: [F alpha -> whisker_l(F, alpha)],
     whisker_right: [alpha G -> whisker_r(alpha, G)],
-    
+
     -- 2-category laws
     laws: {
       -- Interchange law (the two ways of composing in a 2-category agree)
@@ -119,19 +119,19 @@
         compose_01(compose_1(alpha, beta), compose_1(gamma, delta)) ==
         compose_1(compose_01(alpha, gamma), compose_01(beta, delta))
       ],
-      
+
       -- Functors preserve identities: F(id_A) = id_F(A)
       preserve_id: forall [F A ->
         F.map_morph(id_0(A)) == id_0(F.map_obj(A))
       ],
-      
+
       -- Natural transformations are natural: F(f) ∘ α_A = α_B ∘ G(f)
       naturality: forall [alpha f ->
         let F = dom_1(alpha) in
         let G = cod_1(alpha) in
         let A = dom_0(f) in
         let B = cod_0(f) in
-        
+
         compose_0(F.map_morph(f), alpha.component(B)) ==
         compose_0(alpha.component(A), G.map_morph(f))
       ]
@@ -147,7 +147,7 @@
   ]]--
   NaturalTransformation: {
     source_functor: @Xf.Xf,       -- F: C → D
-    target_functor: @Xf.Xf,       -- G: C → D 
+    target_functor: @Xf.Xf,       -- G: C → D
     components: c -> (F(c) -> G(c)), -- For each object c in C, a morphism F(c) → G(c)
     naturality: Bool              -- Whether this transformation is natural
   }
@@ -265,15 +265,15 @@
   verify_naturality: @Xf.Xf * @Xf.Xf * (c -> (F(c) -> G(c))) -> Bool [F G components ->
     let source_cat = F.source_category in
     let morphisms = @Cata.Theory.get_sample_morphisms(source_cat) in
-    
+
     morphisms |> @Prim.forall [f ->
       let dom = @Cat.dom(f) in
       let cod = @Cat.cod(f) in
-      
+
       -- Check naturality square: G(f) ∘ components(dom) = components(cod) ∘ F(f)
       let left_path = @Cat.compose(components(dom), G.map_morph(f)) in
       let right_path = @Cat.compose(F.map_morph(f), components(cod)) in
-      
+
       left_path == right_path
     ]
   ]
@@ -291,7 +291,7 @@
   verify_adjunction: @Xf.Xf * @Xf.Xf * NaturalTransformation * NaturalTransformation -> Bool [F G unit counit ->
     let triangleF = verify_triangle_identity_F(F, G, unit, counit) in
     let triangleG = verify_triangle_identity_G(F, G, unit, counit) in
-    
+
     triangleF && triangleG
   ]
 
@@ -300,12 +300,12 @@
   ]]--
   verify_triangle_identity_F: @Xf.Xf * @Xf.Xf * NaturalTransformation * NaturalTransformation -> Bool [F G unit counit ->
     let objects = F.source_category |> @Cata.Theory.get_sample_objects() in
-    
+
     objects |> @Prim.forall [c ->
       let F_unit_c = F.map_morph(unit.components(c)) in
       let counit_F_c = counit.components(F.map_obj(c)) in
       let composed = @Cat.compose(F_unit_c, counit_F_c) in
-      
+
       composed == @Cat.id(F.map_obj(c))
     ]
   ]
@@ -315,12 +315,12 @@
   ]]--
   verify_triangle_identity_G: @Xf.Xf * @Xf.Xf * NaturalTransformation * NaturalTransformation -> Bool [F G unit counit ->
     let objects = G.source_category |> @Cata.Theory.get_sample_objects() in
-    
+
     objects |> @Prim.forall [d ->
       let unit_G_d = unit.components(G.map_obj(d)) in
       let G_counit_d = G.map_morph(counit.components(d)) in
       let composed = @Cat.compose(unit_G_d, G_counit_d) in
-      
+
       composed == @Cat.id(G.map_obj(d))
     ]
   ]
@@ -355,11 +355,11 @@
     let G = alpha.target_functor in
     let H = beta.source_functor in
     let I = beta.target_functor in
-    
+
     {
       source_functor: compose_functor(F, H),
       target_functor: compose_functor(G, I),
-      components: [c -> 
+      components: [c ->
         let H_alpha_c = H.map_morph(alpha.components(c)) in
         let beta_G_c = beta.components(G.map_obj(c)) in
         @Cat.compose(H_alpha_c, beta_G_c)
@@ -375,7 +375,7 @@
   whisker_left: @Xf.Xf * NaturalTransformation -> NaturalTransformation [F alpha ->
     let G = alpha.source_functor in
     let H = alpha.target_functor in
-    
+
     {
       source_functor: compose_functor(G, F),
       target_functor: compose_functor(H, F),
@@ -391,7 +391,7 @@
   whisker_right: NaturalTransformation * @Xf.Xf -> NaturalTransformation [alpha H ->
     let F = alpha.source_functor in
     let G = alpha.target_functor in
-    
+
     {
       source_functor: compose_functor(H, F),
       target_functor: compose_functor(H, G),
@@ -427,7 +427,7 @@
   fmap_transform: @Xf.Xf * (a -> b) -> NaturalTransformation [F f ->
     -- Create a natural transformation from identity to F applied to f
     let id_functor = @Xf.id(F.source_category) in
-    
+
     {
       source_functor: id_functor,
       target_functor: id_functor,
@@ -455,7 +455,7 @@
   ]]--
   join_transform: @Xf.Xf -> NaturalTransformation [F ->
     let FF = compose_functor(F, F) in
-    
+
     {
       source_functor: FF,
       target_functor: F,
@@ -473,7 +473,7 @@
   ]]--
   to_adjunction: @Xf.Xf * @Xf.Xf * NaturalTransformation * NaturalTransformation -> Adjunction [F G unit counit ->
     let is_adj = verify_adjunction(F, G, unit, counit) in
-    
+
     {
       left_functor: F,
       right_functor: G,
@@ -497,7 +497,7 @@
     -- Attempt to find the unit and counit
     let maybe_unit = build_unit(F, G) in
     let maybe_counit = build_counit(F, G) in
-    
+
     match (maybe_unit, maybe_counit) with
       (Some(unit), Some(counit)) -> ?Some(to_adjunction(F, G, unit, counit))
       _ -> ?None
@@ -508,7 +508,7 @@
   ]]--
   to_monad: @Xf.Xf * NaturalTransformation * NaturalTransformation -> Monad [T unit multiplication ->
     let is_monad = verify_monad_laws(T, unit, multiplication) in
-    
+
     {
       functor: T,
       unit: unit,
@@ -524,25 +524,25 @@
     let F = adj.left_functor in
     let G = adj.right_functor in
     let eta = adj.unit in
-    
+
     -- The monad functor is G∘F
     let T = compose_functor(F, G) in
-    
+
     -- The monad multiplication is G∘ε∘F where ε is the counit
     let epsilon = adj.counit in
-    let mu_components = [c -> 
+    let mu_components = [c ->
       let GF_c = G.map_obj(F.map_obj(c)) in
       let eps_F_c = epsilon.components(F.map_obj(c)) in
       G.map_morph(eps_F_c)
     ] in
-    
+
     let multiplication = {
       source_functor: compose_functor(T, T),
       target_functor: T,
       components: mu_components,
       naturality: true
     } in
-    
+
     to_monad(T, eta, multiplication)
   ]
 
@@ -592,7 +592,7 @@
     let alpha = nat_trans in
     let G = alpha.source_functor in
     let H = alpha.target_functor in
-    
+
     {
       source_functor: compose_functor(G, F),
       target_functor: compose_functor(H, F),
@@ -612,7 +612,7 @@
     -- Try to build η: Id → G∘F
     let id_functor = @Xf.id(F.source_category) in
     let GF = compose_functor(F, G) in
-    
+
     -- In a real implementation, we would try to construct the components
     ?None  -- Simplified: assume we can't automatically build it
   ]
@@ -624,7 +624,7 @@
     -- Try to build ε: F∘G → Id
     let FG = compose_functor(G, F) in
     let id_functor = @Xf.id(G.source_category) in
-    
+
     -- In a real implementation, we would try to construct the components
     ?None  -- Simplified: assume we can't automatically build it
   ]
@@ -634,12 +634,12 @@
   ]]--
   verify_monad_laws: @Xf.Xf * NaturalTransformation * NaturalTransformation -> Bool [T unit multiplication ->
     -- Check that T∘T → T and Id → T satisfy the monad laws
-    
+
     -- This would verify:
     -- 1. Left identity: μ ∘ (η ◦ T) = id_T
     -- 2. Right identity: μ ∘ (T ◦ η) = id_T
     -- 3. Associativity: μ ∘ (μ ◦ T) = μ ∘ (T ◦ μ)
-    
+
     true  -- Simplified implementation
   ]
-} 
+}

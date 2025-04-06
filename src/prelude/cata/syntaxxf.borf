@@ -134,7 +134,7 @@
 
   --[[
     Syntax-Category Structure
-    
+
     Establishes a categorical structure over syntactic expressions.
   ]]--
   syntax_category: {
@@ -143,12 +143,12 @@
     dom = [e -> e.input_type],       -- Domain is the input type
     cod = [e -> e.output_type],      -- Codomain is the output type
     id = [t -> Syntax.id_expr(t)],      -- Identity is the identity expression
-    compose = [e1 e2 -> 
+    compose = [e1 e2 ->
       Syntax.compose_exprs(e1, e2)      -- Composition is expression composition
     ],
-    
+
     -- Laws (simplified)
-    law.identity = [e -> 
+    law.identity = [e ->
       compose(id(cod(e)), e) == e and compose(e, id(dom(e))) == e
     ],
     law.associativity = [e1 e2 e3 ->
@@ -162,7 +162,7 @@
 
   --[[
     Transform Category
-    
+
     Defines a category of syntax transformations, where objects are syntactic
     types and morphisms are transformation functions between expressions.
   ]]--
@@ -173,9 +173,9 @@
     cod = [f -> f.codomain],         -- Codomain is the output type
     id = [t -> [e -> e]],            -- Identity is the identity transformation
     compose = [f g -> [e -> e |> g |> f]],  -- Composition is function composition
-    
+
     -- Laws
-    law.identity = [f -> 
+    law.identity = [f ->
       compose(id(cod(f)), f) == f and compose(f, id(dom(f))) == f
     ],
     law.associativity = [f g h ->
@@ -189,22 +189,22 @@
 
   --[[
     Syntax-Net Mapping
-    
+
     Establishes a structural correspondence between syntax and interaction nets.
   ]]--
   syntax_net_mapping: {
     -- Object mappings
     Syntax.Expr = Net.Agent,            -- Expressions are agents
     Syntax.Type = Net.Symbol,           -- Types are symbols
-    
+
     -- Function mappings
     Syntax.lambda = Net.new_agent,      -- Lambda expressions create agents
     Syntax.apply = Net.connect,         -- Application connects ports
-    
+
     -- Structural operations
     Syntax.compose = Net.compose,       -- Expression composition is net composition
     Syntax.id = Net.empty_net,          -- Identity expression is empty net
-    
+
     -- Conversion functions
     Syntax.eval_syntax_to_net = [e ->   -- Evaluate syntax to net
       -- Implementation details simplified
@@ -215,4 +215,4 @@
       Syntax.empty_expr()
     ]
   }
-} 
+}

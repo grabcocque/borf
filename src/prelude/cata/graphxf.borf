@@ -16,7 +16,7 @@
   fn: {
     -- Graph transformations
     string_to_graph graph_to_string
-    graph_to_category category_to_graph 
+    graph_to_category category_to_graph
   }
 
   E: typ cup op cup fn
@@ -53,7 +53,7 @@
 
   --[[
     Graph-Category Structural Mapping
-    
+
     Maps graphs to categories, establishing a direct structural
     correspondence between graph theory and category theory.
   ]]--
@@ -84,7 +84,7 @@
 
   --[[
     Convert a graph to a category
-    
+
     This transformation creates a category where:
     - Objects are the graph nodes
     - Morphisms are the graph edges
@@ -93,14 +93,14 @@
   ]]--
   graph_to_category: !Grph.Grph -o> Cat.Cat [g ->
     let cat = Cat.new({}, {}) in
-    
+
     -- First add all nodes as objects
     let {g1, nodes} = Prim.get_graph_nodes(g) in
     let cat_with_objs = nodes |> fold [c n ->
       let label = Grph.get_node_label(g1, n) in
       Cat.add_object(c, {id: n.id, label: label})
     ] cat in
-    
+
     -- Then add all edges as morphisms
     let {g2, edges} = Prim.get_graph_edges(g1) in
     edges |> fold [c e ->
@@ -118,7 +118,7 @@
 
   --[[
     Convert a category to a graph
-    
+
     This transformation creates a graph where:
     - Nodes are the category objects
     - Edges are the category morphisms
@@ -126,13 +126,13 @@
   ]]--
   category_to_graph: !Cat.Cat -o> Grph.Grph [c ->
     let g = Grph.new_graph() in
-    
+
     -- First add all objects as nodes
     let objs = Cat.get_objects(c) in
     let g_with_nodes = objs |> fold [g obj ->
       Grph.add_node(g, obj.label).0
     ] g in
-    
+
     -- Then add all morphisms as edges
     let morphs = Cat.get_morphisms(c) in
     morphs |> fold [g m ->
@@ -143,4 +143,4 @@
       Grph.add_edge(g, src_node, tgt_node, m.label).0
     ] g_with_nodes
   ]
-} 
+}

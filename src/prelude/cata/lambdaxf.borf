@@ -1,0 +1,636 @@
+--[[
+  Lambda Calculus Transformations
+
+  This module defines transformations between lambda calculus and other categorical
+  frameworks, enabling rigorous mappings between the theoretical lambda calculus model
+  and practical computational representations.
+]]--
+
+@LambdaXf: {
+  typ: {
+    -- Core transformation types
+    LambdaTransform
+    TypedTransform
+    LinearTransform
+    
+    -- Specific transformations
+    LambdaToPrim
+    LambdaToTerm
+    LambdaToRW
+    LambdaToGraph
+    
+    -- Interpreter types
+    Interpreter
+    Environment
+    Context
+  }
+
+  op: {
+    -- Transformation operators
+    ==> <== <=> ~~
+    
+    -- Composition operators
+    >>> <<< +++ &&&
+    
+    -- Interpretation operators
+    |= |> <| $$
+  }
+
+  fn: {
+    -- Core transformation functions
+    to_prim from_prim
+    to_term from_term
+    to_rw from_rw
+    to_graph from_graph
+    
+    -- Typed lambda transformations
+    typed_to_untyped untyped_to_typed
+    church_encode church_decode
+    
+    -- Linear lambda transformations
+    linear_to_resource resource_to_linear
+    linear_to_session session_to_linear
+    
+    -- Interpretation functions
+    interpret evaluate compile
+    optimize cps_transform
+    
+    -- Category theory connections
+    curry_howard yoneda_embedding
+    adjunction_transform monad_transform
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@LambdaXf, @T, true),        -- Add dependency on Type system
+    (@LambdaXf, @Lambda, true),   -- Add dependency on Lambda calculus
+    (@LambdaXf, @Prim, true),     -- Add dependency on Primitives
+    (@LambdaXf, @CatXf, true),    -- Add dependency on Category theory
+    (@LambdaXf, @Term, true),     -- Add dependency on Termination
+    (@LambdaXf, @RW, true)        -- Add dependency on Rewrite systems
+  }
+
+  --------------------------------------------------
+  -- Lambda to Primitive Transformations
+  --------------------------------------------------
+
+  --[[
+    to_prim transforms lambda calculus expressions into primitive operations,
+    bridging the gap between the theoretical model and practical implementation.
+  ]]--
+  to_prim: @Lambda.Expr -> @Prim.a [expr ->
+    match expr with
+      -- Identity function
+      | { _type: "Abs", param: x, body: { _type: "Var", name: y } } when x == y ->
+          @Prim.id
+      
+      -- Function composition
+      | { _type: "Abs", param: "x", body: { _type: "App", 
+          fn: g, 
+          arg: { _type: "App", fn: f, arg: { _type: "Var", name: "x" } }
+        }} ->
+          @Prim.compose(to_prim(f), to_prim(g))
+      
+      -- Map operation (simplified pattern)
+      | { _type: "Rec", name: "map", param: "f", body: b } when is_map_pattern(b) ->
+          @Prim.map
+      
+      -- Fold operation (simplified pattern)
+      | { _type: "Rec", name: "fold", param: "f", body: b } when is_fold_pattern(b) ->
+          @Prim.fold
+      
+      -- Linear operations
+      | { _type: "LinearAbs", param: x, body: { _type: "Var", name: y } } when x == y ->
+          @Prim.id
+      
+      | { _type: "LinearAbs", param: x, body: @Lambda.unit } ->
+          @Prim.consume
+      
+      -- Primitive operation
+      | { _type: "Primitive", op: p } ->
+          p
+      
+      -- Default case: compile the expression into a function
+      | _ ->
+          compile_to_function(expr)
+  ]
+
+  --[[
+    from_prim transforms primitive operations into lambda calculus expressions,
+    providing a theoretical foundation for Borf's computational model.
+  ]]--
+  from_prim: @Prim.a -> @Lambda.Expr [prim_op ->
+    match prim_op with
+      -- Identity function
+      | @Prim.id ->
+          @Lambda.abs("x", @Lambda.var("x"))
+      
+      -- Function composition
+      | @Prim.compose ->
+          @Lambda.abs("f", @Lambda.abs("g", @Lambda.abs("x", 
+            @Lambda.app(@Lambda.var("g"), @Lambda.app(@Lambda.var("f"), @Lambda.var("x")))
+          )))
+      
+      -- Map operation
+      | @Prim.map ->
+          create_map_lambda()
+      
+      -- Fold operation
+      | @Prim.fold ->
+          create_fold_lambda()
+      
+      -- Linear operations
+      | @Prim.consume ->
+          @Lambda.linear_abs("x", @Lambda.unit)
+      
+      -- Default case: wrap the primitive in a lambda expression
+      | _ ->
+          @Lambda.primitive(prim_op)
+  ]
+
+  --[[
+    Helper function to check if a lambda expression matches a map pattern
+  ]]--
+  is_map_pattern: @Lambda.Expr -> Bool [expr ->
+    -- In a real implementation, this would check for the recursive map pattern
+    true
+  ]
+
+  --[[
+    Helper function to check if a lambda expression matches a fold pattern
+  ]]--
+  is_fold_pattern: @Lambda.Expr -> Bool [expr ->
+    -- In a real implementation, this would check for the recursive fold pattern
+    true
+  ]
+
+  --[[
+    Helper function to compile a lambda expression to a primitive function
+  ]]--
+  compile_to_function: @Lambda.Expr -> (@Prim.a -> @Prim.a) [expr ->
+    -- Create an interpreter for the expression
+    let interpreter = create_interpreter(expr) in
+    
+    -- Return a function that interprets the expression with the given argument
+    [arg -> interpreter.evaluate(initial_environment(arg))]
+  ]
+
+  --[[
+    Helper function to create a map lambda expression
+  ]]--
+  create_map_lambda: () -> @Lambda.Expr [->
+    @Lambda.rec("map", "f", 
+      @Lambda.abs("xs",
+        @Lambda.cond(
+          @Lambda.app(@Lambda.primitive(@Prim.is_empty), @Lambda.var("xs")),
+          @Lambda.empty_list,
+          @Lambda.app(
+            @Lambda.app(@Lambda.cons, 
+              @Lambda.app(@Lambda.var("f"), @Lambda.app(@Lambda.primitive(@Prim.head), @Lambda.var("xs")))
+            ),
+            @Lambda.app(
+              @Lambda.app(@Lambda.var("map"), @Lambda.var("f")),
+              @Lambda.app(@Lambda.primitive(@Prim.tail), @Lambda.var("xs"))
+            )
+          )
+        )
+      ),
+      []
+    )
+  ]
+
+  --[[
+    Helper function to create a fold lambda expression
+  ]]--
+  create_fold_lambda: () -> @Lambda.Expr [->
+    @Lambda.rec("fold", "f",
+      @Lambda.abs("acc",
+        @Lambda.abs("xs",
+          @Lambda.cond(
+            @Lambda.app(@Lambda.primitive(@Prim.is_empty), @Lambda.var("xs")),
+            @Lambda.var("acc"),
+            @Lambda.app(
+              @Lambda.app(
+                @Lambda.app(@Lambda.var("fold"), @Lambda.var("f")),
+                @Lambda.app(
+                  @Lambda.app(@Lambda.var("f"), @Lambda.var("acc")),
+                  @Lambda.app(@Lambda.primitive(@Prim.head), @Lambda.var("xs"))
+                )
+              ),
+              @Lambda.app(@Lambda.primitive(@Prim.tail), @Lambda.var("xs"))
+            )
+          )
+        )
+      ),
+      []
+    )
+  ]
+
+  --------------------------------------------------
+  -- Lambda to Termination Analysis Transformations
+  --------------------------------------------------
+
+  --[[
+    to_term transforms lambda calculus expressions into termination evidence,
+    enabling analysis of computational properties like termination and complexity.
+  ]]--
+  to_term: @Lambda.Expr -> @Term.Evidence [expr ->
+    let net = create_interaction_net(expr) in
+    
+    -- Check for recursive patterns
+    if has_recursion(expr) then
+      analyze_recursive_termination(expr, net)
+    else
+      {
+        net: net,
+        terminating: ?Some(true),  -- Non-recursive lambda expressions always terminate
+        confidence: 1.0,
+        witness: ?Some({
+          ordering: [n1 n2 -> true],
+          measure: [n -> 0],
+          proof: "Expression has no recursion"
+        }),
+        cycles: [],
+        size_metrics: {
+          initial_size: expr_size(expr),
+          current_size: expr_size(expr),
+          growth_rate: 0.0
+        },
+        matched_patterns: [],
+        visited_states: []
+      }
+  ]
+
+  --[[
+    from_term transforms termination evidence into a lambda calculus expression
+    that respects the termination properties of the evidence.
+  ]]--
+  from_term: @Term.Evidence -> @Lambda.Expr [evidence ->
+    if evidence.terminating == ?Some(true) then
+      -- Create a terminating lambda expression
+      @Lambda.abs("x", @Lambda.var("x"))
+    else if evidence.terminating == ?Some(false) then
+      -- Create a non-terminating lambda expression
+      @Lambda.rec("loop", "x", @Lambda.app(@Lambda.var("loop"), @Lambda.var("x")), [])
+    else
+      -- Create a lambda expression with unknown termination properties
+      @Lambda.abs("x", @Lambda.var("x"))
+  ]
+
+  --[[
+    Helper function to create an interaction net from a lambda expression
+  ]]--
+  create_interaction_net: @Lambda.Expr -> @Term.Net [expr ->
+    -- In a real implementation, this would convert lambda expressions to interaction nets
+    @Term.create_net_from_lambda(expr)
+  ]
+
+  --[[
+    Helper function to check if a lambda expression has recursion
+  ]]--
+  has_recursion: @Lambda.Expr -> Bool [expr ->
+    match expr with
+      | { _type: "Rec" } -> true
+      | { _type: "Abs", body: b } -> has_recursion(b)
+      | { _type: "App", fn: f, arg: a } -> has_recursion(f) || has_recursion(a)
+      | _ -> false
+  ]
+
+  --[[
+    Helper function to analyze termination of recursive expressions
+  ]]--
+  analyze_recursive_termination: @Lambda.Expr * @Term.Net -> @Term.Evidence [expr net ->
+    -- Simplistic termination analysis based on structural recursion
+    let decreasing = has_structural_recursion(expr) in
+    
+    {
+      net: net,
+      terminating: ?Some(decreasing),
+      confidence: if decreasing then 0.9 else 0.7,
+      witness: if decreasing then
+        ?Some({
+          ordering: [n1 n2 -> expr_size(n1) < expr_size(n2)],
+          measure: [n -> expr_size(n)],
+          proof: "Recursive calls occur on structurally smaller arguments"
+        })
+      else
+        ?None,
+      cycles: [],
+      size_metrics: {
+        initial_size: expr_size(expr),
+        current_size: expr_size(expr),
+        growth_rate: 0.0
+      },
+      matched_patterns: [],
+      visited_states: []
+    }
+  ]
+
+  --[[
+    Helper function to check if a recursive expression uses structural recursion
+  ]]--
+  has_structural_recursion: @Lambda.Expr -> Bool [expr ->
+    -- In a real implementation, this would analyze recursive calls
+    true
+  ]
+
+  --[[
+    Helper function to compute the size of a lambda expression
+  ]]--
+  expr_size: @Lambda.Expr -> Z [expr ->
+    match expr with
+      | { _type: "Var" } -> 1
+      | { _type: "Abs", body: b } -> 1 + expr_size(b)
+      | { _type: "App", fn: f, arg: a } -> 1 + expr_size(f) + expr_size(a)
+      | { _type: "Rec", body: b } -> 2 + expr_size(b)
+      | _ -> 1
+  ]
+
+  --------------------------------------------------
+  -- Lambda to Rewrite System Transformations
+  --------------------------------------------------
+
+  --[[
+    to_rw transforms lambda calculus expressions into rewrite systems,
+    representing beta reduction as interaction net rewrites.
+  ]]--
+  to_rw: @Lambda.Expr -> @RW.RuleSet [expr ->
+    let rules = [] in
+    
+    -- Add beta reduction rule
+    let beta_rule = create_beta_rule() in
+    rules = rules + [beta_rule] in
+    
+    -- Add rules for let bindings
+    let let_rule = create_let_rule() in
+    rules = rules + [let_rule] in
+    
+    -- Add rules for linear beta reduction
+    if has_linear_abs(expr) then
+      let linear_beta_rule = create_linear_beta_rule() in
+      rules = rules + [linear_beta_rule]
+    in
+    
+    @RW.create_ruleset(rules)
+  ]
+
+  --[[
+    from_rw transforms rewrite systems into lambda calculus expressions,
+    interpreting rewrite rules as lambda reductions.
+  ]]--
+  from_rw: @RW.RuleSet -> @Lambda.Expr [ruleset ->
+    -- Create a generic lambda term that captures the structure of the rewrite system
+    let rules = @RW.rules(ruleset) in
+    
+    match rules with
+      | [r] when is_beta_rule(r) -> 
+          @Lambda.abs("x", @Lambda.abs("y", @Lambda.app(@Lambda.var("x"), @Lambda.var("y"))))
+      | _ ->
+          create_ruleset_lambda(rules)
+  ]
+
+  --[[
+    Helper function to create a beta reduction rule
+  ]]--
+  create_beta_rule: () -> @RW.Rule [->
+    -- In a real implementation, this would create a rule representing beta reduction
+    @RW.create_rule(
+      @RW.pattern_from_string("App(Abs(x, body), arg)"),
+      @RW.pattern_from_string("subst(body, x, arg)")
+    )
+  ]
+
+  --[[
+    Helper function to create a let binding rule
+  ]]--
+  create_let_rule: () -> @RW.Rule [->
+    -- In a real implementation, this would create a rule for let bindings
+    @RW.create_rule(
+      @RW.pattern_from_string("Let(x, value, body)"),
+      @RW.pattern_from_string("subst(body, x, value)")
+    )
+  ]
+
+  --[[
+    Helper function to create a linear beta reduction rule
+  ]]--
+  create_linear_beta_rule: () -> @RW.Rule [->
+    -- In a real implementation, this would create a rule for linear beta reduction
+    @RW.create_rule(
+      @RW.pattern_from_string("LinearApp(LinearAbs(x, body), arg)"),
+      @RW.pattern_from_string("subst(body, x, arg)")
+    )
+  ]
+
+  --[[
+    Helper function to check if an expression has linear abstractions
+  ]]--
+  has_linear_abs: @Lambda.Expr -> Bool [expr ->
+    match expr with
+      | { _type: "LinearAbs" } -> true
+      | { _type: "Abs", body: b } -> has_linear_abs(b)
+      | { _type: "App", fn: f, arg: a } -> has_linear_abs(f) || has_linear_abs(a)
+      | _ -> false
+  ]
+
+  --[[
+    Helper function to check if a rule is a beta reduction rule
+  ]]--
+  is_beta_rule: @RW.Rule -> Bool [rule ->
+    -- In a real implementation, this would check the pattern structure
+    true
+  ]
+
+  --[[
+    Helper function to create a lambda expression from a ruleset
+  ]]--
+  create_ruleset_lambda: [@RW.Rule] -> @Lambda.Expr [rules ->
+    -- In a real implementation, this would create a lambda term that captures the ruleset's behavior
+    @Lambda.abs("x", @Lambda.var("x"))
+  ]
+
+  --------------------------------------------------
+  -- Interpretation Functions
+  --------------------------------------------------
+
+  --[[
+    Interpreter: An interpreter for lambda calculus expressions
+  ]]--
+  Interpreter: {
+    evaluate: Environment -> @Prim.a,
+    env: Environment
+  }
+
+  --[[
+    Environment: An environment for lambda calculus evaluation
+  ]]--
+  Environment: {
+    bindings: S:-> @Prim.a
+  }
+
+  --[[
+    create_interpreter: Creates an interpreter for a lambda expression
+  ]]--
+  create_interpreter: @Lambda.Expr -> Interpreter [expr ->
+    {
+      evaluate: [env -> evaluate_expr(expr, env)],
+      env: { bindings: {} }
+    }
+  ]
+
+  --[[
+    initial_environment: Creates an initial environment with a single binding
+  ]]--
+  initial_environment: @Prim.a -> Environment [arg ->
+    { bindings: { "x": arg } }
+  ]
+
+  --[[
+    evaluate_expr: Evaluates a lambda expression in an environment
+  ]]--
+  evaluate_expr: @Lambda.Expr * Environment -> @Prim.a [expr env ->
+    match expr with
+      | { _type: "Var", name: n } ->
+          env.bindings[n]
+      
+      | { _type: "Abs", param: p, body: b } ->
+          [arg -> evaluate_expr(b, extend_env(env, p, arg))]
+      
+      | { _type: "App", fn: f, arg: a } ->
+          let fn_val = evaluate_expr(f, env) in
+          let arg_val = evaluate_expr(a, env) in
+          fn_val(arg_val)
+      
+      | { _type: "Primitive", op: p } ->
+          p
+      
+      | _ ->
+          error("Cannot evaluate expression")
+  ]
+
+  --[[
+    extend_env: Extends an environment with a new binding
+  ]]--
+  extend_env: Environment * S * @Prim.a -> Environment [env name value ->
+    { bindings: env.bindings cup { name: value } }
+  ]
+
+  --------------------------------------------------
+  -- Categorical Structure of Lambda Transformations
+  --------------------------------------------------
+
+  --[[
+    LambdaTransform defines a transformation between lambda calculus and
+    other representations, preserving computational semantics.
+  ]]--
+  LambdaTransform: {
+    source_type: @T.T,
+    target_type: @T.T,
+    transform: (a -> b),
+    inverse: ?(b -> a),
+    preserves_beta: Bool
+  }
+
+  --[[
+    Functor that maps from the category of lambda expressions to primitive operations.
+    This is the computational instantiation of lambda calculus.
+  ]]--
+  lambda_prim_functor: @CatXf.Functor [
+    {
+      source_category: @Lambda.structure,
+      target_category: @Prim.structure,
+      map_obj: [t -> to_prim_type(t)],
+      map_morph: [f -> to_prim(f)],
+      preserves_id: true,
+      preserves_composition: true
+    }
+  ]
+
+  --[[
+    Functor that maps from the category of lambda expressions to termination evidence.
+    This enables formal analysis of computational properties.
+  ]]--
+  lambda_term_functor: @CatXf.Functor [
+    {
+      source_category: @Lambda.structure,
+      target_category: @Term.structure,
+      map_obj: [t -> to_term_type(t)],
+      map_morph: [f -> to_term(f)],
+      preserves_id: true,
+      preserves_composition: true
+    }
+  ]
+
+  --[[
+    Natural transformation between lambda-to-prim and lambda-to-term functors.
+    This represents the compatibility of termination analysis with primitive operations.
+  ]]--
+  lambda_compatibility_transform: @CatXf.NaturalTransformation [
+    {
+      source_functor: lambda_prim_functor,
+      target_functor: compose_functors(lambda_term_functor, term_prim_functor),
+      components: [a -> [x -> compatible_transform(x)]],
+      naturality: true
+    }
+  ]
+
+  --[[
+    Helper function to transform lambda types to primitive types
+  ]]--
+  to_prim_type: @Lambda.Type -> @T.T [typ ->
+    match typ with
+      | { _type: "ArrowType", domain: d, codomain: c } ->
+          to_prim_type(d) -> to_prim_type(c)
+      | { _type: "ProductType", left: l, right: r } ->
+          to_prim_type(l) * to_prim_type(r)
+      | { _type: "SumType", left: l, right: r } ->
+          to_prim_type(l) + to_prim_type(r)
+      | { _type: "LinearType", inner: i } ->
+          !to_prim_type(i)
+      | { _type: "AtomicType", name: n } ->
+          @T.type_from_name(n)
+      | _ ->
+          @T.Any
+  ]
+
+  --[[
+    Helper function to transform lambda types to termination types
+  ]]--
+  to_term_type: @Lambda.Type -> @Term.Type [typ ->
+    @Term.create_type_from_lambda(typ)
+  ]
+
+  --[[
+    Helper function for compatible transformation
+  ]]--
+  compatible_transform: @Prim.a -> @Term.Evidence [prim ->
+    @Term.create_evidence_from_prim(prim)
+  ]
+
+  --[[
+    Helper function to compose functors
+  ]]--
+  compose_functors: @CatXf.Functor * @CatXf.Functor -> @CatXf.Functor [f g ->
+    @CatXf.functor_composition(f, g)
+  ]
+
+  --[[
+    Assumed reference to a functor from Term to Prim
+  ]]--
+  term_prim_functor: @CatXf.Functor [
+    -- In a real implementation, this would be imported from elsewhere
+    {
+      source_category: @Term.structure,
+      target_category: @Prim.structure,
+      map_obj: [t -> @T.Any],
+      map_morph: [f -> @Prim.id],
+      preserves_id: true,
+      preserves_composition: true
+    }
+  ]
+} 

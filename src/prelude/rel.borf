@@ -80,11 +80,11 @@
   deps: {
     (@R, @T, true)
   }
-  
+
   --------------------------------------------------
   -- Structure Mapping to Category
   --------------------------------------------------
-  
+
   structure: {
     -- Map Relation to Category
     objects: {a}, -- Sets as objects
@@ -93,19 +93,19 @@
     cod: [r -> r.codomain],
     id: [a -> [x y -> x == y]], -- Identity relation
     compose: [r s -> [x z -> exists(y, r(x, y) && s(y, z))]], -- Relation composition
-    
+
     -- For equivalence relations, additional structure
     reflexive: [r -> forall(x, r(x, x))],
     symmetric: [r -> forall(x y, r(x, y) -> r(y, x))],
     transitive: [r -> forall(x y z, r(x, y) && r(y, z) -> r(x, z))],
-    
+
     -- For preorders and partial orders
     antisymmetric: [r -> forall(x y, r(x, y) && r(y, x) -> x == y)],
-    
+
     -- For posets, additional structure mapping
     meets: [r -> [x y -> meet(r, x, y)]], -- Greatest lower bound
     joins: [r -> [x y -> join(r, x, y)]], -- Least upper bound
-    
+
     -- For relation operations
     union: [r s -> [x y -> r(x, y) || s(x, y)]],
     intersection: [r s -> [x y -> r(x, y) && s(x, y)]],

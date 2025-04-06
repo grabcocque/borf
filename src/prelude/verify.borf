@@ -21,7 +21,7 @@
     verify_functorial verify_natural verify_adjunction
     verify_type_preservation verify_resource_usage
     verify_consistent verify_composition_preservation
-    
+
     -- Higher-level verification
     verify_transformation verify_pipeline
   }
@@ -39,7 +39,8 @@
     (@Verify, @Cata.GraphXf, true), -- Add dependency on graph transformations
     (@Verify, @Cata.WireXf, true),  -- Add dependency on wire transformations
     (@Verify, @Cata.INetXf, true),   -- Add dependency on net transformations
-    (@Verify, @Cata.SeqXf, true)    -- Add dependency on sequence transformations
+    (@Verify, @Cata.SeqXf, true),    -- Add dependency on sequence transformations
+    (@Verify, @Cata.VerifyXf, true)  -- Add dependency on verification transformations
   }
 
   --------------------------------------------------
@@ -53,14 +54,14 @@
                     (A -> B) -> VerificationResult [F ->
     let objects = A.objects in
     let morphisms = A.morphisms in
-    
+
     -- Verify identity preservation
     let identity_preserved = objects |> forall [o ->
       let F_id_o = F(A.id(o)) in
       let id_F_o = B.id(F(o)) in
       F_id_o == id_F_o
     ] in
-    
+
     -- Verify composition preservation
     let composition_preserved = morphisms |> forall [f g ->
       if A.composable(f, g) {
@@ -71,7 +72,7 @@
         true  -- Skip non-composable morphisms
       }
     ] in
-    
+
     if identity_preserved and composition_preserved {
       {success: true, errors: []}
     } else {
@@ -97,18 +98,18 @@
                  (forall(X: A.O) -> B.M(F(X), G(X))) -> VerificationResult [alpha ->
     let objects = A.objects in
     let morphisms = A.morphisms in
-    
+
     -- Verify naturality square for each morphism
     let naturality_squares_commute = morphisms |> forall [f ->
       let domain = A.dom(f) in
       let codomain = A.cod(f) in
-      
+
       let top_path = B.compose(F(f), alpha(codomain)) in
       let bottom_path = B.compose(alpha(domain), G(f)) in
-      
+
       top_path == bottom_path
     ] in
-    
+
     if naturality_squares_commute {
       {success: true, errors: []}
     } else {
@@ -125,20 +126,20 @@
                     VerificationResult [unit counit ->
     let A_objects = A.objects in
     let B_objects = B.objects in
-    
+
     -- Verify triangle identities
     let left_triangle = B_objects |> forall [Y ->
       let identity_path = B.id(G(Y)) in
       let composite_path = B.compose(G(unit(F(Y))), counit(Y)) in
       identity_path == composite_path
     ] in
-    
+
     let right_triangle = A_objects |> forall [X ->
       let identity_path = A.id(F(X)) in
       let composite_path = A.compose(unit(X), F(counit(G(X)))) in
       identity_path == composite_path
     ] in
-    
+
     if left_triangle and right_triangle {
       {success: true, errors: []}
     } else {
@@ -164,14 +165,14 @@
                            (A -> B) -> (A -> T.Type) -> (B -> T.Type) ->
                            (forall(a: A) -> B -> Bool) -> VerificationResult [f source_type target_type predicate ->
     let sample_inputs = Prim.generate_samples(A, 10) in
-    
+
     let type_preserved = sample_inputs |> forall [a ->
       let output_type = target_type(f(a)) in
       let expected_type = source_type(a) |> Prim.map_type in
-      
+
       output_type == expected_type and predicate(a, f(a))
     ] in
-    
+
     if type_preserved {
       {success: true, errors: []}
     } else {
@@ -185,12 +186,12 @@
   verify_resource_usage: forall(A: T.Type_0 B: T.Type_0) ->
                         (!A -o> B) -> VerificationResult [f ->
     let sample_inputs = Prim.generate_linear_samples(A, 10) in
-    
+
     let resources_consumed = sample_inputs |> forall [a ->
       -- In a real implementation, would check consumption more precisely
       Prim.is_consumed(a) after f(a)
     ] in
-    
+
     if resources_consumed {
       {success: true, errors: []}
     } else {
@@ -204,15 +205,15 @@
   verify_consistent: forall(A: T.Type_0 B: T.Type_0) ->
                     (A -> B) -> (B -> A) -> VerificationResult [f g ->
     let sample_inputs = Prim.generate_samples(A, 10) in
-    
+
     let round_trip_consistent = sample_inputs |> forall [a ->
       let b = f(a) in
       let a_prime = g(b) in
-      
+
       -- Check consistency based on structure, not exact equality
       Prim.structurally_equivalent(a, a_prime)
     ] in
-    
+
     if round_trip_consistent {
       {success: true, errors: []}
     } else {
@@ -227,14 +228,14 @@
                                  (A -> B) -> (A * A -> A) -> (B * B -> B) ->
                                  VerificationResult [f compose_a compose_b ->
     let sample_pairs = Prim.generate_sample_pairs(A, 10) in
-    
+
     let composition_preserved = sample_pairs |> forall [[a1, a2] ->
       let direct_path = f(compose_a(a1, a2)) in
       let composed_path = compose_b(f(a1), f(a2)) in
-      
+
       direct_path == composed_path
     ] in
-    
+
     if composition_preserved {
       {success: true, errors: []}
     } else {
@@ -249,7 +250,7 @@
   --[[
     Example verification of the graph-to-category functor
   ]]--
-  example.verify_graph_to_category: VerificationResult [-> 
+  example.verify_graph_to_category: VerificationResult [->
     verify_functorial(@Cata.GraphXf.graph_to_category)
   ]
 
@@ -272,14 +273,14 @@
   ]]--
   example.verify_transformation_pipeline: VerificationResult [->
     let g = Prim.sample_graph() in  -- Generate a sample graph
-    
+
     -- Direct path
     let direct_result = @Cata.GraphXf.graph_to_wire(g) in
-    
+
     -- Alternative path
     let wire = @Cata.WireXf.graph_to_wire(g) in
     let alt_result = wire in
-    
+
     -- Check equality
     {
       success: direct_result == alt_result,
@@ -294,7 +295,7 @@
     let graph_to_wire = @Cata.GraphXf.graph_to_wire in
     let wire_to_net = @Cata.WireXf.wire_to_net in
     let graph_to_net = @Cata.GraphXf.graph_to_net in
-    
+
     verify_composition_preservation(
       graph_to_net,
       [g1 g2 -> Grph.merge(g1, g2)],
@@ -308,4 +309,58 @@
   example.verify_transformation_inverse: VerificationResult [->
     verify_consistent(@Cata.GraphXf.graph_to_category, @Cata.GraphXf.category_to_graph)
   ]
-} 
+
+  --------------------------------------------------
+  -- Categorical Structure of Verification
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @Verify as a category.
+    
+    In this categorical structure:
+    - Objects are verification functions with different implementations
+    - Morphisms are transformations between verification functions (refinements, optimizations)
+    - Identity is the trivial transformation
+    - Composition is sequential application of transformations
+  ]]--
+  structure: {
+    -- Map Verify to a category
+    objects: [v | v is (a -> VerificationResult) for some a],
+    morphisms: [f g -> (f -> g)],
+    
+    -- Base category structure
+    dom: [t -> t.source],
+    cod: [t -> t.target],
+    id: [v -> [v' -> v']],  -- Identity transformation
+    compose: [t1 t2 -> [v -> t2(t1(v))]],  -- Composition of transformations
+    
+    -- Functor to transformation category
+    to_transform: [v -> @Cata.VerifyXf.verification_identity(v)],
+    from_transform: [t -> t.target],
+    
+    -- Properties of transformations
+    preserves_correctness: [t v -> 
+      let original_result = v(input) in
+      let transformed_result = t(v)(input) in
+      original_result.success implies transformed_result.success
+    ],
+    
+    -- Laws for the category
+    laws: {
+      -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
+      associativity: forall [t1 t2 t3 ->
+        compose(compose(t1, t2), t3) == compose(t1, compose(t2, t3))
+      ],
+      
+      -- Identity: id ∘ f = f = f ∘ id
+      identity: forall [t ->
+        compose(id(dom(t)), t) == t && compose(t, id(cod(t))) == t
+      ],
+      
+      -- Correctness preservation
+      correctness: forall [t v ->
+        preserves_correctness(t, v)
+      ]
+    }
+  }
+}

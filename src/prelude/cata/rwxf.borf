@@ -10,13 +10,13 @@
   typ: {
     -- Transformation types
     RewriteTransformation RuleTransformation PatternTransformation
-    
+
     -- Specific transformations
     RewriteToCategory RewriteToGraph RuleToMorphism
-    
+
     -- Structure transformations
     RewriteCategory TransitionSystem
-    
+
     -- Analysis objects
     ConfluenceAnalysis TerminationProof CriticalPairAnalysis
   }
@@ -24,7 +24,7 @@
   op: {
     -- Transformation operators
     ==> <== <=> ~~
-    
+
     -- Rewrite operations
     o >>> <<< ||| &&&
   }
@@ -34,28 +34,28 @@
     to_theory from_theory
     to_transition from_transition
     to_graph from_graph
-    
+
     -- Rule transformations
     rule_to_morphism morphism_to_rule
     ruleset_to_functor functor_to_ruleset
     critical_to_2cell critical_from_2cell
-    
+
     -- Pattern transformations
     pattern_to_graph graph_to_pattern
     pattern_to_object object_to_pattern
-    
+
     -- Property transformations
     confluence_to_natural_isomorphism natural_isomorphism_to_confluence
     termination_to_well_founded well_founded_to_termination
-    
+
     -- Analysis transformations
     analyze_confluence analyze_termination analyze_critical_pairs
-    
+
     -- Advanced transformations
     to_adhesive from_adhesive
     to_double_pushout from_double_pushout
     to_hoare to_modal
-    
+
     -- Composition transformations
     sequentially_compose parallelly_compose
     pullback_compose pushout_compose
@@ -86,21 +86,21 @@
   ]]--
   to_theory: @RW -> @Cata.Theory.RewriteCategory [rw_system ->
     let rewrite_cat = @Cata.Theory.new_rewrite_category() in
-    
+
     -- Add basic category structure
     @Cata.Theory.add_morphisms(rewrite_cat, {
       objects: @INet.!Net,
       id: [n -> [net -> net]],
       compose: [f g -> [net -> g(f(net))]]
     }) |>
-    
+
     -- Add rewrite-specific structures
     [cat -> @Cata.Theory.add_rewrite_structure(cat, {
       rules: @RW.R,
       apply: @RW.apply,
       transform: @RW.transform
     })] |>
-    
+
     -- Add critical pair analysis
     [cat -> @Cata.Theory.add_critical_pair_structure(cat, {
       find_critical: @RW.find_critical_pairs,
@@ -115,11 +115,11 @@
   from_theory: @Cata.Theory.RewriteCategory -> @RW [theory_cat ->
     -- Extract the rewrite structure
     let rewrite_structure = @Cata.Theory.get_rewrite_structure(theory_cat) in
-    
+
     -- Create a ruleset from the morphisms
     let morphisms = @Cata.Theory.get_morphisms(theory_cat) in
     let rules = morphisms |> @Prim.map morphism_to_rule in
-    
+
     -- Create a rewrite system from the rules
     @RW.create_ruleset(rules)
   ]
@@ -127,17 +127,17 @@
   --------------------------------------------------
   -- Rewrite System to Transition System Transformations
   --------------------------------------------------
-  
+
   --[[
     to_transition transforms a rewrite system into a transition system
     where states are net configurations and transitions are rule applications.
   ]]--
   to_transition: @RW -> TransitionSystem [rw ->
     let transition_system = new_transition_system() in
-    
+
     -- Each net configuration is a state
     let states = collect_potential_configurations(rw) in
-    
+
     -- Each rule application is a transition
     let transitions = rw.R |> @Prim.fold [acc rule ->
       states |> @Prim.fold [inner_acc state ->
@@ -148,12 +148,12 @@
           inner_acc
       ] acc
     ] {} in
-    
+
     -- Build the transition system
     add_states(transition_system, states) |>
     [ts -> add_transitions(ts, transitions)]
   ]
-  
+
   --[[
     from_transition transforms a transition system back into a rewrite system
     by extracting rules from transitions.
@@ -161,18 +161,18 @@
   from_transition: TransitionSystem -> @RW [ts ->
     -- Extract transitions
     let transitions = get_transitions(ts) in
-    
+
     -- Convert transitions to rules
     let rules = transitions |> @Prim.map [t ->
       -- Create pattern from source state
       let pattern = @RW.create_pattern(t.source) in
-      
+
       -- Create replacement from target state
       let replacement = extract_replacement(t.source, t.target) in
-      
+
       @RW.create_rule(pattern, replacement)
     ] in
-    
+
     -- Create a rewrite system
     @RW.create_ruleset(rules)
   ]
@@ -180,14 +180,14 @@
   --------------------------------------------------
   -- Rewrite System to Graph Transformations
   --------------------------------------------------
-  
+
   --[[
     to_graph transforms a rewrite system into a graph structure,
     where nodes are rules and edges represent dependencies.
   ]]--
   to_graph: @RW -> @Graph.!Graph [rw ->
     let g = @Graph.empty() in
-    
+
     -- Add each rule as a node
     let rules = rw.R in
     let g_with_rules = rules |> @Prim.fold [graph rule idx ->
@@ -196,7 +196,7 @@
         critical: find_critical_for_rule(rule, rules)
       })
     ] g in
-    
+
     -- Add dependencies between rules as edges
     rules |> @Prim.fold [graph rule_a idx_a ->
       rules |> @Prim.fold [inner_graph rule_b idx_b ->
@@ -208,7 +208,7 @@
           inner_graph
       ] graph
     ] g_with_rules |>
-    
+
     -- Add critical pair connections
     [graph -> rw.R |> @Prim.fold [g rule_a idx_a ->
       rw.R |> @Prim.fold [inner_g rule_b idx_b ->
@@ -221,7 +221,7 @@
       ] g
     ] graph]
   ]
-  
+
   --[[
     from_graph transforms a graph into a rewrite system,
     extracting rules from nodes and their relationships.
@@ -231,12 +231,12 @@
     let rule_nodes = @Graph.get_nodes(graph) |> @Prim.filter [node ->
       node.data?.rule
     ] in
-    
+
     -- Extract rules from nodes
     let rules = rule_nodes |> @Prim.map [node ->
       node.data.rule
     ] in
-    
+
     -- Create a rewrite system
     @RW.create_ruleset(rules)
   ]
@@ -244,7 +244,7 @@
   --------------------------------------------------
   -- Rule to Morphism Transformations
   --------------------------------------------------
-  
+
   --[[
     rule_to_morphism transforms a rewrite rule to a categorical morphism
     between net configurations.
@@ -256,27 +256,27 @@
       [net -> @RW.apply(rule, net)]
     )
   ]
-  
+
   --[[
     morphism_to_rule transforms a categorical morphism to a rewrite rule
   ]]--
   morphism_to_rule: @Cata.Theory.Morphism -> (@RW.alpha * @RW.rho) [morphism ->
     let source_obj = @Cata.Theory.dom(morphism) in
     let target_obj = @Cata.Theory.cod(morphism) in
-    
+
     let source_pattern = source_obj.data?.pattern or create_default_pattern() in
     let target_pattern = target_obj.data?.pattern or create_default_pattern() in
-    
+
     (source_pattern, target_pattern)
   ]
-  
+
   --[[
     ruleset_to_functor transforms a ruleset to a functor between categories
   ]]--
   ruleset_to_functor: @RW.RuleSet -> @Cata.Theory.Functor [ruleset ->
     @Cata.Theory.new_functor({
       map_obj: [obj -> obj],  -- Identity on objects (net configurations)
-      map_morph: [morph -> 
+      map_morph: [morph ->
         if is_rewrite_morphism(morph) then
           apply_ruleset_to_morphism(ruleset, morph)
         else
@@ -286,56 +286,56 @@
       preserves_composition: true
     })
   ]
-  
+
   --[[
     functor_to_ruleset extracts a ruleset from a functor between categories
   ]]--
   functor_to_ruleset: @Cata.Theory.Functor -> @RW.RuleSet [functor ->
     -- Get all morphisms mapped by this functor
     let morphisms = collect_mapped_morphisms(functor) in
-    
+
     -- Convert morphisms to rules
     let rules = morphisms |> @Prim.map morphism_to_rule in
-    
+
     @RW.create_ruleset(rules)
   ]
-  
+
   --[[
     critical_to_2cell transforms a critical pair to a 2-cell in a 2-category
   ]]--
   critical_to_2cell: (@RW.alpha * @RW.alpha) -> @Cata.Theory.TwoCell [critical_pair ->
     let (pattern1, pattern2) = critical_pair in
-    
+
     -- Find overlapping pattern
     let overlap = find_critical_overlap(pattern1, pattern2) in
-    
+
     -- Create source and target 1-cells (rules)
     let source = rule_to_morphism((pattern1, apply(pattern1, overlap))) in
     let target = rule_to_morphism((pattern2, apply(pattern2, overlap))) in
-    
+
     @Cata.Theory.new_2cell(source, target, {
       natural: true,
       critical_pair: critical_pair
     })
   ]
-  
+
   --[[
     critical_from_2cell reconstructs a critical pair from a 2-cell
   ]]--
   critical_from_2cell: @Cata.Theory.TwoCell -> (@RW.alpha * @RW.alpha) [two_cell ->
     let source = @Cata.Theory.source(two_cell) in
     let target = @Cata.Theory.target(two_cell) in
-    
+
     let source_rule = morphism_to_rule(source) in
     let target_rule = morphism_to_rule(target) in
-    
+
     (source_rule.0, target_rule.0)
   ]
 
   --------------------------------------------------
   -- Pattern Transformations
   --------------------------------------------------
-  
+
   --[[
     pattern_to_graph transforms a pattern to a graph structure
   ]]--
@@ -343,7 +343,7 @@
     -- Convert pattern to an explicit graph structure
     @RW.pattern_graph(pattern)
   ]
-  
+
   --[[
     graph_to_pattern transforms a graph to a pattern
   ]]--
@@ -351,7 +351,7 @@
     -- Create a pattern from a graph structure
     create_pattern_from_graph(graph)
   ]
-  
+
   --[[
     pattern_to_object transforms a pattern to a categorical object
   ]]--
@@ -361,7 +361,7 @@
       structure: @RW.pattern_graph(pattern)
     })
   ]
-  
+
   --[[
     object_to_pattern transforms a categorical object to a pattern
   ]]--
@@ -372,18 +372,18 @@
   --------------------------------------------------
   -- Property Transformations
   --------------------------------------------------
-  
+
   --[[
     confluence_to_natural_isomorphism transforms confluence properties
     to natural isomorphisms between functors
   ]]--
   confluence_to_natural_isomorphism: ((@RW.alpha * @RW.rho) * (@RW.alpha * @RW.rho)) -> @Cata.Theory.NaturalIsomorphism [critical ->
     let (rule1, rule2) = critical in
-    
+
     -- Create functors from the rules
     let functor1 = rule_to_functor(rule1) in
     let functor2 = rule_to_functor(rule2) in
-    
+
     -- Check for confluence
     if @RW.commute(rule1, rule2) then
       -- Create a natural isomorphism witnessing confluence
@@ -394,7 +394,7 @@
     else
       null
   ]
-  
+
   --[[
     natural_isomorphism_to_confluence extracts confluence properties
     from a natural isomorphism
@@ -403,36 +403,36 @@
     -- Extract the functors
     let functor1 = @Cata.Theory.domain(nat_iso) in
     let functor2 = @Cata.Theory.codomain(nat_iso) in
-    
+
     -- Convert functors to rules
     let rule1 = functor_to_rule(functor1) in
     let rule2 = functor_to_rule(functor2) in
-    
+
     -- Check if the rules commute
     @RW.commute(rule1, rule2)
   ]
-  
+
   --[[
     termination_to_well_founded transforms termination properties to
     well-founded relations in order theory
   ]]--
   termination_to_well_founded: @RW.RuleSet -> @Cata.Theory.WellFoundedRelation [ruleset ->
     -- Define a relation on net configurations
-    let relation = [n1 n2 -> 
+    let relation = [n1 n2 ->
       ruleset.rules |> @Prim.exists [rule ->
         @RW.match(rule.0, n1) && @RW.apply(rule, n1) veq n2
       ]
     ] in
-    
+
     -- Check if the relation is well-founded (no infinite descending chains)
     let is_well_founded = check_well_founded(relation) in
-    
+
     @Cata.Theory.new_well_founded_relation(relation, {
       well_founded: is_well_founded,
       evidence: generate_termination_evidence(ruleset)
     })
   ]
-  
+
   --[[
     well_founded_to_termination extracts termination properties from
     a well-founded relation
@@ -444,42 +444,42 @@
   --------------------------------------------------
   -- Analysis Transformations
   --------------------------------------------------
-  
+
   --[[
     analyze_confluence performs a confluence analysis on a rewrite system
   ]]--
   analyze_confluence: @RW.RuleSet -> ConfluenceAnalysis [ruleset ->
     -- Find all critical pairs
     let critical_pairs = @RW.find_critical_pairs(ruleset) in
-    
+
     -- Check if all critical pairs are confluent
     let all_confluent = critical_pairs |> @Prim.forall @RW.commute in
-    
+
     {
       is_confluent: all_confluent,
       critical_pairs: critical_pairs,
-      non_confluent_pairs: critical_pairs |> @Prim.filter [pair -> 
+      non_confluent_pairs: critical_pairs |> @Prim.filter [pair ->
         not @RW.commute(pair.0, pair.1)
       ],
       local_confluence: critical_pairs |> @Prim.forall local_confluence_check,
       strong_confluence: critical_pairs |> @Prim.forall strong_confluence_check
     }
   ]
-  
+
   --[[
     analyze_termination performs a termination analysis on a rewrite system
   ]]--
   analyze_termination: @RW.RuleSet -> TerminationProof [ruleset ->
     -- Define the rewrite relation
-    let rewrite_relation = [n1 n2 -> 
+    let rewrite_relation = [n1 n2 ->
       ruleset.rules |> @Prim.exists [rule ->
         @RW.match(rule.0, n1) && @RW.apply(rule, n1) veq n2
       ]
     ] in
-    
+
     -- Try to find a well-founded ordering
     let ordering = find_termination_ordering(ruleset) in
-    
+
     {
       is_terminating: ordering != null,
       ordering: ordering,
@@ -487,14 +487,14 @@
       counterexample: ordering == null |> [_ -> find_non_terminating_example(ruleset)]
     }
   ]
-  
+
   --[[
     analyze_critical_pairs analyzes the critical pairs in a rewrite system
   ]]--
   analyze_critical_pairs: @RW.RuleSet -> CriticalPairAnalysis [ruleset ->
     -- Find all critical pairs
     let critical_pairs = @RW.find_critical_pairs(ruleset) in
-    
+
     {
       pairs: critical_pairs,
       count: critical_pairs |> @Prim.rho,
@@ -507,35 +507,35 @@
   --------------------------------------------------
   -- Advanced Transformations
   --------------------------------------------------
-  
+
   --[[
     to_adhesive transforms a rewrite system to an adhesive category
     representation for double-pushout rewriting
   ]]--
   to_adhesive: @RW -> @Cata.Theory.AdhesiveCategory [rw ->
     let adhesive_cat = @Cata.Theory.new_adhesive_category() in
-    
+
     -- Add objects (graph-like structures)
-    @Cata.Theory.add_objects(adhesive_cat, 
+    @Cata.Theory.add_objects(adhesive_cat,
       rw.R |> @Prim.fold [acc rule ->
         acc cup {pattern_to_object(rule.0), pattern_to_object(rule.1)}
       ] {}
     ) |>
-    
+
     -- Add morphisms (structure-preserving maps)
     [cat -> @Cata.Theory.add_morphisms(cat,
       rw.R |> @Prim.fold [acc rule ->
         acc cup {rule_to_morphism(rule)}
       ] {}
     )] |>
-    
+
     -- Add pullback and pushout operations
     [cat -> @Cata.Theory.add_adhesive_operations(cat, {
       pullback: compute_pullback,
       pushout: compute_pushout
     })]
   ]
-  
+
   --[[
     from_adhesive transforms an adhesive category representation
     back to a concrete rewrite system
@@ -544,48 +544,48 @@
     -- Extract morphisms as rules
     let morphisms = @Cata.Theory.get_morphisms(adhesive_cat) in
     let rules = morphisms |> @Prim.map morphism_to_rule in
-    
+
     @RW.create_ruleset(rules)
   ]
-  
+
   --[[
     to_double_pushout transforms rewrite rules to double pushout diagrams
   ]]--
   to_double_pushout: (@RW.alpha * @RW.rho) -> @Cata.Theory.DoublePushoutDiagram [rule ->
     let (pattern, replacement) = rule in
-    
+
     -- Extract the interface (preserved part)
     let interface = extract_interface(pattern, replacement) in
-    
+
     -- Create left and right morphisms
     let left = @Cata.Theory.new_morphism(
       pattern_to_object(interface),
       pattern_to_object(pattern),
       interface_to_pattern_morphism
     ) in
-    
+
     let right = @Cata.Theory.new_morphism(
       pattern_to_object(interface),
       pattern_to_object(replacement),
       interface_to_replacement_morphism
     ) in
-    
+
     @Cata.Theory.new_dpo_diagram(left, right)
   ]
-  
+
   --[[
     from_double_pushout extracts a rewrite rule from a double pushout diagram
   ]]--
   from_double_pushout: @Cata.Theory.DoublePushoutDiagram -> (@RW.alpha * @RW.rho) [dpo ->
     let left = @Cata.Theory.left(dpo) in
     let right = @Cata.Theory.right(dpo) in
-    
+
     let pattern = object_to_pattern(@Cata.Theory.cod(left)) in
     let replacement = object_to_pattern(@Cata.Theory.cod(right)) in
-    
+
     (pattern, replacement)
   ]
-  
+
   --[[
     to_hoare transforms rewrite rules to Hoare triples for verification
   ]]--
@@ -593,17 +593,17 @@
     let precondition = [net -> @RW.match(rule.0, net)] in
     let transformation = [net -> @RW.apply(rule, net)] in
     let postcondition = [net -> @RW.consistent(net)] in
-    
+
     @Cata.Theory.new_hoare_triple(precondition, transformation, postcondition)
   ]
-  
+
   --[[
     to_modal transforms rewrite rules to modal logic formulas
   ]]--
   to_modal: (@RW.alpha * @RW.rho) -> @Cata.Theory.ModalFormula [rule ->
     let pattern_formula = pattern_to_formula(rule.0) in
     let replacement_formula = pattern_to_formula(rule.1) in
-    
+
     @Cata.Theory.new_modal_formula(
       @Cata.Theory.box(pattern_formula, @Cata.Theory.diamond(replacement_formula))
     )
@@ -612,37 +612,37 @@
   --------------------------------------------------
   -- Composition Transformations
   --------------------------------------------------
-  
+
   --[[
     sequentially_compose sequentially composes two rewrite systems
   ]]--
   sequentially_compose: @RW * @RW -> @RW [rw1 rw2 ->
     let rules1 = rw1.R in
     let rules2 = rw2.R in
-    
+
     -- Try to compose each rule in rw1 with each rule in rw2
     let composed_rules = rules1 |> @Prim.fold [acc rule1 ->
       rules2 |> @Prim.fold [inner_acc rule2 ->
         let composed = @RW.compose_rules(rule1, rule2) in
-        
+
         if composed then
           inner_acc cup {composed}
         else
           inner_acc
       ] acc
     ] {} in
-    
+
     -- Create a new ruleset with the composed rules
     @RW.create_ruleset(rules1 cup rules2 cup composed_rules)
   ]
-  
+
   --[[
     parallelly_compose creates a parallel composition of two rewrite systems
   ]]--
   parallelly_compose: @RW * @RW -> @RW [rw1 rw2 ->
     let rules1 = rw1.R in
     let rules2 = rw2.R in
-    
+
     -- Create parallel compositions of rules
     let parallel_rules = rules1 |> @Prim.fold [acc rule1 ->
       rules2 |> @Prim.fold [inner_acc rule2 ->
@@ -650,31 +650,31 @@
         inner_acc cup {parallel}
       ] acc
     ] {} in
-    
+
     -- Create a new ruleset with all rules
     @RW.create_ruleset(rules1 cup rules2 cup parallel_rules)
   ]
-  
+
   --[[
     pullback_compose composes rewrite systems via pullback
   ]]--
   pullback_compose: @RW * @RW -> @RW [rw1 rw2 ->
     -- Compute a pullback of the two rewrite systems
     let common_interface = find_common_interface(rw1, rw2) in
-    
+
     -- Filter rules that respect the interface
     let compatible_rules1 = rw1.R |> @Prim.filter [rule ->
       respects_interface(rule, common_interface)
     ] in
-    
+
     let compatible_rules2 = rw2.R |> @Prim.filter [rule ->
       respects_interface(rule, common_interface)
     ] in
-    
+
     -- Create a new ruleset with compatible rules
     @RW.create_ruleset(compatible_rules1 cup compatible_rules2)
   ]
-  
+
   --[[
     pushout_compose composes rewrite systems via pushout
   ]]--
@@ -682,10 +682,10 @@
     -- Get inclusion morphisms from common to rw1 and rw2
     let inclusion1 = find_inclusion(common, rw1) in
     let inclusion2 = find_inclusion(common, rw2) in
-    
+
     -- Compute pushout to create a merged system
     let merged_rules = compute_pushout_rules(rw1.R, rw2.R, common.R, inclusion1, inclusion2) in
-    
+
     -- Create a new ruleset with merged rules
     @RW.create_ruleset(merged_rules)
   ]
@@ -693,74 +693,74 @@
   --------------------------------------------------
   -- Helper Functions
   --------------------------------------------------
-  
+
   -- Helper function to create a new transition system
   new_transition_system: () -> TransitionSystem [->
     { states: {}, transitions: {} }
   ]
-  
+
   -- Helper function to add states to a transition system
   add_states: TransitionSystem * {Any} -> TransitionSystem [ts states ->
     { ts with states: ts.states cup states }
   ]
-  
+
   -- Helper function to add transitions to a transition system
   add_transitions: TransitionSystem * {(Any * Any * Any)} -> TransitionSystem [ts transitions ->
     { ts with transitions: ts.transitions cup transitions }
   ]
-  
+
   -- Helper function to get transitions from a transition system
   get_transitions: TransitionSystem -> {(Any * Any * Any)} [ts ->
     ts.transitions
   ]
-  
+
   -- Helper function to collect potential configurations from a rewrite system
   collect_potential_configurations: @RW -> {@INet.!Net} [rw ->
     -- In practice, this would need to be bounded or dynamically generated
     { @INet.empty_net() }  -- Simplified implementation: start with empty net
   ]
-  
+
   -- Helper function to extract a replacement pattern from net transformations
   extract_replacement: @INet.!Net * @INet.!Net -> @RW.rho [source target ->
     -- Create a replacement from the difference between source and target
     @RW.create_pattern(target)  -- Simplified implementation
   ]
-  
+
   -- Helper function to find critical overlaps between patterns
   find_critical_overlap: @RW.alpha * @RW.alpha -> @RW.alpha [pattern1 pattern2 ->
     -- Create a simplified pattern representing the overlap
     @RW.create_pattern(@INet.empty_net())  -- Simplified implementation
   ]
-  
+
   -- Helper function to check if one rule depends on another
   depends_on: (@RW.alpha * @RW.rho) * (@RW.alpha * @RW.rho) -> Bool [rule_a rule_b ->
     -- Check if the replacement of rule_b can match the pattern of rule_a
     false  -- Simplified implementation
   ]
-  
+
   -- Helper to find all rules that form critical pairs with a given rule
   find_critical_for_rule: (@RW.alpha * @RW.rho) * {(@RW.alpha * @RW.rho)} -> {(@RW.alpha * @RW.rho)} [rule rules ->
     rules |> @Prim.filter [r ->
       @RW.is_critical(rule.0, r.0)
     ]
   ]
-  
+
   -- Helper to create a default pattern
   create_default_pattern: () -> @RW.Pattern [->
     @RW.create_pattern(@INet.empty_net())
   ]
-  
+
   -- Helper to create a pattern from a graph
   create_pattern_from_graph: @Graph.!Graph -> @RW.Pattern [graph ->
     -- Convert graph to an interaction net, then to a pattern
     let net = graph_to_net(graph) in
     @RW.create_pattern(net)
   ]
-  
+
   -- Helper to convert a graph to an interaction net
   graph_to_net: @Graph.!Graph -> @INet.!Net [graph ->
     let net = @INet.empty_net() in
-    
+
     -- Add agents for nodes
     let net_with_agents = @Graph.get_nodes(graph) |> @Prim.fold [n node ->
       let agent = @INet.new_agent({
@@ -770,38 +770,38 @@
       }) in
       @INet.add_agent(n, agent)
     ] net in
-    
+
     -- Add connections for edges
     @Graph.get_edges(graph) |> @Prim.fold [n edge ->
       let source_agent = @INet.find_agent(n, edge.source) in
       let target_agent = @INet.find_agent(n, edge.target) in
-      
+
       let source_port = @INet.get_port(source_agent, "out") in
       let target_port = @INet.get_port(target_agent, "in") in
-      
+
       @INet.connect(n, source_port, target_port)
     ] net_with_agents
   ]
-  
+
   -- Helper to get ports for a node
   get_ports_for_node: @Graph.Node * @Graph.!Graph -> [{name: S, principal: Bool}] [node graph ->
     -- Count incoming and outgoing edges
     let incoming = @Graph.get_edges_to(graph, node.label) in
     let outgoing = @Graph.get_edges_from(graph, node.label) in
-    
+
     let ports = [{name: "main", principal: true}] in
-    
+
     -- Add ports for each edge
-    ports cup 
+    ports cup
       (incoming |> @Prim.map [_ -> {name: "in", principal: false}]) cup
       (outgoing |> @Prim.map [_ -> {name: "out", principal: false}])
   ]
-  
+
   -- Helper to convert a rule to a functor
   rule_to_functor: (@RW.alpha * @RW.rho) -> @Cata.Theory.Functor [rule ->
     @Cata.Theory.new_functor({
       map_obj: [obj -> obj],  -- Identity on objects
-      map_morph: [morph -> 
+      map_morph: [morph ->
         -- Only modify the rewrite morphism corresponding to this rule
         morph
       ],
@@ -809,14 +809,14 @@
       preserves_composition: true
     })
   ]
-  
+
   -- Helper to extract a rule from a functor
   functor_to_rule: @Cata.Theory.Functor -> (@RW.alpha * @RW.rho) [functor ->
     -- Extract a representative morphism and convert to a rule
     let morphism = find_representative_morphism(functor) in
     morphism_to_rule(morphism)
   ]
-  
+
   -- Helper to find a representative morphism for a functor
   find_representative_morphism: @Cata.Theory.Functor -> @Cata.Theory.Morphism [functor ->
     -- In practice, would select a representative morphism
@@ -826,156 +826,156 @@
       [x -> x]
     )
   ]
-  
+
   -- Helper to check if a morphism represents a rewrite
   is_rewrite_morphism: @Cata.Theory.Morphism -> Bool [morph ->
     -- Check if the morphism represents a rewrite rule
     morph.data?.is_rewrite or false
   ]
-  
+
   -- Helper to apply a ruleset to transform a morphism
   apply_ruleset_to_morphism: @RW.RuleSet * @Cata.Theory.Morphism -> @Cata.Theory.Morphism [ruleset morph ->
     -- Enhance a morphism with rewrite capabilities
     morph
   ]
-  
+
   -- Helper to collect morphisms mapped by a functor
   collect_mapped_morphisms: @Cata.Theory.Functor -> {@Cata.Theory.Morphism} [functor ->
     -- In practice, would determine the morphisms in the domain
     {}
   ]
-  
+
   -- Helper to create an identity morphism on an object
   identity_morphism: @Cata.Theory.Object -> @Cata.Theory.Morphism [obj ->
     @Cata.Theory.new_morphism(obj, obj, [x -> x])
   ]
-  
+
   -- Helper to check local confluence
   local_confluence_check: (@RW.alpha * @RW.alpha) -> Bool [pair ->
     @RW.commute(pair.0, pair.1)
   ]
-  
+
   -- Helper to check strong confluence
   strong_confluence_check: (@RW.alpha * @RW.alpha) -> Bool [pair ->
     -- Strong confluence is a stronger property than local confluence
     @RW.commute(pair.0, pair.1)  -- Simplified implementation
   ]
-  
+
   -- Helper to check joinability of a critical pair
   check_joinability: (@RW.alpha * @RW.alpha) -> Bool [pair ->
     @RW.commute(pair.0, pair.1)
   ]
-  
+
   -- Helper to compute development closure
   compute_development_closure: {(@RW.alpha * @RW.alpha)} -> {(@RW.alpha * @RW.alpha)} [pairs ->
     -- The set of all derivations from critical overlaps
     pairs
   ]
-  
+
   -- Helper to find a termination ordering
   find_termination_ordering: @RW.RuleSet -> ?(@INet.!Net -> @INet.!Net -> Bool) [ruleset ->
     -- In practice, would try to find a well-founded ordering
     ?null  -- Simplified implementation
   ]
-  
+
   -- Helper to generate termination evidence
   generate_termination_evidence: @RW.RuleSet * ?(@INet.!Net -> @INet.!Net -> Bool) -> {} [ruleset ordering ->
     -- Evidence for termination, such as reduction in a measure
     {}
   ]
-  
+
   -- Simplified version without ordering
   generate_termination_evidence: @RW.RuleSet -> {} [ruleset ->
     generate_termination_evidence(ruleset, ?null)
   ]
-  
+
   -- Helper to find a non-terminating example
   find_non_terminating_example: @RW.RuleSet -> ?{@INet.!Net} [ruleset ->
     -- Find a cycle in the rewrite relation
     ?null  -- Simplified implementation
   ]
-  
+
   -- Helper to extract the interface between a pattern and replacement
   extract_interface: @RW.alpha * @RW.rho -> @RW.Pattern [pattern replacement ->
     -- Find the common structure preserved by the rule
     create_default_pattern()  -- Simplified implementation
   ]
-  
+
   -- Helper to create a morphism from interface to pattern
   interface_to_pattern_morphism: @INet.!Net -> @INet.!Net [interface ->
     -- Map the interface into the pattern
     interface
   ]
-  
+
   -- Helper to create a morphism from interface to replacement
   interface_to_replacement_morphism: @INet.!Net -> @INet.!Net [interface ->
     -- Map the interface into the replacement
     interface
   ]
-  
+
   -- Helper to compute a pullback of two morphisms
   compute_pullback: @Cata.Theory.Morphism * @Cata.Theory.Morphism -> @Cata.Theory.Pullback [f g ->
     -- Compute the categorical pullback
     @Cata.Theory.new_pullback(f, g, {})
   ]
-  
+
   -- Helper to compute a pushout of two morphisms
   compute_pushout: @Cata.Theory.Morphism * @Cata.Theory.Morphism -> @Cata.Theory.Pushout [f g ->
     -- Compute the categorical pushout
     @Cata.Theory.new_pushout(f, g, {})
   ]
-  
+
   -- Helper to create a parallel rule from two rules
   create_parallel_rule: (@RW.alpha * @RW.rho) * (@RW.alpha * @RW.rho) -> (@RW.alpha * @RW.rho) [rule1 rule2 ->
     -- Create a rule that applies both rule1 and rule2 in parallel
     -- when their patterns don't overlap
     let combined_pattern = combine_patterns(rule1.0, rule2.0) in
     let combined_replacement = combine_patterns(rule1.1, rule2.1) in
-    
+
     (combined_pattern, combined_replacement)
   ]
-  
+
   -- Helper to combine two patterns
   combine_patterns: @RW.Pattern * @RW.Pattern -> @RW.Pattern [pattern1 pattern2 ->
     -- Create a pattern that matches both pattern1 and pattern2
     pattern1  -- Simplified implementation
   ]
-  
+
   -- Helper to find a common interface between rewrite systems
   find_common_interface: @RW * @RW -> @RW.Pattern [rw1 rw2 ->
     -- Find common structures between the rewrite systems
     create_default_pattern()  -- Simplified implementation
   ]
-  
+
   -- Helper to check if a rule respects an interface
   respects_interface: (@RW.alpha * @RW.rho) * @RW.Pattern -> Bool [rule interface ->
     -- Check if the rule preserves the interface structure
     false  -- Simplified implementation
   ]
-  
+
   -- Helper to find an inclusion from one rewrite system to another
   find_inclusion: @RW * @RW -> (@RW.RuleSet -> @RW.RuleSet) [common target ->
     -- Find how rules in 'common' are included in 'target'
     [rs -> rs]  -- Simplified implementation
   ]
-  
+
   -- Helper to compute pushout of rules
-  compute_pushout_rules: {(@RW.alpha * @RW.rho)} * {(@RW.alpha * @RW.rho)} * {(@RW.alpha * @RW.rho)} * 
-                     (@RW.RuleSet -> @RW.RuleSet) * (@RW.RuleSet -> @RW.RuleSet) -> 
+  compute_pushout_rules: {(@RW.alpha * @RW.rho)} * {(@RW.alpha * @RW.rho)} * {(@RW.alpha * @RW.rho)} *
+                     (@RW.RuleSet -> @RW.RuleSet) * (@RW.RuleSet -> @RW.RuleSet) ->
                      {(@RW.alpha * @RW.rho)} [rules1 rules2 common_rules incl1 incl2 ->
     -- Compute pushout of rule sets along the inclusions
     rules1 cup rules2  -- Simplified implementation
   ]
-  
+
   -- Helper to check if a relation is well-founded
   check_well_founded: (@INet.!Net -> @INet.!Net -> Bool) -> Bool [relation ->
     -- Check if the relation admits no infinite descending chains
     true  -- Simplified implementation
   ]
-  
+
   -- Helper to convert a pattern to a logical formula
   pattern_to_formula: @RW.Pattern -> @Cata.Theory.Formula [pattern ->
     -- Create a formula that is satisfied exactly when the pattern matches
     @Cata.Theory.new_atom_formula("matches_pattern")
   ]
-} 
+}

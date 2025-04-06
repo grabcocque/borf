@@ -1,24 +1,60 @@
 --[[
-  Wiring Diagram Transformations
+  Wire Diagram Transformations
 
-  This module defines transformations between wiring diagrams and other
-  categorical structures, implementing functors and natural transformations
-  for wiring diagrams.
+  This module defines transformations between wire diagrams and other categorical
+  frameworks, enabling visualization of categorical structures through string diagrams.
 ]]--
 
 @WireXf: {
   typ: {
-    WireRep
+    -- Core transformation types
+    WireTransform
+    MorphismTransform
+    VisualTransform
+
+    -- Specific transformations
+    CategoryToWire
+    LambdaToWire
+    PrimToWire
+    TermToWire
+
+    -- Rendering types
+    RenderConfig
+    Layout
+    Theme
   }
 
   op: {
+    -- Transformation operators
+    ==> <== <=> ~~
+
+    -- Composition operators
+    >>> <<< +++ &&&
+
+    -- Visualization operators
+    render view export layout
   }
 
   fn: {
-    -- Wire transformations
-    string_to_wire wire_to_string
-    graph_to_wire wire_to_graph 
-    wire_to_category category_to_wire
+    -- Core transformation functions
+    to_wire from_wire
+    to_category from_category
+
+    -- Specific transformations
+    category_to_wire lambda_to_wire prim_to_wire
+    term_to_wire rw_to_wire
+
+    -- Rendering functions
+    render_wire layout_wire export_wire optimize_layout
+    layout_transform suggest_layout
+
+    -- Structural transformations
+    map_objects map_morphisms map_composition
+    map_tensor map_braiding
+
+    -- Special categorical visualizations
+    adjunction_diagram monad_diagram
+    functor_diagram natural_transform_diagram
   }
 
   E: typ cup op cup fn
@@ -28,205 +64,523 @@
   vis: E |> [e -> true]
 
   deps: {
-    (@WireXf, @T, true),      -- Add dependency on Type system
-    (@WireXf, @Wire, true),   -- Add dependency on Wire module
-    (@WireXf, @Graph, true),   -- Add dependency on Graph module
-    (@WireXf, @Cata.Theory, true),    -- Add dependency on Category theory module
-    (@WireXf, @Cata.Linear, true)  -- Add dependency on linear transformations
+    (@WireXf, @T, true),        -- Add dependency on Type system
+    (@WireXf, @Wire, true),     -- Add dependency on Wire diagrams
+    (@WireXf, @CatXf, true),    -- Add dependency on Category theory
+    (@WireXf, @Lambda, true),   -- Add dependency on Lambda calculus
+    (@WireXf, @LambdaXf, true), -- Add dependency on Lambda transformations
+    (@WireXf, @Prim, true),     -- Add dependency on Primitives
+    (@WireXf, @PrimXf, true),   -- Add dependency on Primitive transformations
+    (@WireXf, @Term, true)      -- Add dependency on Termination
   }
 
   --------------------------------------------------
-  -- Wire Transformation Types
+  -- Category to Wire Transformations
   --------------------------------------------------
 
   --[[
-    WireRep: Structural representation of wiring diagrams
+    category_to_wire transforms categorical structures into wire diagrams,
+    providing a visual representation of category theory concepts.
   ]]--
-  WireRep: {
-    boxes: [Box],
-    ports: [Port],
-    connections: [Connection],
-    owners: (Port -> Box)
+  category_to_wire: CatXf.Category -> Wire.WireDiagram [category ->
+    -- Create a wire diagram representing the category
+    let objects = extract_objects(category) in
+    let morphisms = extract_morphisms(category) in
+
+    -- Create boxes for objects
+    let object_boxes = objects |> map [obj ->
+      Wire.create_box(obj.name, [], [], ?None, ?None)
+    ] in
+
+    -- Create wires for morphisms
+    let morphism_wires = morphisms |> map [morph ->
+      let source_box = find_box(object_boxes, morph.source) in
+      let target_box = find_box(object_boxes, morph.target) in
+      Wire.connect(source_box, target_box, morph.type, ?None, ?None, ?None, ?None)
+    ] in
+
+    -- Create the diagram
+    Wire.create_diagram(object_boxes, morphism_wires, [], [])
+  ]
+
+  --[[
+    from_wire transforms wire diagrams back into categorical structures,
+    enabling formal reasoning about diagrams.
+  ]]--
+  from_wire: Wire.WireDiagram -> CatXf.Category [diagram ->
+    -- Create a category from a wire diagram
+    let boxes = diagram.boxes in
+    let wires = diagram.wires in
+
+    -- Extract objects from boxes
+    let objects = boxes |> map [box ->
+      create_categorical_object(box)
+    ] in
+
+    -- Extract morphisms from wires
+    let morphisms = wires |> map [wire ->
+      create_categorical_morphism(wire)
+    ] in
+
+    -- Create the category
+    CatXf.create_category(objects, morphisms)
+  ]
+
+  --------------------------------------------------
+  -- Lambda to Wire Transformations
+  --------------------------------------------------
+
+  --[[
+    lambda_to_wire transforms lambda expressions into wire diagrams,
+    visualizing the structure of functional programs.
+  ]]--
+  lambda_to_wire: Lambda.Expr -> Wire.WireDiagram [expr ->
+    match expr with
+      -- Variable: single wire with label
+      | { _type: "Var", name: n } ->
+          let wire = Wire.create_wire(T.Any) in
+          let labeled_wire = Wire.labeled_wire(wire, n) in
+          Wire.create_diagram([], [labeled_wire], [labeled_wire], [labeled_wire])
+
+      -- Abstraction: box with input and output
+      | { _type: "Abs", param: p, body: b } ->
+          let body_diagram = lambda_to_wire(b) in
+          let param_wire = Wire.labeled_wire(Wire.create_wire(T.Any), p) in
+          let abs_box = Wire.create_box("λ" + p, [param_wire], body_diagram.output_wires) in
+          Wire.create_diagram([abs_box], [param_wire] + body_diagram.wires, [param_wire], body_diagram.output_wires)
+
+      -- Application: connect function output to argument input
+      | { _type: "App", fn: f, arg: a } ->
+          let fn_diagram = lambda_to_wire(f) in
+          let arg_diagram = lambda_to_wire(a) in
+          let app_box = Wire.create_box("app", fn_diagram.output_wires + arg_diagram.output_wires, [Wire.create_wire(T.Any)]) in
+          Wire.create_diagram(
+            fn_diagram.boxes + arg_diagram.boxes + [app_box],
+            fn_diagram.wires + arg_diagram.wires + [Wire.create_wire(T.Any)],
+            fn_diagram.input_wires + arg_diagram.input_wires,
+            [Wire.create_wire(T.Any)]
+          )
+
+      -- Linear abstraction: linear box with input and output
+      | { _type: "LinearAbs", param: p, body: b } ->
+          let body_diagram = lambda_to_wire(b) in
+          let param_wire = Wire.labeled_wire(Wire.linear_wire(T.Any), p) in
+          let abs_box = Wire.create_box("!λ" + p, [param_wire], body_diagram.output_wires) in
+          Wire.create_diagram([abs_box], [param_wire] + body_diagram.wires, [param_wire], body_diagram.output_wires)
+
+      -- Linear application: connect with linear wire
+      | { _type: "LinearApp", fn: f, arg: a } ->
+          let fn_diagram = lambda_to_wire(f) in
+          let arg_diagram = lambda_to_wire(a) in
+          let app_box = Wire.create_box("linear_app", fn_diagram.output_wires + arg_diagram.output_wires, [Wire.linear_wire(T.Any)]) in
+          Wire.create_diagram(
+            fn_diagram.boxes + arg_diagram.boxes + [app_box],
+            fn_diagram.wires + arg_diagram.wires + [Wire.linear_wire(T.Any)],
+            fn_diagram.input_wires + arg_diagram.input_wires,
+            [Wire.linear_wire(T.Any)]
+          )
+
+      -- Default case: empty diagram
+      | _ ->
+          Wire.create_diagram([], [], [], [])
+  ]
+
+  --------------------------------------------------
+  -- Prim to Wire Transformations
+  --------------------------------------------------
+
+  --[[
+    prim_to_wire transforms primitive operations into wire diagrams,
+    visualizing computational primitives.
+  ]]--
+  prim_to_wire: Prim.a -> Wire.WireDiagram [prim_op ->
+    -- Convert primitive to lambda expression, then to wire diagram
+    let lambda_expr = PrimXf.to_lambda(prim_op) in
+    lambda_to_wire(lambda_expr)
+  ]
+
+  --------------------------------------------------
+  -- Termination to Wire Transformations
+  --------------------------------------------------
+
+  --[[
+    term_to_wire transforms termination evidence into wire diagrams,
+    visualizing termination properties.
+  ]]--
+  term_to_wire: Term.Evidence -> Wire.WireDiagram [evidence ->
+    -- Create a diagram representing the termination net
+    let net = evidence.net in
+
+    -- Create boxes for each node in the termination net
+    let boxes = extract_nodes(net) |> map [node ->
+      Wire.create_box(node.label, [], [], ?None, ?None)
+    ] in
+
+    -- Create wires for each edge in the termination net
+    let wires = extract_edges(net) |> map [edge ->
+      let source_box = find_box(boxes, edge.source) in
+      let target_box = find_box(boxes, edge.target) in
+      Wire.connect(source_box, target_box, edge.type, ?None, ?None, ?None, ?None)
+    ] in
+
+    -- Add special styling for termination properties
+    let style = {
+      line_style: ?Some("solid"),
+      line_width: ?Some(1.0),
+      fill_color: if evidence.terminating == ?Some(true) then
+        ?Some({ name: ?Some("green"), r: ?Some(0), g: ?Some(255), b: ?Some(0) })
+      else if evidence.terminating == ?Some(false) then
+        ?Some({ name: ?Some("red"), r: ?Some(255), g: ?Some(0), b: ?Some(0) })
+      else
+        ?Some({ name: ?Some("yellow"), r: ?Some(255), g: ?Some(255), b: ?Some(0) }),
+      stroke_color: ?None,
+      font: ?Some("Arial"),
+      font_size: ?Some(12.0),
+      opacity: ?Some(1.0)
+    } in
+
+    let diagram = Wire.create_diagram(boxes, wires, [], []) in
+    Wire.set_style(diagram, style)
+  ]
+
+  --------------------------------------------------
+  -- Helper Functions
+  --------------------------------------------------
+
+  --[[
+    extract_objects extracts objects from a category
+  ]]--
+  extract_objects: CatXf.Category -> [CatXf.Object] [category ->
+    -- In a real implementation, this would properly extract objects
+    []
+  ]
+
+  --[[
+    extract_morphisms extracts morphisms from a category
+  ]]--
+  extract_morphisms: CatXf.Category -> [CatXf.Morphism] [category ->
+    -- In a real implementation, this would properly extract morphisms
+    []
+  ]
+
+  --[[
+    find_box finds a box by object name
+  ]]--
+  find_box: [Wire.Box] * S -> Wire.Box [boxes name ->
+    -- In a real implementation, this would search for the box
+    boxes[0]
+  ]
+
+  --[[
+    create_categorical_object creates a categorical object from a box
+  ]]--
+  create_categorical_object: Wire.Box -> CatXf.Object [box ->
+    -- In a real implementation, this would create a proper categorical object
+    { name: "Object" }
+  ]
+
+  --[[
+    create_categorical_morphism creates a categorical morphism from a wire
+  ]]--
+  create_categorical_morphism: Wire.Wire -> CatXf.Morphism [wire ->
+    -- In a real implementation, this would create a proper categorical morphism
+    { source: "Source", target: "Target", type: T.Any }
+  ]
+
+  --[[
+    extract_nodes extracts nodes from a termination net
+  ]]--
+  extract_nodes: Term.Net -> [Term.Node] [net ->
+    -- In a real implementation, this would properly extract nodes
+    []
+  ]
+
+  --[[
+    extract_edges extracts edges from a termination net
+  ]]--
+  extract_edges: Term.Net -> [Term.Edge] [net ->
+    -- In a real implementation, this would properly extract edges
+    []
+  ]
+
+  --------------------------------------------------
+  -- Specialized Diagram Functions
+  --------------------------------------------------
+
+  --[[
+    adjunction_diagram creates a wire diagram for an adjunction
+  ]]--
+  adjunction_diagram: CatXf.Adjunction -> Wire.WireDiagram [adj ->
+    -- Create a wire diagram for an adjunction (F ⊣ G)
+    let left_functor_box = Wire.create_box("F", [], []) in
+    let right_functor_box = Wire.create_box("G", [], []) in
+    let unit_wire = Wire.create_wire(T.Any) in
+    let counit_wire = Wire.create_wire(T.Any) in
+
+    Wire.create_diagram([left_functor_box, right_functor_box], [unit_wire, counit_wire], [], [])
+  ]
+
+  --[[
+    monad_diagram creates a wire diagram for a monad
+  ]]--
+  monad_diagram: CatXf.Monad -> Wire.WireDiagram [monad ->
+    -- Create a wire diagram for a monad (T, η, μ)
+    let functor_box = Wire.create_box("T", [], []) in
+    let unit_wire = Wire.create_wire(T.Any) in
+    let mult_wire = Wire.create_wire(T.Any) in
+
+    Wire.create_diagram([functor_box], [unit_wire, mult_wire], [], [])
+  ]
+
+  --[[
+    functor_diagram creates a wire diagram for a functor
+  ]]--
+  functor_diagram: CatXf.Functor -> Wire.WireDiagram [functor ->
+    -- Create a wire diagram for a functor
+    let source_box = Wire.create_box("Source", [], []) in
+    let target_box = Wire.create_box("Target", [], []) in
+    let functor_wire = Wire.create_wire(T.Any) in
+
+    Wire.create_diagram([source_box, target_box], [functor_wire], [], [])
+  ]
+
+  --[[
+    natural_transform_diagram creates a wire diagram for a natural transformation
+  ]]--
+  natural_transform_diagram: CatXf.NaturalTransformation -> Wire.WireDiagram [nat_trans ->
+    -- Create a wire diagram for a natural transformation
+    let source_functor_box = Wire.create_box("F", [], []) in
+    let target_functor_box = Wire.create_box("G", [], []) in
+    let component_wire = Wire.create_wire(T.Any) in
+
+    Wire.create_diagram([source_functor_box, target_functor_box], [component_wire], [], [])
+  ]
+
+  --------------------------------------------------
+  -- Categorical Structure of Wire Transformations
+  --------------------------------------------------
+
+  --[[
+    WireTransform defines a transformation between wire diagrams and
+    other representations, preserving categorical structure.
+  ]]--
+  WireTransform: {
+    source_type: T.T,
+    target_type: T.T,
+    transform: (a -> b),
+    inverse: ?(b -> a),
+    preserves_structure: Bool
   }
 
-  --------------------------------------------------
-  -- Wire-Graph Structural Mapping
-  --------------------------------------------------
-
   --[[
-    Wire-Graph Structural Mapping
-    
-    Maps wiring diagrams to graphs, establishing a direct structural
-    correspondence between circuit diagrams and graph structures.
+    Functor that maps from the category of wire diagrams to categories.
+    This enables formal reasoning about wire diagrams.
   ]]--
-  wire_graph_mapping: {
-    Wire.Box = Grph.Node,          -- Boxes in a wiring diagram are nodes in a graph  
-    Wire.Wire = Grph.Edge,         -- Wires are edges in a graph
-    Wire.source = Grph.source,     -- Source of a wire is source of an edge
-    Wire.target = Grph.target,     -- Target of a wire is target of an edge
-    Wire.connect = Grph.add_edge,  -- Connecting wires is adding edges
-    Wire.compose = Grph.merge      -- Composing wiring diagrams is merging graphs
-  }
-
-  --[[
-    Convert a string to a wiring diagram
-  ]]--
-  string_to_wire: S -> Wire.Diagram [s ->
-    -- Parse string directly to wiring diagram
-    s |> Prim.parse_to_wire
-  ]
-
-  --[[
-    Convert a wiring diagram to a string
-  ]]--
-  wire_to_string: Wire.Diagram -> S [w ->
-    -- Convert wiring diagram to string representation
-    w |> Prim.wire_to_string
-  ]
-
-  --[[
-    Convert a graph to a wiring diagram
-    
-    This transformation creates a wiring diagram where:
-    - Graph nodes become boxes
-    - Graph edges become wires
-    - Edge directions determine port connections
-  ]]--
-  graph_to_wire: !Grph.Grph -o> Wire.Diagram [g ->
-    let d = Wire.id() in
-    
-    -- First add all nodes as boxes
-    let {g1, nodes} = Prim.get_graph_nodes(g) in
-    let d_with_boxes = nodes |> fold [d n ->
-      let label = Grph.get_node_label(g1, n) in
-      let box = Prim.create_box(label) in
-      Wire.subdiagram(d, box)
-    ] d in
-    
-    -- Then add all edges as connections
-    let {g2, edges} = Prim.get_graph_edges(g1) in
-    edges |> fold [d e ->
-      let src_node = Grph.src(g2, e) in
-      let tgt_node = Grph.tgt(g2, e) in
-      let src_box = Prim.find_box(d, src_node.id) in
-      let tgt_box = Prim.find_box(d, tgt_node.id) in
-      
-      -- Create connection between output port of source and input port of target
-      let src_port = Wire.out_ports(src_box) |> head in
-      let tgt_port = Wire.in_ports(tgt_box) |> head in
-      Wire.connect(d, src_port, tgt_port)
-    ] d_with_boxes
-  ]
-
-  --[[
-    Convert a wiring diagram to a graph
-    
-    This transformation creates a graph where:
-    - Boxes become nodes
-    - Wires become edges
-    - Port connections determine edge directions
-  ]]--
-  wire_to_graph: !Wire.Diagram -o> Grph.Grph [d ->
-    let g = Grph.new_graph() in
-    
-    -- First add all boxes as nodes
-    let boxes = Prim.get_boxes(d) in
-    let g_with_nodes = boxes |> fold [g b ->
-      let label = Prim.get_box_label(b) in
-      Grph.add_node(g, label).0
-    ] g in
-    
-    -- Then add all connections as edges
-    let connections = Prim.get_connections(d) in
-    connections |> fold [g c ->
-      let src_port = c.0 in
-      let tgt_port = c.1 in
-      let src_box = Wire.owner(src_port) in
-      let tgt_box = Wire.owner(tgt_port) in
-      let src_node = Grph.get_node(g, src_box.id) in
-      let tgt_node = Grph.get_node(g, tgt_box.id) in
-      Grph.add_edge(g, src_node, tgt_node, c).0
-    ] g_with_nodes
-  ]
-
-  --------------------------------------------------
-  -- Wire-Category Structural Mapping
-  --------------------------------------------------
-
-  --[[
-    Wire-Category Structural Mapping
-    
-    Maps wiring diagrams to categories, establishing a direct structural
-    correspondence between circuit diagrams and categorical structure.
-  ]]--
-  wire_category_mapping: {
-    Wire.Box = Cat.O,                  -- Boxes are objects
-    Wire.Diagram = Cat.M,              -- Diagrams are morphisms
-    Wire.compose = Cat.compose,        -- Sequential composition is morphism composition
-    Wire.tensor_compose = Cat.tensor,  -- Parallel composition is tensor product
-    Wire.id = Cat.id,                  -- Identity wiring is identity morphism
-    
-    -- Law mappings
-    Wire.law.composition_associativity = Cat.law.associativity,
-    Wire.law.identity_unit = Cat.law.id_right_neutral,
-    Wire.law.tensor_associativity = Cat.law.tensor_associativity
-  }
-
-  --[[
-    Convert a wiring diagram to a category
-    
-    This transformation creates a symmetric monoidal category where:
-    - Box types are objects
-    - Diagrams are morphisms
-    - Sequential composition is morphism composition
-    - Tensor product is parallel composition
-  ]]--
-  wire_to_category: !Wire.Diagram -o> Cat.Cat [d ->
-    -- Create a symmetric monoidal category
-    let cat = Cat.new({}, {}) in
-    
-    -- Add all box types as objects
-    let boxes = Prim.get_boxes(d) in
-    let box_types = boxes |> map [b -> Wire.box_type(b)] |> unique in
-    
-    let cat_with_objs = box_types |> fold [c t ->
-      Cat.add_object(c, t)
-    ] cat in
-    
-    -- Add all diagrams as morphisms
-    let subdiagrams = Prim.get_subdiagrams(d) in
-    subdiagrams |> fold [c sd ->
-      let dom = Prim.diagram_domain(sd) in
-      let cod = Prim.diagram_codomain(sd) in
-      Cat.add_morphism(c, {
-        diagram: sd,
-        domain: dom,
-        codomain: cod
-      })
-    ] cat_with_objs
-  ]
-
-  --[[
-    Convert a category to a wiring diagram
-    
-    This transformation creates a wiring diagram from a symmetric monoidal category:
-    - Objects become box types
-    - Morphisms become box connections
-    - Composition becomes sequential composition
-    - Tensor product becomes parallel composition
-  ]]--
-  category_to_wire: !Cat.Cat -o> Wire.Diagram [c ->
-    -- Only works for categories that are symmetric monoidal
-    -- and have the appropriate structure
-    let morphisms = Cat.get_morphisms(c) |> filter [m -> m.diagram |> Prim.is_valid] in
-    
-    if morphisms |> is_empty {
-      -- Create a default empty diagram
-      Wire.id()
-    } else {
-      -- Return the first valid diagram
-      let m = morphisms |> head in
-      m.diagram
+  wire_category_functor: CatXf.Functor [
+    {
+      source_category: Wire.structure,
+      target_category: CatXf.cat_of_cats,
+      map_obj: [t -> to_category_object(t)],
+      map_morph: [f -> from_wire(f)],
+      preserves_id: true,
+      preserves_composition: true
     }
   ]
-} 
+
+  --[[
+    Functor that maps from lambda calculus to wire diagrams.
+    This enables visualization of functional programs.
+  ]]--
+  lambda_wire_functor: CatXf.Functor [
+    {
+      source_category: Lambda.structure,
+      target_category: Wire.structure,
+      map_obj: [t -> to_wire_object(t)],
+      map_morph: [f -> lambda_to_wire(f)],
+      preserves_id: true,
+      preserves_composition: true
+    }
+  ]
+
+  --[[
+    Natural transformation between wire diagrams and other visual representations.
+    This enables different rendering styles for diagrams.
+  ]]--
+  wire_rendering_transform: CatXf.NaturalTransformation [
+    {
+      source_functor: wire_category_functor,
+      target_functor: wire_category_functor,
+      components: [a -> [x -> style_transform(x)]],
+      naturality: true
+    }
+  ]
+
+  --[[
+    Helper function to transform a type to a categorical object
+  ]]--
+  to_category_object: T.T -> CatXf.Object [typ ->
+    { name: T.type_to_string(typ) }
+  ]
+
+  --[[
+    Helper function to transform a lambda type to a wire diagram object
+  ]]--
+  to_wire_object: Lambda.Type -> T.T [typ ->
+    match typ with
+      | { _type: "ArrowType", domain: d, codomain: c } ->
+          LambdaXf.to_prim_type(typ)
+      | _ ->
+          T.Any
+  ]
+
+  --[[
+    Helper function for style transformations
+  ]]--
+  style_transform: Wire.WireDiagram -> Wire.WireDiagram [diagram ->
+    -- Apply a visual transformation to the diagram
+    Wire.auto_layout(diagram)
+  ]
+
+  --------------------------------------------------
+  -- Layout Transformations
+  --------------------------------------------------
+
+  --[[
+    layout_transform transforms a wire diagram by applying a layout algorithm,
+    making it suitable for visualization.
+  ]]--
+  layout_transform: Wire.WireDiagram -> Wire.WireDiagram [diagram ->
+    -- Determine the best layout strategy based on diagram structure
+    let layout = suggest_layout(diagram) in
+    Wire.apply_layout(diagram, layout)
+  ]
+
+  --[[
+    suggest_layout analyzes a diagram and suggests an appropriate layout.
+    This is smarter than Wire.initial_layout because it can consider the
+    semantic meaning of the diagram based on its transformational origin.
+  ]]--
+  suggest_layout: Wire.WireDiagram -> Wire.Layout [diagram ->
+    -- Check if we have semantic information about the diagram
+    let semantic_type = extract_semantic_type(diagram) in
+
+    match semantic_type with
+      | "category" ->
+          -- Categories often work well in a hierarchical layout
+          { _type: "FlowLayout", direction: "vertical", spacing: 2.5 }
+
+      | "lambda" ->
+          -- Lambda expressions often work well with a tree layout
+          { _type: "FlowLayout", direction: "horizontal", spacing: 2.0 }
+
+      | "linear" ->
+          -- Linear types often work well with explicit resource flow
+          { _type: "FlowLayout", direction: "horizontal", spacing: 1.5 }
+
+      | "termination" ->
+          -- Termination evidence often works well with a cyclic layout
+          { _type: "ForceLayout", spring_constant: 0.3, repulsion_constant: 200.0, damping: 0.7, iterations: 150 }
+
+      | "functor" ->
+          -- Functors often work well with a two-level layout
+          { _type: "Grid", rows: 2, columns: diagram.boxes |> length |> [l -> l / 2 + l % 2], cell_width: 3.0, cell_height: 4.0 }
+
+      | "natural_transformation" ->
+          -- Natural transformations often work well with a parallel layout
+          { _type: "Grid", rows: 2, columns: diagram.boxes |> length |> [l -> l / 2], cell_width: 3.0, cell_height: 3.0 }
+
+      | _ ->
+          -- Fall back to Wire's initial layout algorithm
+          Wire.initial_layout(diagram)
+  ]
+
+  --[[
+    extract_semantic_type attempts to determine the semantic origin of a diagram
+    based on pattern matching against known structures.
+  ]]--
+  extract_semantic_type: Wire.WireDiagram -> S [diagram ->
+    -- Look for clues about the diagram's origin in box names and wire types
+
+    -- Check for lambda-specific boxes
+    if exists_box_with_name(diagram, "λ") || exists_box_with_name(diagram, "app") then
+      "lambda"
+
+    -- Check for linear lambda-specific boxes
+    else if exists_box_with_name(diagram, "!λ") || exists_box_with_name(diagram, "linear_app") then
+      "linear"
+
+    -- Check for functor-specific boxes
+    else if exists_box_with_name(diagram, "F") && exists_box_with_name(diagram, "G") then
+      "functor"
+
+    -- Check for natural transformation structure
+    else if has_natural_transformation_structure(diagram) then
+      "natural_transformation"
+
+    -- Check for termination evidence structure
+    else if has_termination_evidence_structure(diagram) then
+      "termination"
+
+    -- Default to category
+    else
+      "category"
+  ]
+
+  --[[
+    exists_box_with_name checks if a diagram contains a box with a given name
+  ]]--
+  exists_box_with_name: Wire.WireDiagram * S -> Bool [diagram name ->
+    diagram.boxes |> exists [box ->
+      match box with
+        | { _type: "Composite", name: n } -> n |> contains name
+        | _ -> false
+    ]
+  ]
+
+  --[[
+    has_natural_transformation_structure checks if a diagram has the structure of a natural transformation
+  ]]--
+  has_natural_transformation_structure: Wire.WireDiagram -> Bool [diagram ->
+    -- In a real implementation, this would check for the characteristic structure
+    -- of a natural transformation diagram
+    false
+  ]
+
+  --[[
+    has_termination_evidence_structure checks if a diagram has the structure of termination evidence
+  ]]--
+  has_termination_evidence_structure: Wire.WireDiagram -> Bool [diagram ->
+    -- In a real implementation, this would check for cycles, decreasing metrics, etc.
+    false
+  ]
+
+  --[[
+    render_wire renders a wire diagram with automatic layout
+  ]]--
+  render_wire: Wire.WireDiagram * S * ?Wire.Layout -> S [diagram format layout ->
+    -- Apply the layout transformation first
+    let positioned_diagram = match layout with
+      | ?Some(l) -> Wire.apply_layout(diagram, l)
+      | ?None -> layout_transform(diagram)
+    in
+
+    -- Render in the requested format
+    match format with
+      | "svg" -> Wire.to_svg(positioned_diagram, ?None)  -- Layout already applied
+      | "dot" -> Wire.to_dot(positioned_diagram, ?None)  -- Layout already applied
+      | "ascii" -> Wire.to_ascii(positioned_diagram, ?None)  -- Layout already applied
+      | "latex" -> Wire.to_latex(positioned_diagram, ?None)  -- Layout already applied
+      | _ -> "Unsupported format: " + format
+  ]
+
+  --[[
+    export_wire exports a wire diagram to a file
+  ]]--
+  export_wire: Wire.WireDiagram * S * S * ?Wire.Layout -> Bool [diagram filename format layout ->
+    -- Render the diagram
+    let content = render_wire(diagram, format, layout) in
+
+    -- In a real implementation, this would write to a file
+    true
+  ]
+}

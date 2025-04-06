@@ -10,10 +10,10 @@
   typ: {
     -- Transformation types
     EffectTransformation LinearEffectTransform ResourceTransform
-    
+
     -- Specific transformations
     FileTransform StreamTransform SocketTransform
-    
+
     -- Structure transformations
     LinearEffectCategory ResourceTrackedCategory
   }
@@ -21,7 +21,7 @@
   op: {
     -- Transformation operators
     ==> <== <=> ~~
-    
+
     -- IO operators
     |>> <|> <+>
   }
@@ -31,26 +31,26 @@
     to_theory from_theory
     to_result from_result
     to_pure from_pure
-    
+
     -- Resource transformations
     to_resource from_resource
     track_resource untrack_resource
-    
+
     -- Stream transformations
     to_stream from_stream
     stream_to_file file_to_stream
-    
+
     -- File transformations
     to_file from_file
     filepath_to_file file_to_filepath
-    
+
     -- Object and morphism mappings
     map_effect map_objects map_morphisms
-    
+
     -- Resource lifecycle transformations
     effect_to_resource resource_to_effect
     with_cleanup add_cleanup
-    
+
     -- Transformation utilities
     compose identity pipe parallel combine
   }
@@ -80,20 +80,20 @@
   ]]--
   to_theory: @IO.!IO -> @Cata.Theory.LinearEffectCategory [io_effect ->
     let effect_cat = @Cata.Theory.new_linear_effect_category() in
-    
+
     -- Map the linear morphism structure
     @Cata.Theory.add_linear_morphisms(effect_cat, {
       objects: T.Type_0,
       id: [a -> [!x -o> !IO(x)]],
       compose: [f g -> [!x -o> f(x) |>> g]]
     }) |>
-    
+
     -- Add tensor structure
     [cat -> @Cata.Theory.add_tensor_structure(cat, {
       tensor: [a b -> (!a * !b)],
       unit: T.Unit
     })] |>
-    
+
     -- Add effect operations
     [cat -> @Cata.Theory.add_effect_operations(cat, {
       pure: @IO.pure,
@@ -101,7 +101,7 @@
       combine: @IO.combine,
       parallel: @IO.parallel
     })] |>
-    
+
     -- Add resource management structure
     [cat -> @Cata.Theory.add_resource_structure(cat, {
       acquire: @IO.acquire_resource,
@@ -128,7 +128,7 @@
   --------------------------------------------------
   -- IO to Result Transformations
   --------------------------------------------------
-  
+
   --[[
     to_result transforms an IO effect into a Result structure.
   ]]--
@@ -140,7 +140,7 @@
       )
     ]
   ]
-  
+
   --[[
     from_result transforms a Result into an IO effect.
   ]]--
@@ -154,7 +154,7 @@
   --------------------------------------------------
   -- IO to Pure Transformations
   --------------------------------------------------
-  
+
   --[[
     to_pure unsafely extracts a pure value from an IO effect,
     potentially evaluating side effects.
@@ -162,7 +162,7 @@
   to_pure: @IO.!IO(a) -o> a [io ->
     @IO.unsafe_perform(io)
   ]
-  
+
   --[[
     from_pure wraps a pure value in an IO effect without side effects.
   ]]--
@@ -173,7 +173,7 @@
   --------------------------------------------------
   -- Resource Transformations
   --------------------------------------------------
-  
+
   --[[
     to_resource extracts the resource component from an IO effect.
   ]]--
@@ -183,7 +183,7 @@
       release: [!a -o> @IO.release(a)]
     }
   ]
-  
+
   --[[
     from_resource creates an IO effect from a resource representation.
   ]]--
@@ -194,7 +194,7 @@
       resource.release
     )
   ]
-  
+
   --[[
     track_resource adds explicit resource tracking to values
   ]]--
@@ -205,50 +205,50 @@
       tracked: true
     })
   ]
-  
+
   --[[
     untrack_resource removes resource tracking, returning a regular value
   ]]--
   untrack_resource: @IO.!IO(@Cata.Linear.Tracked(a)) -o> @IO.!IO(a) [io ->
-    io |>> [tracked -> 
-      if tracked.tracked 
+    io |>> [tracked ->
+      if tracked.tracked
       then @IO.pure(tracked.value)
       else @IO.fail({
         code: "resource_error",
         message: "Resource already consumed or released"
-      }) 
+      })
     ]
   ]
 
   --------------------------------------------------
   -- Stream Transformations
   --------------------------------------------------
-  
+
   --[[
     to_stream transforms an IO operation returning data into a stream.
   ]]--
   to_stream: @IO.!IO(a) -o> @IO.!Stream(a) [io ->
     @IO.create_stream(io)
   ]
-  
+
   --[[
     from_stream reads a stream until EOF, producing a single IO result.
   ]]--
   from_stream: @IO.!Stream(a) -o> @IO.!IO([a]) [stream ->
     @IO.read_all(stream)
   ]
-  
+
   --[[
     stream_to_file writes a stream to a file.
   ]]--
   stream_to_file: @IO.!Stream(a) * @IO.!Path -o> @IO.!IO(Unit) [stream path ->
-    @IO.open_file(path, :write) |>> [file -> 
+    @IO.open_file(path, :write) |>> [file ->
       @IO.stream_to_file(stream, file) |>> [_ ->
         @IO.close_file(file)
       ]
     ]
   ]
-  
+
   --[[
     file_to_stream reads a file as a stream.
   ]]--
@@ -261,28 +261,28 @@
   --------------------------------------------------
   -- File Transformations
   --------------------------------------------------
-  
+
   --[[
     to_file transforms data into a file.
   ]]--
   to_file: @IO.!Path * !S -o> @IO.!IO(Unit) [path data ->
     @IO.write_file(path, data)
   ]
-  
+
   --[[
     from_file reads data from a file.
   ]]--
   from_file: @IO.!Path -o> @IO.!IO(S) [path ->
     @IO.read_file(path)
   ]
-  
+
   --[[
     filepath_to_file opens a file from a path.
   ]]--
   filepath_to_file: @IO.!Path * @IO.Mode -o> @IO.!IO(@IO.!File) [path mode ->
     @IO.open_file(path, mode)
   ]
-  
+
   --[[
     file_to_filepath retrieves the path from a file.
   ]]--
@@ -293,32 +293,32 @@
   --------------------------------------------------
   -- Effect Manipulation Utilities
   --------------------------------------------------
-  
+
   --[[
     map_effect applies a transformation to an IO effect.
   ]]--
   map_effect: @IO.!IO(a) * (!a -o> b) -o> @IO.!IO(b) [io f ->
     io |>> [x -> @IO.pure(f(x))]
   ]
-  
+
   --[[
     map_objects applies a function to all object types in an IO effect.
   ]]--
   map_objects: (@IO.!IO(a) -o> @IO.!IO(b)) * ![a] -o> @IO.!IO([b]) [transform objects ->
-    objects |> @IO.sequence(map [obj -> 
+    objects |> @IO.sequence(map [obj ->
       @IO.pure(obj) |> transform
     ])
   ]
-  
+
   --[[
     map_morphisms applies a function to all morphism types in an IO effect.
   ]]--
   map_morphisms: (@IO.!IO(!a -o> b) -o> @IO.!IO(!c -o> d)) * ![!a -o> b] -o> @IO.!IO([!c -o> d]) [transform morphisms ->
-    morphisms |> @IO.sequence(map [morph -> 
+    morphisms |> @IO.sequence(map [morph ->
       @IO.pure(morph) |> transform
     ])
   ]
-  
+
   --[[
     effect_to_resource transforms an effect into an explicit resource
   ]]--
@@ -328,7 +328,7 @@
       release: [!a -o> @IO.release(a)]
     })
   ]
-  
+
   --[[
     resource_to_effect transforms a resource into an effect
   ]]--
@@ -339,49 +339,49 @@
       resource.release
     )
   ]
-  
+
   --[[
     with_cleanup adds a cleanup action to an IO effect
   ]]--
   with_cleanup: @IO.!IO(a) * (!a -o> @IO.!IO(Unit)) -o> @IO.!IO(a) [io cleanup ->
     @IO.with_cleanup(io, cleanup)
   ]
-  
+
   --[[
     add_cleanup adds a cleanup action that doesn't depend on the result
   ]]--
   add_cleanup: @IO.!IO(a) * (() -o> @IO.!IO(Unit)) -o> @IO.!IO(a) [io cleanup ->
     @IO.with_cleanup(io, [!_ -o> cleanup(())])
   ]
-  
+
   --[[
     compose composes two IO transformations, preserving linearity
   ]]--
   compose: (!a -o> @IO.!IO(b)) * (!b -o> @IO.!IO(c)) -o> (!a -o> @IO.!IO(c)) [f g ->
     [!x -o> f(x) |>> g]
   ]
-  
+
   --[[
     identity creates an identity transformation for IO effects
   ]]--
   identity: !a -o> @IO.!IO(a) [!x ->
     @IO.pure(x)
   ]
-  
+
   --[[
     pipe sequences IO effects with the pipe operator
   ]]--
   pipe: @IO.!IO(a) * (!a -o> @IO.!IO(b)) -o> @IO.!IO(b) [io f ->
     io |>> f
   ]
-  
+
   --[[
     parallel runs multiple IO effects in parallel
   ]]--
   parallel: ![!IO.!IO(a)] -o> @IO.!IO([a]) [ios ->
     @IO.parallel(ios)
   ]
-  
+
   --[[
     combine merges two IO effects into one
   ]]--
