@@ -1,0 +1,293 @@
+--[[
+  Adjunction Transformations (AdjunctionXf)
+
+  This module defines transformations involving adjunctions, linking them
+  to other categorical structures like monads, comonads, and potentially
+  visual representations like wire diagrams.
+
+  Key transformations include deriving the monad associated with the
+  composition G ∘ F and the comonad associated with F ∘ G for an
+  adjunction F ⊣ G.
+]]--
+
+@AdjunctionXf@prelude: {
+  typ: {
+    !AdjunctionToMonadMap
+    !AdjunctionToComonadMap
+    !AdjunctionToWireMap
+  }
+
+  op: {
+    -- Composition operators if needed
+  }
+
+  fn: {
+    -- Core transformation functions
+    adjunction_to_monad
+    adjunction_to_comonad
+    adjunction_to_wire
+
+    -- Helper functions (if needed)
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@AdjunctionXf@prelude, @Adjunction, true), -- Depends on Adjunction definition
+    (@AdjunctionXf@prelude, @Cat, true),        -- Depends on Category
+    (@AdjunctionXf@prelude, @CatXf, true),      -- Depends on Functors, Nat Transformations
+    (@AdjunctionXf@prelude, @Monad, true),      -- Depends on Monad definition (or Kleisli)
+    (@AdjunctionXf@prelude, @CAV, true),        -- Depends on Comonad (CAV) definition
+    (@AdjunctionXf@prelude, @Wire, true),       -- Depends on Wire diagrams
+    (@AdjunctionXf@prelude, @WireXf, true),     -- Depends on Wire transformations
+    (@AdjunctionXf@prelude, @Linear, true),     -- Depends on Linear types
+    (@AdjunctionXf@prelude, @T, true)           -- Depends on Type system
+  }
+
+  --------------------------------------------------
+  -- Core Transformation Types
+  --------------------------------------------------
+
+  --[[
+    !AdjunctionToMonadMap represents the mapping from an adjunction to its associated monad.
+    The monad is (T = G ∘ F, η = unit, μ = GεF).
+  ]]--
+  !AdjunctionToMonadMap: {
+    _type: "AdjunctionToMonadMap",
+    adjunction: @Adjunction.!Adjunction,
+    resulting_monad: @Kleisli.!Monad, -- Using Kleisli module for Monad definition
+    mapping_verified: Bool
+  }
+
+  --[[
+    !AdjunctionToComonadMap represents the mapping from an adjunction to its associated comonad.
+    The comonad is (W = F ∘ G, ε = counit, δ = FηG).
+  ]]--
+  !AdjunctionToComonadMap: {
+    _type: "AdjunctionToComonadMap",
+    adjunction: @Adjunction.!Adjunction,
+    resulting_comonad: @CAV.!Comonad, -- Using CAV module for Comonad definition
+    mapping_verified: Bool
+  }
+
+  --[[
+    !AdjunctionToWireMap represents the mapping from an adjunction to a wire diagram representation.
+  ]]--
+  !AdjunctionToWireMap: {
+    _type: "AdjunctionToWireMap",
+    adjunction: @Adjunction.!Adjunction,
+    wire_diagram: @Wire.WireDiagram,
+    layout_applied: Bool
+  }
+
+  --------------------------------------------------
+  -- Core Transformation Functions
+  --------------------------------------------------
+
+  --[[
+    adjunction_to_monad derives the monad T = G ∘ F from an adjunction F ⊣ G.
+    The monad's unit is the adjunction's unit η.
+    The monad's multiplication μ is derived from the counit ε as GεF.
+    Requires functions from @CatXf for functor composition and manipulating natural transformations.
+  ]]--
+  adjunction_to_monad: @Adjunction.!Adjunction -> !AdjunctionToMonadMap [
+    adj ->
+    let F = @Adjunction.left_adjoint(adj) in
+    let G = @Adjunction.right_adjoint(adj) in
+    let eta = @Adjunction.unit(adj).base in       -- η: Id_C -> G ∘ F
+    let epsilon = @Adjunction.counit(adj).base in -- ε: F ∘ G -> Id_D
+
+    -- 1. Define the endofunctor T = G ∘ F
+    let T_functor = @CatXf.compose_functors(G, F) in
+
+    -- 2. The unit η is directly from the adjunction
+    let monad_unit = eta in
+
+    -- 3. Define the multiplication μ = GεF
+    --    Requires horizontal composition or whiskering:
+    --    Gε: G ∘ F ∘ G -> G
+    --    GεF: G ∘ F ∘ G ∘ F -> G ∘ F
+    let G_epsilon = @CatXf.apply_functor_to_nat_trans(G, epsilon) in -- Gε : G(FG) -> G
+    let mu = @CatXf.whisker_right_nat_trans(G_epsilon, F) in          -- GεF : GFG F -> G F
+    -- Note: The exact CatXf functions might differ (e.g., horizontal_compose)
+    -- mu should have type: T ∘ T -> T which is G F G F -> G F
+
+    -- 4. Construct the Monad (using @Kleisli types for now)
+    let monad = @Kleisli.monad(
+      adj.name + "-Monad",
+      T_functor,
+      monad_unit,
+      mu
+    ) in
+
+    -- 5. Verify monad laws (should hold if adjunction laws hold)
+    let verified = @Kleisli.check_monad_laws(monad) in
+
+    {
+      _type: "AdjunctionToMonadMap",
+      adjunction: adj,
+      resulting_monad: monad,
+      mapping_verified: verified
+    }
+  ]
+
+  --[[
+    adjunction_to_comonad derives the comonad W = F ∘ G from an adjunction F ⊣ G.
+    The comonad's counit is the adjunction's counit ε.
+    The comonad's comultiplication δ is derived from the unit η as FηG.
+  ]]--
+  adjunction_to_comonad: @Adjunction.!Adjunction -> !AdjunctionToComonadMap [
+    adj ->
+    let F = @Adjunction.left_adjoint(adj) in
+    let G = @Adjunction.right_adjoint(adj) in
+    let eta = @Adjunction.unit(adj).base in       -- η: Id_C -> G ∘ F
+    let epsilon = @Adjunction.counit(adj).base in -- ε: F ∘ G -> Id_D
+
+    -- 1. Define the endofunctor W = F ∘ G
+    let W_functor = @CatXf.compose_functors(F, G) in
+
+    -- 2. The counit ε is directly from the adjunction
+    let comonad_counit = epsilon in
+
+    -- 3. Define the comultiplication δ = FηG
+    --    Requires horizontal composition or whiskering:
+    --    Fη: F -> F ∘ G ∘ F
+    --    FηG: F ∘ G -> F ∘ G ∘ F ∘ G
+    let F_eta = @CatXf.apply_functor_to_nat_trans(F, eta) in -- Fη : F(Id) -> F(GF)
+    let delta = @CatXf.whisker_right_nat_trans(F_eta, G) in      -- FηG : F G -> F G F G
+    -- Note: The exact CatXf functions might differ.
+    -- delta should have type: W -> W ∘ W which is F G -> F G F G
+
+    -- 4. Construct the Comonad (using @CAV types)
+    --    Need extract = counit's component map, duplicate = delta's component map
+    --    This assumes @CAV.comonad can be built from Functor, counit NatTrans, duplicate NatTrans
+    --    Or we might need a specific constructor in @CAV
+    let comonad = @CAV.comonad_from_adjunction(
+        adj.name + "-Comonad",
+        W_functor,     -- The functor W = F ∘ G
+        comonad_counit, -- The natural transformation ε: W -> Id
+        delta          -- The natural transformation δ: W -> W ∘ W
+    ) in
+
+    -- 5. Verify comonad laws (should hold if adjunction laws hold)
+    let verified = @CAV.check_comonad_laws(comonad) in
+
+    {
+      _type: "AdjunctionToComonadMap",
+      adjunction: adj,
+      resulting_comonad: comonad,
+      mapping_verified: verified
+    }
+  ]
+
+  --[[
+    adjunction_to_wire transforms an adjunction into a wire diagram representation.
+    Uses helper functions from @WireXf if available, or defines a basic structure.
+  ]]--
+  adjunction_to_wire: @Adjunction.!Adjunction -> !AdjunctionToWireMap [
+    adj ->
+    -- Check if a specific adjunction diagram function exists in WireXf
+    let diagram = if @WireXf.has("adjunction_diagram") then
+        @WireXf.adjunction_diagram(adj) -- Assuming WireXf has a dedicated function
+      else
+        -- Fallback: create a simple diagram
+        let F = @Adjunction.left_adjoint(adj) in
+        let G = @Adjunction.right_adjoint(adj) in
+        let boxF = @Wire.create_box("F: " + F.source_category.name + " -> " + F.target_category.name, [], []) in
+        let boxG = @Wire.create_box("G: " + G.source_category.name + " -> " + G.target_category.name, [], []) in
+        let symbol_box = @Wire.create_box("⊣", [], [], ?None, ?None) -- Adjunction symbol
+        -- Basic positioning (needs improvement)
+        let boxF = @Wire.set_box_position(boxF, 0.0, 1.0) in
+        let boxG = @Wire.set_box_position(boxG, 2.0, 1.0) in
+        let symbol_box = @Wire.set_box_position(symbol_box, 1.0, 0.0) in
+        -- Wires representing the relationship (e.g., between F and G via symbol)
+        let wire1 = @Wire.connect(boxF, symbol_box, T.Any) in
+        let wire2 = @Wire.connect(symbol_box, boxG, T.Any) in
+        @Wire.create_diagram([boxF, boxG, symbol_box], [wire1, wire2], [], [])
+    in
+
+    -- Apply layout
+    let laid_out_diagram = @Wire.auto_layout(diagram) in
+
+    {
+      _type: "AdjunctionToWireMap",
+      adjunction: adj,
+      wire_diagram: laid_out_diagram,
+      layout_applied: true
+    }
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping (Conceptual)
+  --------------------------------------------------
+
+  --[[
+    Structure mapping for Adjunction Transformations.
+
+    The primary role here is to define the transformations themselves.
+    We could potentially define a category where objects are Adjunctions
+    and morphisms are transformations preserving the adjunction structure,
+    but that's highly complex.
+
+    The 'structure' block here focuses on the validity of the defined mappings.
+  ]]--
+  structure: {
+    law: {
+      monad_derivation: [map ->
+        -- Check if the derived monad from the map satisfies monad laws
+        @Kleisli.check_monad_laws(map.resulting_monad)
+      ],
+      comonad_derivation: [map ->
+        -- Check if the derived comonad from the map satisfies comonad laws
+        @CAV.check_comonad_laws(map.resulting_comonad)
+      ],
+      wire_representation: [map ->
+        -- Basic check: does the wire diagram have nodes related to F and G?
+        let names = map.wire_diagram.boxes |> map [b -> b.label] in
+        let hasF = names |> exists [n -> n |> contains(map.adjunction.left_functor.name)] in
+        let hasG = names |> exists [n -> n |> contains(map.adjunction.right_functor.name)] in
+        hasF && hasG
+      ]
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    --[[
+      Example: Derive Monad from Product-Diagonal Adjunction
+    ]]--
+    prod_diag_to_monad: () -> ?(!AdjunctionToMonadMap) [ ->
+      let maybe_adj = @Adjunction.example.product_diagonal_adjunction() in
+      match maybe_adj with
+        | ?Some(adj) -> ?Some(adjunction_to_monad(adj)) -- Should yield the State monad (or similar)
+        | ?None -> ?None
+    ],
+
+    --[[
+      Example: Derive Comonad from Product-Diagonal Adjunction
+    ]]--
+    prod_diag_to_comonad: () -> ?(!AdjunctionToComonadMap) [ ->
+      let maybe_adj = @Adjunction.example.product_diagonal_adjunction() in
+      match maybe_adj with
+        | ?Some(adj) -> ?Some(adjunction_to_comonad(adj)) -- Should yield the Costate comonad (Store/Env)
+        | ?None -> ?None
+    ],
+
+    --[[
+      Example: Derive Monad from Free-Forgetful Adjunction
+    ]]--
+    free_forgetful_to_monad: () -> ?(!AdjunctionToMonadMap) [ ->
+      let maybe_adj = @Adjunction.example.free_forgetful_adjunction() in
+      match maybe_adj with
+        | ?Some(adj) -> ?Some(adjunction_to_monad(adj)) -- Should yield the Free Monoid monad
+        | ?None -> ?None
+    ]
+
+    -- Add wire diagram examples if desired
+  }
+} 

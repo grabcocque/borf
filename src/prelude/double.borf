@@ -1,0 +1,297 @@
+--[[
+  Double Categories
+
+  This module defines double categories, a higher-dimensional categorical structure.
+  A double category D consists of:
+  - Objects (0-cells)
+  - Horizontal morphisms (1-cells)
+  - Vertical morphisms (1-cells)
+  - Squares (2-cells) bounded by horizontal and vertical morphisms.
+
+  It involves multiple composition operations (horizontal, vertical, globular)
+  and associated coherence laws (associativity, identity, interchange).
+
+  Notation:
+  - Horizontal morphism f: A -> B
+  - Vertical morphism u: A -> C
+  - Square α: (f, g, u, v) where f:A->B, u:A->C, g:C->D, v:B->D
+    Top: f, Bottom: g, Left: u, Right: v
+    Source object: A, Target object: D
+    Horizontal source/target: A, B
+    Vertical source/target: A, C
+
+     A --f--> B
+     |        |
+     u        v
+     |        |
+     V        V
+     C --g--> D
+
+  Requires careful handling of domains, codomains, and composition rules.
+]]--
+
+@Double: {
+  typ: {
+    !DoubleCategory
+    !DCObject -- 0-cells
+    !DCHorizontalMorphism -- 1-cells (horizontal)
+    !DCVerticalMorphism -- 1-cells (vertical)
+    !DCSquare -- 2-cells
+  }
+
+  op: {
+    ∘h -- Horizontal composition of horizontal morphisms
+    ∘v -- Vertical composition of vertical morphisms
+    ⋆h -- Horizontal composition of squares
+    ⋆v -- Vertical composition of squares
+    -- Identity morphisms/squares are usually functions/constants
+  }
+
+  fn: {
+    -- Core structure functions
+    double_category
+    object
+    horizontal_morphism
+    vertical_morphism
+    square
+
+    -- Composition functions
+    compose_h_morph -- f' ∘h f
+    compose_v_morph -- u' ∘v u
+    compose_h_square -- α' ⋆h α
+    compose_v_square -- α' ⋆v α
+
+    -- Identity functions
+    id_h -- Identity horizontal morphism for an object
+    id_v -- Identity vertical morphism for an object
+    id_square_h -- Identity square for a horizontal morphism (degenerate square)
+    id_square_v -- Identity square for a vertical morphism (degenerate square)
+
+    -- Source/Target functions
+    source_h -- Source object of a horizontal morphism
+    target_h -- Target object of a horizontal morphism
+    source_v -- Source object of a vertical morphism
+    target_v -- Target object of a vertical morphism
+    source_obj_sq -- Source object of a square (top-left)
+    target_obj_sq -- Target object of a square (bottom-right)
+    top_sq    -- Top horizontal morphism of a square
+    bottom_sq -- Bottom horizontal morphism of a square
+    left_sq   -- Left vertical morphism of a square
+    right_sq  -- Right vertical morphism of a square
+
+    -- Verification
+    check_double_category_laws
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Double, @Cat, true), -- Base category concepts useful
+    (@Double, @Linear, true),
+    (@Double, @T, true)
+  }
+
+  --------------------------------------------------
+  -- Core Double Category Types
+  --------------------------------------------------
+
+  !DCObject: { _type: "DCObject", name: S }
+  !DCHorizontalMorphism: { _type: "DCHorizontalMorphism", name: S, source: !DCObject, target: !DCObject }
+  !DCVerticalMorphism: { _type: "DCVerticalMorphism", name: S, source: !DCObject, target: !DCObject }
+
+  !DCSquare: {
+    _type: "DCSquare",
+    name: S,
+    top: !DCHorizontalMorphism,    -- f: A -> B
+    bottom: !DCHorizontalMorphism, -- g: C -> D
+    left: !DCVerticalMorphism,     -- u: A -> C
+    right: !DCVerticalMorphism,    -- v: B -> D
+    -- Consistency check: left.target == bottom.source AND top.target == right.source
+    -- Consistency check: left.source == top.source AND right.target == bottom.target
+    source_obj: !DCObject, -- A
+    target_obj: !DCObject  -- D
+  }
+
+  !DoubleCategory: {
+    _type: "DoubleCategory",
+    name: S,
+    objects: [!DCObject],
+    horizontal_morphisms: [!DCHorizontalMorphism],
+    vertical_morphisms: [!DCVerticalMorphism],
+    squares: [!DCSquare],
+
+    -- Function references for operations (or implemented directly)
+    compose_h_morph_fn: (!DCHorizontalMorphism * !DCHorizontalMorphism -> !DCHorizontalMorphism),
+    compose_v_morph_fn: (!DCVerticalMorphism * !DCVerticalMorphism -> !DCVerticalMorphism),
+    compose_h_square_fn: (!DCSquare * !DCSquare -> !DCSquare), -- α' ⋆h α
+    compose_v_square_fn: (!DCSquare * !DCSquare -> !DCSquare), -- α' ⋆v α
+    id_h_fn: (!DCObject -> !DCHorizontalMorphism),
+    id_v_fn: (!DCObject -> !DCVerticalMorphism),
+    id_square_h_fn: (!DCHorizontalMorphism -> !DCSquare), -- id_f
+    id_square_v_fn: (!DCVerticalMorphism -> !DCSquare), -- id_u
+
+    laws_satisfied: Bool
+  }
+
+  --------------------------------------------------
+  -- Core Functions (Constructors and Operations)
+  --------------------------------------------------
+
+  -- Basic constructors (implementation depends on specific double category)
+  object: S -> !DCObject [{ name: name }]
+  horizontal_morphism: S * !DCObject * !DCObject -> !DCHorizontalMorphism [...]
+  vertical_morphism: S * !DCObject * !DCObject -> !DCVerticalMorphism [...]
+  square: S * !DCHorizontalMorphism * !DCHorizontalMorphism * !DCVerticalMorphism * !DCVerticalMorphism -> !DCSquare [
+     name f g u v ->
+     -- Check boundary consistency
+     let A = f.source in let B = f.target in
+     let C = u.target in let D = v.target in
+     if not (u.source == A && v.source == B && g.source == C && g.target == D) {
+        error("Square boundaries mismatch for " + name)
+     }
+     {
+        _type: "DCSquare", name: name,
+        top: f, bottom: g, left: u, right: v,
+        source_obj: A, target_obj: D
+     }
+  ]
+
+  -- Composition wrappers (calling functions from the category record)
+  compose_h_morph: !DoubleCategory * !DCHorizontalMorphism * !DCHorizontalMorphism -> !DCHorizontalMorphism [
+    dc f' f -> dc.compose_h_morph_fn(f', f)
+  ]
+  compose_v_morph: !DoubleCategory * !DCVerticalMorphism * !DCVerticalMorphism -> !DCVerticalMorphism [
+    dc u' u -> dc.compose_v_morph_fn(u', u)
+  ]
+  compose_h_square: !DoubleCategory * !DCSquare * !DCSquare -> !DCSquare [
+    dc alpha' alpha -> dc.compose_h_square_fn(alpha', alpha)
+  ]
+  compose_v_square: !DoubleCategory * !DCSquare * !DCSquare -> !DCSquare [
+    dc alpha' alpha -> dc.compose_v_square_fn(alpha', alpha)
+  ]
+
+  -- Identity wrappers
+  id_h: !DoubleCategory * !DCObject -> !DCHorizontalMorphism [ dc obj -> dc.id_h_fn(obj) ]
+  id_v: !DoubleCategory * !DCObject -> !DCVerticalMorphism [ dc obj -> dc.id_v_fn(obj) ]
+  id_square_h: !DoubleCategory * !DCHorizontalMorphism -> !DCSquare [ dc f -> dc.id_square_h_fn(f) ]
+  id_square_v: !DoubleCategory * !DCVerticalMorphism -> !DCSquare [ dc u -> dc.id_square_v_fn(u) ]
+
+  -- Operator aliases
+  ∘h: !DoubleCategory * !DCHorizontalMorphism * !DCHorizontalMorphism -> !DCHorizontalMorphism = compose_h_morph
+  ∘v: !DoubleCategory * !DCVerticalMorphism * !DCVerticalMorphism -> !DCVerticalMorphism = compose_v_morph
+  ⋆h: !DoubleCategory * !DCSquare * !DCSquare -> !DCSquare = compose_h_square
+  ⋆v: !DoubleCategory * !DCSquare * !DCSquare -> !DCSquare = compose_v_square
+
+  -- Source/Target accessors
+  source_h: !DCHorizontalMorphism -> !DCObject [ f -> f.source ]
+  target_h: !DCHorizontalMorphism -> !DCObject [ f -> f.target ]
+  source_v: !DCVerticalMorphism -> !DCObject [ u -> u.source ]
+  target_v: !DCVerticalMorphism -> !DCObject [ u -> u.target ]
+  source_obj_sq: !DCSquare -> !DCObject [ alpha -> alpha.source_obj ]
+  target_obj_sq: !DCSquare -> !DCObject [ alpha -> alpha.target_obj ]
+  top_sq: !DCSquare -> !DCHorizontalMorphism [ alpha -> alpha.top ]
+  bottom_sq: !DCSquare -> !DCHorizontalMorphism [ alpha -> alpha.bottom ]
+  left_sq: !DCSquare -> !DCVerticalMorphism [ alpha -> alpha.left ]
+  right_sq: !DCSquare -> !DCVerticalMorphism [ alpha -> alpha.right ]
+
+
+  --[[
+    double_category constructor - Takes components and checks laws.
+    This is a high-level constructor; actual implementations might build these functions.
+  ]]--
+  double_category: S * [...] -> !DoubleCategory [
+     name components ->
+     -- ... construct the category record ...
+     let dc = { ... components ... } in
+     let laws_ok = check_double_category_laws(dc) in
+     { ... dc, laws_satisfied: laws_ok }
+  ]
+
+  --[[
+    check_double_category_laws: Verifies all associativity, identity, and interchange laws.
+    This is highly complex and involves checking compositions like:
+    - (f'' ∘h f') ∘h f = f'' ∘h (f' ∘h f)
+    - (u'' ∘v u') ∘v u = u'' ∘v (u' ∘v u)
+    - Identity laws for ∘h, ∘v
+    - (α'' ⋆h α') ⋆h α = α'' ⋆h (α' ⋆h α)
+    - (α'' ⋆v α') ⋆v α = α'' ⋆v (α' ⋆v α)
+    - Identity laws for ⋆h, ⋆v (using id_square_h, id_square_v)
+    - Interchange Law: (β' ⋆h β) ⋆v (α' ⋆h α) = (β' ⋆v α') ⋆h (β ⋆v α)
+  ]]--
+  check_double_category_laws: !DoubleCategory -> Bool [
+    dc ->
+    -- Placeholder: requires extensive checks over all components.
+    true
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping
+  --------------------------------------------------
+
+  --[[
+    Structure mapping for Double Categories.
+    Defines the expected components and the laws they must satisfy.
+  ]]--
+  structure: {
+    components: {
+      objects: !DCObject,
+      horizontal_morphisms: !DCHorizontalMorphism,
+      vertical_morphisms: !DCVerticalMorphism,
+      squares: !DCSquare,
+      compose_h_morph: (!DCHorizontalMorphism * !DCHorizontalMorphism -> !DCHorizontalMorphism),
+      compose_v_morph: (!DCVerticalMorphism * !DCVerticalMorphism -> !DCVerticalMorphism),
+      compose_h_square: (!DCSquare * !DCSquare -> !DCSquare),
+      compose_v_square: (!DCSquare * !DCSquare -> !DCSquare),
+      id_h: (!DCObject -> !DCHorizontalMorphism),
+      id_v: (!DCObject -> !DCVerticalMorphism),
+      id_square_h: (!DCHorizontalMorphism -> !DCSquare),
+      id_square_v: (!DCVerticalMorphism -> !DCSquare)
+      -- source/target functions assumed based on types
+    },
+
+    law: {
+      h_morph_assoc: [dc f'' f' f -> (f'' ∘h f') ∘h f == f'' ∘h (f' ∘h f)],
+      v_morph_assoc: [dc u'' u' u -> (u'' ∘v u') ∘v u == u'' ∘v (u' ∘v u)],
+      h_morph_id_left: [dc f -> id_h(source_h(f)) ∘h f == f],
+      h_morph_id_right: [dc f -> f ∘h id_h(target_h(f)) == f],
+      v_morph_id_left: [dc u -> id_v(source_v(u)) ∘v u == u],
+      v_morph_id_right: [dc u -> u ∘v id_v(target_v(u)) == u],
+
+      h_square_assoc: [dc α'' α' α -> (α'' ⋆h α') ⋆h α == α'' ⋆h (α' ⋆h α)],
+      v_square_assoc: [dc α'' α' α -> (α'' ⋆v α') ⋆v α == α'' ⋆v (α' ⋆v α)],
+      h_square_id_left: [dc α -> id_square_v(left_sq(α)) ⋆h α == α], -- Uses vertical identity square
+      h_square_id_right: [dc α -> α ⋆h id_square_v(right_sq(α)) == α],
+      v_square_id_left: [dc α -> id_square_h(top_sq(α)) ⋆v α == α], -- Uses horizontal identity square
+      v_square_id_right: [dc α -> α ⋆v id_square_h(bottom_sq(α)) == α],
+
+      interchange: [dc α β α' β' -> -- where shapes match for (β'⋆hβ)⋆v(α'⋆hα)
+         (β' ⋆h β) ⋆v (α' ⋆h α) == (β' ⋆v α') ⋆h (β ⋆v α)
+      ]
+      -- Plus boundary condition checks for all compositions.
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    --[[ Example: Double category of categories, functors, and natural transformations ]]
+    -- Objects: Categories
+    -- Horizontal Morphisms: Functors
+    -- Vertical Morphisms: Functors
+    -- Squares: Natural transformations α: G ∘ F' -> F ∘ G'
+    -- where F: A->B, G: B->C (Vertical), F': A->A', G': A'->B' (Horizontal)
+    -- Requires careful definition of compositions.
+    CatDbl: () -> ?(!DoubleCategory) [ -> ?None ],
+
+    --[[ Example: Double category of commutative squares in a category C ]]
+    -- Objects: Objects of C
+    -- Horizontal Morphisms: Morphisms of C
+    -- Vertical Morphisms: Morphisms of C
+    -- Squares: Commutative squares v ∘ f = g ∘ u in C
+    SquareCat: (@Cat.!Category) -> ?(!DoubleCategory) [ cat -> ?None ]
+  }
+} 

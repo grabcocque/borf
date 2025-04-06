@@ -1,0 +1,225 @@
+--[[
+  Kan Extensions
+
+  This module defines Kan extensions, a fundamental concept in category theory
+  for extending functors along other functors.
+
+  Given functors F: A -> C and K: A -> B:
+  - Left Kan Extension (Lan K F): A functor L: B -> C and a natural transformation
+    α: F -> L ∘ K, such that for any other pair (M: B -> C, β: F -> M ∘ K),
+    there exists a unique natural transformation σ: L -> M with β = (σ ∘ K) ∘ α.
+
+      F --α--> L K
+      | \      /
+      β  \ σK /
+          V  /
+          M K
+
+  - Right Kan Extension (Ran K F): A functor R: B -> C and a natural transformation
+    ε: R ∘ K -> F, such that for any other pair (M: B -> C, δ: M ∘ K -> F),
+    there exists a unique natural transformation τ: M -> R with δ = ε ∘ (τ ∘ K).
+
+      M K --δ--> F
+       \      /
+     τK \    / ε
+         V  /
+         R K
+
+  Implementation requires defining natural transformations between composed functors
+  and potentially higher-order quantification for the universal property.
+]]--
+
+@Kan: {
+  typ: {
+    !LeftKanExtension
+    !RightKanExtension
+  }
+
+  op: {
+    -- Inherited ops
+  }
+
+  fn: {
+    -- Core functions
+    left_kan_extension -- Computes/represents Lan K F
+    right_kan_extension -- Computes/represents Ran K F
+    lan_functor -- Extracts L from Lan K F
+    ran_functor -- Extracts R from Ran K F
+    lan_unit -- Extracts α from Lan K F
+    ran_counit -- Extracts ε from Ran K F
+    lan_universal_map -- Computes σ for Lan K F
+    ran_universal_map -- Computes τ for Ran K F
+
+    -- Verification
+    check_lan_property
+    check_ran_property
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Kan, @Cat, true),     -- Depends on Category
+    (@Kan, @CatXf, true),   -- Depends on Functors, Natural Transformations
+    (@Kan, @Linear, true),
+    (@Kan, @T, true)
+  }
+
+  --------------------------------------------------
+  -- Core Kan Extension Types
+  --------------------------------------------------
+
+  --[[
+    !LeftKanExtension represents the left Kan extension Lan K F.
+    Includes the functor L: B -> C and the universal transformation α: F -> L ∘ K.
+  ]]--
+  !LeftKanExtension: {
+    _type: "LeftKanExtension",
+    F: @CatXf.!Functor, -- Functor F: A -> C
+    K: @CatXf.!Functor, -- Functor K: A -> B
+    L: @CatXf.!Functor, -- The extension functor L: B -> C (Lan K F)
+    alpha: @CatXf.!NaturalTransformation, -- Universal transformation α: F -> L ∘ K
+    is_universal: Bool -- Whether the universal property holds
+  }
+
+  --[[
+    !RightKanExtension represents the right Kan extension Ran K F.
+    Includes the functor R: B -> C and the universal transformation ε: R ∘ K -> F.
+  ]]--
+  !RightKanExtension: {
+    _type: "RightKanExtension",
+    F: @CatXf.!Functor, -- Functor F: A -> C
+    K: @CatXf.!Functor, -- Functor K: A -> B
+    R: @CatXf.!Functor, -- The extension functor R: B -> C (Ran K F)
+    epsilon: @CatXf.!NaturalTransformation, -- Universal transformation ε: R ∘ K -> F
+    is_universal: Bool -- Whether the universal property holds
+  }
+
+  --------------------------------------------------
+  -- Core Functions
+  --------------------------------------------------
+
+  --[[
+    left_kan_extension computes/constructs the left Kan extension.
+    Existence is guaranteed under certain conditions (e.g., if A is small and C is cocomplete).
+    The actual computation can be complex (e.g., via colimits).
+  ]]--
+  left_kan_extension: @CatXf.!Functor * @CatXf.!Functor -> ?(!LeftKanExtension) [
+    F K ->
+    -- Check functor domains/codomains: F: A -> C, K: A -> B
+    if F.source_category != K.source_category {
+      error("Source categories for F and K must match for Kan extension.")
+      ?None
+    }
+    -- Placeholder: Assume construction exists or is provided by the category system.
+    -- let (L, alpha) = @Cat.compute_lan(F, K) in
+    -- let universal = check_lan_property(F, K, L, alpha) in
+    -- ?Some({ _type: "LeftKanExtension", F: F, K: K, L: L, alpha: alpha, is_universal: universal })
+    ?None
+  ]
+
+  --[[
+    right_kan_extension computes/constructs the right Kan extension.
+    Existence is guaranteed under certain conditions (e.g., if A is small and C is complete).
+    Computation often involves limits.
+  ]]--
+  right_kan_extension: @CatXf.!Functor * @CatXf.!Functor -> ?(!RightKanExtension) [
+    F K ->
+    -- Check functor domains/codomains: F: A -> C, K: A -> B
+    if F.source_category != K.source_category {
+      error("Source categories for F and K must match for Kan extension.")
+      ?None
+    }
+    -- Placeholder: Assume construction exists.
+    -- let (R, epsilon) = @Cat.compute_ran(F, K) in
+    -- let universal = check_ran_property(F, K, R, epsilon) in
+    -- ?Some({ _type: "RightKanExtension", F: F, K: K, R: R, epsilon: epsilon, is_universal: universal })
+    ?None
+  ]
+
+  -- Accessors
+  lan_functor: !LeftKanExtension -> @CatXf.!Functor [ lan -> lan.L ]
+  ran_functor: !RightKanExtension -> @CatXf.!Functor [ ran -> ran.R ]
+  lan_unit: !LeftKanExtension -> @CatXf.!NaturalTransformation [ lan -> lan.alpha ]
+  ran_counit: !RightKanExtension -> @CatXf.!NaturalTransformation [ ran -> ran.epsilon ]
+
+  --[[
+    lan_universal_map computes the unique σ: L -> M given M and β: F -> M ∘ K.
+    σ is the mediating map guaranteed by the universal property of Lan K F.
+  ]]--
+  lan_universal_map: !LeftKanExtension * @CatXf.!Functor * @CatXf.!NaturalTransformation -> ?(@CatXf.!NaturalTransformation) [
+    lan M beta ->
+    -- Check domains/codomains of M and beta
+    -- Placeholder: Relies on category-specific computation or proof.
+    ?None
+  ]
+
+  --[[
+    ran_universal_map computes the unique τ: M -> R given M and δ: M ∘ K -> F.
+    τ is the mediating map guaranteed by the universal property of Ran K F.
+  ]]--
+  ran_universal_map: !RightKanExtension * @CatXf.!Functor * @CatXf.!NaturalTransformation -> ?(@CatXf.!NaturalTransformation) [
+    ran M delta ->
+    -- Check domains/codomains of M and delta
+    -- Placeholder: Relies on category-specific computation or proof.
+    ?None
+  ]
+
+  -- Verification (Placeholders - very complex)
+  check_lan_property: @CatXf.!Functor * @CatXf.!Functor * @CatXf.!Functor * @CatXf.!NaturalTransformation -> Bool [
+    F K L alpha -> true
+  ]
+  check_ran_property: @CatXf.!Functor * @CatXf.!Functor * @CatXf.!Functor * @CatXf.!NaturalTransformation -> Bool [
+    F K R epsilon -> true
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping
+  --------------------------------------------------
+
+  --[[
+    Structure mapping for Kan Extensions.
+    Defines the components and the universal property law.
+  ]]--
+  structure: {
+    components: {
+      -- Left Kan
+      Lan: { F: Functor, K: Functor, L: Functor, alpha: NatTrans },
+      -- Right Kan
+      Ran: { F: Functor, K: Functor, R: Functor, epsilon: NatTrans }
+    },
+    law: {
+      lan_universal: [lan ->
+         -- For all M: B->C, beta: F -> M K, exists unique sigma: L -> M s.t. beta = (sigma K) . alpha
+         lan.is_universal
+      ],
+      ran_universal: [ran ->
+         -- For all M: B->C, delta: M K -> F, exists unique tau: M -> R s.t. delta = epsilon . (tau K)
+         ran.is_universal
+      ]
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    --[[ Example: Kan extension related to Adjunctions ]]
+    -- If G: D -> C has a left adjoint F: C -> D (F ⊣ G), then:
+    -- - Ran G Id_C = F
+    -- - Lan F Id_C = G
+    adjunction_as_kan: (@Adjunction.!Adjunction) -> ?(!RightKanExtension * !LeftKanExtension) [ adj ->
+      -- let F = @Adjunction.left_adjoint(adj) in
+      -- let G = @Adjunction.right_adjoint(adj) in
+      -- let C = F.source_category in
+      -- let D = G.source_category in
+      -- let IdC = @CatXf.identity_functor(C) in
+      -- let IdD = @CatXf.identity_functor(D) in
+      -- let ran_G_IdC = right_kan_extension(IdC, G) -- Should yield F, epsilon = counit
+      -- let lan_F_IdC = left_kan_extension(IdC, F)  -- Should yield G, alpha = unit
+      ?None -- Placeholder
+    ]
+  }
+} 

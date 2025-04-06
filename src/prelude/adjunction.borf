@@ -1,0 +1,279 @@
+--[[
+  Adjunctions
+
+  This module defines adjunctions between categories. An adjunction consists
+  of a pair of functors F: C -> D (left adjoint) and G: D -> C (right adjoint),
+  along with natural transformations η: Id_C -> G ∘ F (unit) and
+  ε: F ∘ G -> Id_D (counit), satisfying the triangle identities.
+
+  Linear types are used for precise composition and resource tracking.
+]]--
+
+@Adjunction: {
+  typ: {
+    !Adjunction
+    !UnitTransformation  -- Represents the unit η
+    !CounitTransformation -- Represents the counit ε
+  }
+
+  op: {
+    -- Composition operators inherited from Cat/Functor if needed
+  }
+
+  fn: {
+    -- Core functions
+    adjunction
+    left_adjoint
+    right_adjoint
+    unit
+    counit
+
+    -- Verification functions
+    check_triangle_laws
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Adjunction, @Cat, true),     -- Depends on Category definition
+    (@Adjunction, @CatXf, true),   -- Depends on Functors, Natural Transformations
+    (@Adjunction, @Linear, true),  -- Depends on Linear types
+    (@Adjunction, @T, true)        -- Depends on Type system
+  }
+
+  --------------------------------------------------
+  -- Core Adjunction Types
+  --------------------------------------------------
+
+  --[[
+    !UnitTransformation represents the unit η: Id_C -> G ∘ F
+    It's a natural transformation where the source functor is Id_C
+    and the target functor is the composition G ∘ F.
+  ]]--
+  !UnitTransformation: {
+    _type: "UnitTransformation",
+    base: @CatXf.!NaturalTransformation -- Inherits from NaturalTransformation
+    -- components: (c -> (Id_C c -o> (G (F c)))) -- Explicit type signature
+  }
+
+  --[[
+    !CounitTransformation represents the counit ε: F ∘ G -> Id_D
+    It's a natural transformation where the source functor is F ∘ G
+    and the target functor is Id_D.
+  ]]--
+  !CounitTransformation: {
+    _type: "CounitTransformation",
+    base: @CatXf.!NaturalTransformation -- Inherits from NaturalTransformation
+    -- components: (d -> ((F (G d)) -o> Id_D d)) -- Explicit type signature
+  }
+
+  --[[
+    !Adjunction represents an adjunction F ⊣ G between categories C and D.
+  ]]--
+  !Adjunction: {
+    _type: "Adjunction",
+    name: S,
+    left_functor: @CatXf.!Functor,     -- F: C -> D
+    right_functor: @CatXf.!Functor,    -- G: D -> C
+    unit_transform: !UnitTransformation,    -- η: Id_C -> G ∘ F
+    counit_transform: !CounitTransformation, -- ε: F ∘ G -> Id_D
+    laws_satisfied: Bool                -- Whether triangle identities hold
+  }
+
+  --------------------------------------------------
+  -- Core Functions
+  --------------------------------------------------
+
+  --[[
+    adjunction creates a new adjunction record.
+    Requires verification that F/G are functors between the correct categories
+    and that η/ε are valid natural transformations with correct domains/codomains.
+  ]]--
+  adjunction: S * @CatXf.!Functor * @CatXf.!Functor * !UnitTransformation * !CounitTransformation -> !Adjunction [
+    name F G eta epsilon ->
+    -- Basic validation (more rigorous checks needed in a full implementation)
+    let C = F.source_category in
+    let D = F.target_category in
+    let G_source_ok = G.source_category == D in
+    let G_target_ok = G.target_category == C in
+    -- Check domains/codomains of eta and epsilon components match F and G properly
+    -- ...
+
+    if not G_source_ok or not G_target_ok {
+      error("Functor domains/codomains mismatch for adjunction " + name)
+    }
+
+    let laws_ok = check_triangle_laws(F, G, eta, epsilon) in
+
+    {
+      _type: "Adjunction",
+      name: name,
+      left_functor: F,
+      right_functor: G,
+      unit_transform: eta,
+      counit_transform: epsilon,
+      laws_satisfied: laws_ok
+    }
+  ]
+
+  --[[
+    left_adjoint extracts the left adjoint functor F.
+  ]]--
+  left_adjoint: !Adjunction -> @CatXf.!Functor [
+    adj -> adj.left_functor
+  ]
+
+  --[[
+    right_adjoint extracts the right adjoint functor G.
+  ]]--
+  right_adjoint: !Adjunction -> @CatXf.!Functor [
+    adj -> adj.right_functor
+  ]
+
+  --[[
+    unit extracts the unit natural transformation η.
+  ]]--
+  unit: !Adjunction -> !UnitTransformation [
+    adj -> adj.unit_transform
+  ]
+
+  --[[
+    counit extracts the counit natural transformation ε.
+  ]]--
+  counit: !Adjunction -> !CounitTransformation [
+    adj -> adj.counit_transform
+  ]
+
+  --[[
+    check_triangle_laws verifies the triangle identities.
+    1. (Gε) ∘ (ηG) = id_G   (ε is counit, η is unit)
+       Naturality square for ε at morphism g: d1 -> d2 gives: G(ε_{d2}) ∘ G(F(G(g))) = G(g) ∘ G(ε_{d1})
+       Naturality square for η at morphism G(g): G(d1) -> G(d2) gives: G(F(G(g))) ∘ η_{G(d1)} = η_{G(d2)} ∘ G(g)
+       Triangle Law 1: For any object d in D, G(ε_d) ∘ η_{G(d)} = id_{G(d)}
+
+    2. (εF) ∘ (Fη) = id_F
+       Naturality square for η at morphism f: c1 -> c2 gives: G(F(f)) ∘ η_{c1} = η_{c2} ∘ f
+       Naturality square for ε at morphism F(f): F(c1) -> F(c2) gives: ε_{F(c2)} ∘ F(G(F(f))) = F(f) ∘ ε_{F(c1)}
+       Triangle Law 2: For any object c in C, ε_{F(c)} ∘ F(η_c) = id_{F(c)}
+
+    This requires applying functor actions (F, G) to natural transformations (η, ε)
+    and composing natural transformations vertically (∘). Assumes CatXf provides these.
+  ]]--
+  check_triangle_laws: @CatXf.!Functor * @CatXf.!Functor * !UnitTransformation * !CounitTransformation -> Bool [
+    F G eta epsilon ->
+    let C = F.source_category in
+    let D = F.target_category in
+
+    -- Need functions from @CatXf like:
+    -- apply_functor_to_nat_trans: Functor * NaturalTransformation -> NaturalTransformation
+    -- vertical_compose_nat_trans: NaturalTransformation * NaturalTransformation -> NaturalTransformation
+    -- identity_nat_trans: Functor -> NaturalTransformation
+
+    let G_epsilon = @CatXf.apply_functor_to_nat_trans(G, epsilon.base) in
+    let eta_G = @CatXf.whisker_right_nat_trans(eta.base, G) in -- η_{G(d)} : G(d) -> G(F(G(d)))
+    let law1_lhs = @CatXf.vertical_compose_nat_trans(G_epsilon, eta_G) in
+    let law1_rhs = @CatXf.identity_nat_trans(G) in
+    let law1_holds = law1_lhs == law1_rhs in -- Equality check for Nat Trans
+
+    let epsilon_F = @CatXf.whisker_left_nat_trans(F, epsilon.base) in -- ε_{F(c)} : F(G(F(c))) -> F(c)
+    let F_eta = @CatXf.apply_functor_to_nat_trans(F, eta.base) in
+    let law2_lhs = @CatXf.vertical_compose_nat_trans(epsilon_F, F_eta) in
+    let law2_rhs = @CatXf.identity_nat_trans(F) in
+    let law2_holds = law2_lhs == law2_rhs in -- Equality check for Nat Trans
+
+    law1_holds && law2_holds
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping to Category
+  --------------------------------------------------
+
+  --[[
+    Structure mapping for Adjunctions.
+
+    Defining a standard category *of* adjunctions is complex.
+    Commonly, one considers:
+    1. A fixed pair of categories (C, D), objects are adjunctions F ⊣ G between C and D.
+       Morphisms are pairs of natural transformations (α: F -> F', β: G' -> G) satisfying certain conditions.
+    2. 2-Category Adj where objects are categories, 1-morphisms are functors,
+       and 2-morphisms are natural transformations. Adjunctions are specific structures within this.
+
+    For simplicity here, we won't define a full categorical structure *for* adjunctions themselves,
+    as they *relate* two existing categories via functors and natural transformations.
+    The core definition and laws capture their essence.
+  ]]--
+  structure: {
+    -- Adjunctions relate categories, rather than forming a simple category themselves.
+    -- The 'laws_satisfied' field ensures the core structure holds.
+    -- Objects: N/A (Adjunctions are structure *between* categories)
+    -- Morphisms: N/A
+    -- id: N/A
+    -- compose: N/A
+    law: {
+      triangle1: [adj ->
+        let F = left_adjoint(adj) in
+        let G = right_adjoint(adj) in
+        let eta = unit(adj) in
+        let epsilon = counit(adj) in
+        -- (Gε) ∘ (ηG) = id_G
+        @CatXf.vertical_compose_nat_trans(
+          @CatXf.apply_functor_to_nat_trans(G, epsilon.base),
+          @CatXf.whisker_right_nat_trans(eta.base, G)
+        ) == @CatXf.identity_nat_trans(G)
+      ],
+      triangle2: [adj ->
+        let F = left_adjoint(adj) in
+        let G = right_adjoint(adj) in
+        let eta = unit(adj) in
+        let epsilon = counit(adj) in
+        -- (εF) ∘ (Fη) = id_F
+        @CatXf.vertical_compose_nat_trans(
+          @CatXf.whisker_left_nat_trans(F, epsilon.base),
+          @CatXf.apply_functor_to_nat_trans(F, eta.base)
+        ) == @CatXf.identity_nat_trans(F)
+      ]
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    --[[
+      Example: Product ⊣ Diagonal Adjunction (in Set or a CCC)
+      Requires Product functor (Prod: C x C -> C) and Diagonal functor (Δ: C -> C x C).
+      Needs unit η: Id -> Δ ∘ Prod and counit ε: Prod ∘ Δ -> Id.
+      This requires specific definitions from @CCC or @Monoidal.
+    ]]--
+    product_diagonal_adjunction: () -> ?(!Adjunction) [ ->
+      -- Assume we have Prod, Δ functors from @CCC
+      -- Assume we have η, ε transformations defined correctly
+      -- let F = @CCC.product_functor in
+      -- let G = @CCC.diagonal_functor in
+      -- let eta = @CCC.product_diagonal_unit in
+      -- let epsilon = @CCC.product_diagonal_counit in
+      -- adjunction("Prod-Diag", F, G, eta, epsilon)
+      ?None -- Placeholder until dependencies are fully available/defined
+    ],
+
+    --[[
+      Example: Free ⊣ Forgetful Adjunction (e.g., Free Monoid)
+      Requires Free functor (Free: Set -> Monoid) and Forgetful functor (U: Monoid -> Set).
+      Needs unit η: Id_Set -> U ∘ Free and counit ε: Free ∘ U -> Id_Monoid.
+      This requires specific definitions from @Free and a Set category.
+    ]]--
+    free_forgetful_adjunction: () -> ?(!Adjunction) [ ->
+      -- Assume we have Free, U functors from @Free / @Set
+      -- Assume we have η, ε transformations defined correctly
+      -- let F = @Free.free_monoid_functor in
+      -- let G = @Free.forgetful_monoid_functor in
+      -- let eta = @Free.free_forgetful_unit in
+      -- let epsilon = @Free.free_forgetful_counit in
+      -- adjunction("Free-Forgetful", F, G, eta, epsilon)
+      ?None -- Placeholder until dependencies are fully available/defined
+    ]
+  }
+} 

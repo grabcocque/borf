@@ -1,0 +1,254 @@
+--[[
+  Bifunctors
+
+  This module defines bifunctors, which are functors from a product category
+  C x D to a target category E.
+
+  A bifunctor T maps pairs of objects (c, d) to T(c, d) and pairs of
+  morphisms (f: c -> c', g: d -> d') to T(f, g): T(c, d) -> T(c', d'),
+  preserving identity and composition in both arguments.
+
+  Assumes definitions from @Cat and @CatXf (for underlying functors).
+]]--
+
+@Bifunctor: {
+  typ: {
+    !Bifunctor
+  }
+
+  op: {
+    -- Inherited ops
+  }
+
+  fn: {
+    -- Core function
+    bifunctor
+    bimap     -- Applies the bifunctor to a pair of morphisms
+    map_first -- Maps a morphism in the first argument, identity in the second
+    map_second-- Maps a morphism in the second argument, identity in the first
+
+    -- Verification
+    check_bifunctor_laws
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Bifunctor, @Cat, true),     -- Depends on Category definition
+    (@Bifunctor, @CatXf, true),   -- Depends on Functors
+    (@Bifunctor, @Linear, true),  -- Depends on Linear types
+    (@Bifunctor, @T, true)        -- Depends on Type system
+  }
+
+  --------------------------------------------------
+  -- Core Bifunctor Type
+  --------------------------------------------------
+
+  --[[
+    !Bifunctor represents a bifunctor T: C x D -> E.
+    It can be defined via its action on pairs of morphisms (bimap),
+    or equivalently, via its action on each argument separately (map_first, map_second).
+  ]]--
+  !Bifunctor: {
+    _type: "Bifunctor",
+    name: S,
+    source_category1: @Cat.!Category, -- Category C
+    source_category2: @Cat.!Category, -- Category D
+    target_category: @Cat.!Category,  -- Category E
+
+    -- Mapping on objects: Takes a pair of objects (c, d) -> e
+    map_obj: (@Cat.!Object * @Cat.!Object -> @Cat.!Object),
+
+    -- Mapping on morphisms (bimap): Takes (f: c->c', g: d->d') -> T(f,g): T(c,d)->T(c',d')
+    map_morph_pair: (@Cat.!Morphism * @Cat.!Morphism -> @Cat.!Morphism),
+
+    -- Alternatively, define via mapping each argument separately:
+    -- map_morph_first: (f: c->c') -> T(f, id_d): T(c,d)->T(c',d)
+    -- map_morph_second: (g: d->d') -> T(id_c, g): T(c,d)->T(c,d')
+
+    laws_satisfied: Bool
+  }
+
+  --------------------------------------------------
+  -- Core Functions
+  --------------------------------------------------
+
+  --[[
+    bifunctor creates a new bifunctor record.
+    Requires map_obj and map_morph_pair, and verifies laws.
+  ]]--
+  bifunctor: S * @Cat.!Category * @Cat.!Category * @Cat.!Category *
+             (@Cat.!Object * @Cat.!Object -> @Cat.!Object) *
+             (@Cat.!Morphism * @Cat.!Morphism -> @Cat.!Morphism) -> !Bifunctor [
+    name catC catD catE map_obj_fn map_morph_fn ->
+
+    let laws_ok = check_bifunctor_laws(
+      catC, catD, catE, map_obj_fn, map_morph_fn
+    ) in
+
+    {
+      _type: "Bifunctor",
+      name: name,
+      source_category1: catC,
+      source_category2: catD,
+      target_category: catE,
+      map_obj: map_obj_fn,
+      map_morph_pair: map_morph_fn,
+      laws_satisfied: laws_ok
+    }
+  ]
+
+  --[[
+    bimap applies the bifunctor to a pair of morphisms.
+  ]]--
+  bimap: !Bifunctor * @Cat.!Morphism * @Cat.!Morphism -> @Cat.!Morphism [
+    bi f g ->
+    -- Basic checks: f should be in catC, g should be in catD
+    -- More rigorous domain/codomain checks needed
+    bi.map_morph_pair(f, g)
+  ]
+
+  --[[
+    map_first applies the bifunctor to a morphism in the first argument
+    and the identity in the second argument.
+    T(f, id_d) : T(c, d) -> T(c', d)
+  ]]--
+  map_first: !Bifunctor * @Cat.!Morphism -> (@Cat.!Object -> @Cat.!Morphism) [
+    bi f ->
+    [d_obj ->
+      let catD = bi.source_category2 in
+      let id_d = @Cat.id(catD, d_obj) in
+      bimap(bi, f, id_d)
+    ]
+  ]
+
+  --[[
+    map_second applies the bifunctor to a morphism in the second argument
+    and the identity in the first argument.
+    T(id_c, g) : T(c, d) -> T(c, d')
+  ]]--
+  map_second: !Bifunctor * @Cat.!Morphism -> (@Cat.!Object -> @Cat.!Morphism) [
+    bi g ->
+    [c_obj ->
+      let catC = bi.source_category1 in
+      let id_c = @Cat.id(catC, c_obj) in
+      bimap(bi, id_c, g)
+    ]
+  ]
+
+  --[[
+    check_bifunctor_laws verifies the bifunctor properties:
+    1. Identity preservation: T(id_c, id_d) = id_{T(c,d)}
+    2. Compositionality:
+       T(f' ∘ f, g' ∘ g) = T(f', g') ∘ T(f, g)
+    Equivalently, check functoriality in each argument separately and the interchange law:
+    T(f', id_d') ∘ T(f, id_d) = T(f' ∘ f, id_d)
+    T(id_c', g') ∘ T(id_c, g) = T(id_c, g' ∘ g)
+    T(id_c', g) ∘ T(f, id_d) = T(f, id_{d'}) ∘ T(id_c, g)  (Interchange Law)
+    Which simplifies to: T(f, g) = T(f, id_{d'}) ∘ T(id_c, g) = T(id_{c'}, g) ∘ T(f, id_d)
+  ]]--
+  check_bifunctor_laws:
+    @Cat.!Category * @Cat.!Category * @Cat.!Category *
+    (@Cat.!Object * @Cat.!Object -> @Cat.!Object) *
+    (@Cat.!Morphism * @Cat.!Morphism -> @Cat.!Morphism) -> Bool [
+    catC catD catE map_obj map_morph_pair ->
+
+    -- Requires iterating over objects and composable morphisms, which is complex.
+    -- We'll check the simplified interchange law property as a proxy.
+
+    -- Simplified check: Verify T(f, g) = T(id, g) ∘ T(f, id)
+    -- This requires selecting example objects/morphisms.
+    -- For a robust check, more formal methods or property-based testing needed.
+
+    -- Placeholder: Assume true for now.
+    true
+  ]
+
+
+  --------------------------------------------------
+  -- Structure Mapping to Category
+  --------------------------------------------------
+
+  --[[
+    Structure mapping for Bifunctors.
+
+    A bifunctor is essentially a functor F: C x D -> E.
+    The `structure` block represents the laws it must satisfy.
+  ]]--
+  structure: {
+    -- A bifunctor IS a functor from the product category C x D.
+    -- The product category C x D has objects (c, d) and morphisms (f, g).
+    -- Identity in C x D is (id_c, id_d).
+    -- Composition in C x D is (f', g') ∘ (f, g) = (f' ∘ f, g' ∘ g).
+
+    -- This structure implicitly defines the functor properties.
+    law: {
+      identity: [bi c_obj d_obj ->
+        -- T(id_c, id_d) = id_{T(c,d)}
+        let catC = bi.source_category1 in
+        let catD = bi.source_category2 in
+        let catE = bi.target_category in
+        let id_c = @Cat.id(catC, c_obj) in
+        let id_d = @Cat.id(catD, d_obj) in
+        let T_c_d = bi.map_obj(c_obj, d_obj) in
+        let id_T_c_d = @Cat.id(catE, T_c_d) in
+        bi.map_morph_pair(id_c, id_d) == id_T_c_d
+      ],
+
+      composition: [bi f f' g g' -> -- where f',f and g',g are composable
+        -- T(f' ∘ f, g' ∘ g) = T(f', g') ∘ T(f, g)
+        let catC = bi.source_category1 in
+        let catD = bi.source_category2 in
+        let catE = bi.target_category in
+        let f_comp = @Cat.compose(catC, f', f) in
+        let g_comp = @Cat.compose(catD, g', g) in
+        let lhs = bi.map_morph_pair(f_comp, g_comp) in
+
+        let T_f_g = bi.map_morph_pair(f, g) in
+        let T_f'_g' = bi.map_morph_pair(f', g') in
+        let rhs = @Cat.compose(catE, T_f'_g', T_f_g) in
+        lhs == rhs
+      ]
+      -- The interchange law can also be listed here if defined via map_first/map_second.
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    --[[
+      Example: Product Bifunctor (in a Cartesian category like Set)
+      Prod: C x C -> C
+      Prod(c, d) = c x d
+      Prod(f, g) = (x, y) -> (f(x), g(y))
+    ]]--
+    product_bifunctor_example: () -> ?(!Bifunctor) [ ->
+      -- Assumes a Cartesian category C (e.g., @CCC)
+      -- let C = @CCC.category in
+      -- let map_obj_prod = [ (c, d) -> @CCC.product_object(C, c, d) ] in
+      -- let map_morph_prod = [ (f, g) -> @CCC.product_morphism(C, f, g) ] in
+      -- bifunctor("Product", C, C, C, map_obj_prod, map_morph_prod)
+      ?None -- Placeholder
+    ],
+
+    --[[
+      Example: Hom Bifunctor (Set^op x Set -> Set)
+      Hom(C, D) = Set(C, D) (functions from C to D)
+      Hom(f: C'->C, g: D->D') = h: C->D => g ∘ h ∘ f : C' -> D'
+      (Contravariant in first argument, covariant in second)
+    ]]--
+    hom_bifunctor_example: () -> ?(!Bifunctor) [ ->
+      -- Requires Set category and its opposite Set^op
+      -- let SetCat = @Set.category in
+      -- let SetOpCat = @Cat.opposite(SetCat) in
+      -- let map_obj_hom = [ (c_op, d) -> @Set.hom_object(c_op.original, d) ] in
+      -- let map_morph_hom = [ (f_op: c'->c, g: d->d') -> @Set.hom_morphism(f_op.original, g) ] in
+      -- bifunctor("Hom", SetOpCat, SetCat, SetCat, map_obj_hom, map_morph_hom)
+      ?None -- Placeholder
+    ]
+  }
+} 

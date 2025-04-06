@@ -1,0 +1,203 @@
+--[[
+  Abelian Categories
+
+  This module defines Abelian categories, which are categories resembling
+  the category of Abelian groups (Ab).
+
+  An Abelian category C satisfies:
+  1. It has a zero object (initial and terminal).
+  2. It has all binary products (A × B) and binary coproducts (A ⊕ B).
+     (In an additive category, finite products and coproducts coincide - biproducts).
+  3. Every morphism f has a kernel (ker f) and a cokernel (coker f).
+  4. Every monomorphism is normal (it is a kernel of its cokernel).
+  5. Every epimorphism is conormal (it is a cokernel of its kernel).
+
+  This implies the category is additive (enriched over the category Ab of Abelian groups)
+  and has all finite limits and colimits.
+]]--
+
+@Abelian: {
+  typ: {
+    !AbelianCategory
+    !KernelObject -- Object part of the kernel limit cone
+    !CokernelObject -- Object part of the cokernel colimit cocone
+    !ZeroObject
+    !BiproductObject
+  }
+
+  op: {
+    -- +, - for morphisms (from enrichment over Ab)
+    -- ∘ for composition
+  }
+
+  fn: {
+    -- Core structure functions
+    abelian_category
+    zero_object -- Returns the zero object
+    kernel -- Computes the kernel morphism k: K -> A for f: A -> B
+    cokernel -- Computes the cokernel morphism c: B -> Q for f: A -> B
+    biproduct -- Computes the biproduct A ⊕ B
+    zero_morphism -- Computes the unique morphism A -> 0 -> B
+
+    -- Morphism operations (assuming enrichment)
+    add_morphisms
+    negate_morphism
+
+    -- Verification functions
+    is_zero_object
+    has_biproducts
+    has_kernels
+    has_cokernels
+    is_normal -- Checks if mono m = kernel(cokernel(m))
+    is_conormal -- Checks if epi e = cokernel(kernel(e))
+    check_abelian_laws
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Abelian, @Cat, true),       -- Depends on Category
+    (@Abelian, @Linear, true),    -- For zero morphism, potentially additive structure
+    (@Abelian, @T, true),
+    -- Potentially depends on @Limit, @Colimit if defined generally
+    (@Abelian, @Equalizer, true), -- Kernels are equalizers
+    (@Abelian, @Coequalizer, true) -- Cokernels are coequalizers
+    -- Requires Biproducts, maybe from @Monoidal or a dedicated module
+  }
+
+  --------------------------------------------------
+  -- Core Abelian Category Types
+  --------------------------------------------------
+
+  -- Types for specific constructions
+  !KernelObject: { _type: "KernelObject", base: @Cat.!Object }
+  !CokernelObject: { _type: "CokernelObject", base: @Cat.!Object }
+  !ZeroObject: { _type: "ZeroObject", base: @Cat.!Object }
+  !BiproductObject: { _type: "BiproductObject", base: @Cat.!Object }
+
+  --[[
+    !AbelianCategory represents an Abelian category.
+    It bundles the underlying category with evidence that it satisfies
+    all the required properties.
+  ]]--
+  !AbelianCategory: {
+    _type: "AbelianCategory",
+    name: S,
+    base_category: @Cat.!Category,
+
+    -- Evidence of structure (functions or proofs)
+    zero_obj_proof: !ZeroObject,
+    has_biproducts_proof: Bool, -- Or function: (A, B) -> BiproductCone
+    kernel_fn: (@Cat.!Morphism -> @Equalizer.!EqualizerCone), -- Kernel is equalizer(f, 0)
+    cokernel_fn: (@Cat.!Morphism -> @Coequalizer.!CoequalizerCocone), -- Cokernel is coequalizer(f, 0)
+    monos_are_normal_proof: Bool,
+    epis_are_conormal_proof: Bool,
+
+    -- Assumed: Additive structure on Hom-sets
+    add_morph_fn: (@Cat.!Morphism * @Cat.!Morphism -> @Cat.!Morphism),
+    negate_morph_fn: (@Cat.!Morphism -> @Cat.!Morphism),
+    zero_morph_fn: (@Cat.!Object * @Cat.!Object -> @Cat.!Morphism),
+
+    laws_satisfied: Bool
+  }
+
+  --------------------------------------------------
+  -- Core Functions
+  --------------------------------------------------
+
+  -- Constructor (requires providing all evidence)
+  abelian_category: S * @Cat.!Category * ... -> !AbelianCategory [
+    name cat evidence ->
+    let laws_ok = check_abelian_laws(cat, evidence) in
+    { _type: "AbelianCategory", name: name, base_category: cat, ... evidence, laws_satisfied: laws_ok }
+  ]
+
+  -- Accessors for key structures
+  zero_object: !AbelianCategory -> !ZeroObject [ ac -> ac.zero_obj_proof ]
+  kernel: !AbelianCategory * @Cat.!Morphism -> @Equalizer.!EqualizerCone [ ac f -> ac.kernel_fn(f) ]
+  cokernel: !AbelianCategory * @Cat.!Morphism -> @Coequalizer.!CoequalizerCocone [ ac f -> ac.cokernel_fn(f) ]
+  zero_morphism: !AbelianCategory * @Cat.!Object * @Cat.!Object -> @Cat.!Morphism [
+    ac A B -> ac.zero_morph_fn(A, B)
+  ]
+
+  -- Additive structure operations
+  add_morphisms: !AbelianCategory * @Cat.!Morphism * @Cat.!Morphism -> @Cat.!Morphism [
+    ac f g -> ac.add_morph_fn(f, g)
+  ]
+  negate_morphism: !AbelianCategory * @Cat.!Morphism -> @Cat.!Morphism [
+    ac f -> ac.negate_morph_fn(f)
+  ]
+
+  -- Verification functions (placeholders)
+  is_zero_object: !AbelianCategory * @Cat.!Object -> Bool [ ac obj -> true ]
+  has_biproducts: !AbelianCategory -> Bool [ ac -> ac.has_biproducts_proof ]
+  has_kernels: !AbelianCategory -> Bool [ ac -> true ] -- Assumed by kernel_fn presence
+  has_cokernels: !AbelianCategory -> Bool [ ac -> true ] -- Assumed by cokernel_fn presence
+  is_normal: !AbelianCategory * @Cat.!Morphism -> Bool [ ac mono -> ac.monos_are_normal_proof ]
+  is_conormal: !AbelianCategory * @Cat.!Morphism -> Bool [ ac epi -> ac.epis_are_conormal_proof ]
+
+  --[[
+    check_abelian_laws: Verifies all defining properties of an Abelian category.
+    This involves checking zero object properties, biproduct properties,
+    kernel/cokernel universal properties, and normality/conormality.
+    Also checks that the additive structure on Hom-sets forms an Abelian group
+    and that composition is bilinear.
+  ]]--
+  check_abelian_laws: @Cat.!Category * {...evidence} -> Bool [
+    cat evidence ->
+    -- Placeholder: Very complex verification step.
+    true
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping
+  --------------------------------------------------
+
+  --[[
+    Structure mapping for Abelian Categories.
+    Defines the required components and laws.
+  ]]--
+  structure: {
+    base: @Cat.structure,
+    components: {
+      zero_object: !ZeroObject,
+      kernel: (@Cat.!Morphism -> @Equalizer.!EqualizerCone),
+      cokernel: (@Cat.!Morphism -> @Coequalizer.!CoequalizerCocone),
+      biproduct: (@Cat.!Object * @Cat.!Object -> ...), -- Biproduct cone
+      add_morph: ..., negate_morph: ..., zero_morph: ...
+    },
+    law: {
+      is_additive: [ac -> true], -- Check Hom(A,B) is Ab group, composition bilinear
+      has_zero_object: [ac -> is_zero_object(ac, zero_object(ac))],
+      has_all_kernels: [ac -> has_kernels(ac)],
+      has_all_cokernels: [ac -> has_cokernels(ac)],
+      has_all_biproducts: [ac -> has_biproducts(ac)],
+      monos_are_normal: [ac -> ac.monos_are_normal_proof],
+      epis_are_conormal: [ac -> ac.epis_are_conormal_proof]
+      -- Add checks for kernel/cokernel properties specifically if needed
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    --[[ Example: Category of Abelian Groups (Ab) ]]
+    AbCat: () -> ?(!AbelianCategory) [ ->
+      -- Requires defining the category Ab (objects=abelian groups, morphisms=group homs)
+      -- Requires providing functions/proofs for zero group, kernel (subgroup),
+      -- cokernel (quotient group), direct sum (biproduct), etc.
+      ?None -- Placeholder
+    ],
+
+    --[[ Example: Category of R-Modules (R-Mod) ]]
+    RModCat: (Ring) -> ?(!AbelianCategory) [ ring ->
+      -- Requires defining the category R-Mod for a given ring R
+      -- Requires providing functions/proofs analogous to Ab
+      ?None -- Placeholder
+    ]
+  }
+} 

@@ -1,0 +1,176 @@
+--[[
+  Abelian Category Transformations (AbelianXf)
+
+  This module defines transformations involving Abelian categories.
+  Key concepts include exact functors (preserving finite limits/colimits)
+  and potential visualizations.
+]]--
+
+@AbelianXf@prelude: {
+  typ: {
+    !ExactFunctorMap -- Maps a standard functor to an ExactFunctor if possible
+    !AbelianToWireMap
+  }
+
+  op: {
+    -- Inherited ops
+  }
+
+  fn: {
+    -- Core transformation functions
+    promote_to_exact_functor -- Checks if a Functor is exact
+    abelian_to_wire
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@AbelianXf@prelude, @Abelian, true),   -- Depends on Abelian
+    (@AbelianXf@prelude, @Cat, true),        -- Depends on Category
+    (@AbelianXf@prelude, @CatXf, true),      -- Depends on Functors
+    (@AbelianXf@prelude, @Wire, true),       -- Depends on Wire diagrams
+    (@AbelianXf@prelude, @WireXf, true),     -- Depends on Wire transformations
+    (@AbelianXf@prelude, @LimitXf, true),    -- Depends on Limit transformations
+    (@AbelianXf@prelude, @Linear, true),     -- Depends on Linear types
+    (@AbelianXf@prelude, @T, true)           -- Depends on Type system
+  }
+
+  --------------------------------------------------
+  -- Core Transformation Types
+  --------------------------------------------------
+
+  --[[
+    !ExactFunctorMap indicates if a functor between Abelian categories is exact.
+    An exact functor preserves exact sequences (equivalently, finite limits and colimits).
+    It maps kernels to kernels and cokernels to cokernels.
+  ]]--
+  !ExactFunctorMap: {
+    _type: "ExactFunctorMap",
+    base_functor: @CatXf.!Functor,
+    source_abelian_cat: @Abelian.!AbelianCategory,
+    target_abelian_cat: @Abelian.!AbelianCategory,
+    is_exact: Bool,
+    exact_functor: ?(@CatXf.!Functor) -- Could define a specific !ExactFunctor type later
+  }
+
+  !AbelianToWireMap: {
+    _type: "AbelianToWireMap",
+    abelian_category: @Abelian.!AbelianCategory,
+    wire_diagram: @Wire.WireDiagram -- Diagram possibly highlighting abelian structure
+  }
+
+  --------------------------------------------------
+  -- Core Transformation Functions
+  --------------------------------------------------
+
+  --[[
+    promote_to_exact_functor checks if a functor F between Abelian categories
+    preserves finite limits and colimits (is exact).
+  ]]--
+  promote_to_exact_functor:
+    @CatXf.!Functor * @Abelian.!AbelianCategory * @Abelian.!AbelianCategory -> !ExactFunctorMap [
+    F src_ac tgt_ac ->
+
+    -- Check if source/target categories match
+    if not (F.source_category == src_ac.base_category &&
+            F.target_category == tgt_ac.base_category) {
+      error("Functor categories do not match the Abelian categories provided.")
+      {
+        _type: "ExactFunctorMap", base_functor: F, source_abelian_cat: src_ac,
+        target_abelian_cat: tgt_ac, is_exact: false, exact_functor: ?None
+      }
+    }
+
+    -- Check preservation properties (requires iterating or formal proof):
+    -- - Preserves zero object: F(0) is zero object in target
+    -- - Preserves kernels: F(ker f) = ker(F(f))
+    -- - Preserves cokernels: F(coker f) = coker(F(f))
+    -- - Preserves biproducts: F(A ⊕ B) = F(A) ⊕ F(B)
+    let preserves = true -- Placeholder
+
+    {
+      _type: "ExactFunctorMap",
+      base_functor: F,
+      source_abelian_cat: src_ac,
+      target_abelian_cat: tgt_ac,
+      is_exact: preserves,
+      exact_functor: if preserves then ?Some(F) else ?None
+    }
+  ]
+
+  --[[
+    abelian_to_wire transforms an abelian category into a wire diagram.
+    Could highlight the zero object or structure like kernels/cokernels.
+  ]]--
+  abelian_to_wire: @Abelian.!AbelianCategory -> !AbelianToWireMap [
+    ac ->
+    let base_cat = ac.base_category in
+    let base_diagram = @WireXf.category_to_wire(base_cat) in
+
+    -- Find and style the zero object
+    let zero_obj_name = @Abelian.zero_object(ac).base.name in
+    let styled_diagram = @Wire.update_box_style(
+        base_diagram,
+        zero_obj_name,
+        { fill_color: ?Some({ name: ?Some("lightgray") }), shape: ?Some("ellipse") }
+    ) in
+
+    -- Add a label
+    let final_diagram = @Wire.add_label(styled_diagram, "(Abelian Category)", {
+      position: ?Some({ x: 0.0, y: -1.5 }),
+      font_size: ?Some(10.0),
+      color: ?Some({ name: ?Some("darkred") })
+    }) in
+
+    {
+      _type: "AbelianToWireMap",
+      abelian_category: ac,
+      wire_diagram: final_diagram
+    }
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping (Conceptual)
+  --------------------------------------------------
+
+  structure: {
+    law: {
+      exact_functor_preservation: [map ->
+        -- If a functor is exact, it must preserve kernels, cokernels, zero object, etc.
+        if map.is_exact then
+          -- Placeholder check
+          true
+        else
+          true
+      ]
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    --[[ Example: Check if Hom(A, -): Ab -> Ab is exact ]]
+    hom_exact_check: () -> ?(Bool) [ ->
+      -- let Ab = @Abelian.example.AbCat() in
+      -- let A = @Ab.some_group() in
+      -- let HomA = @Ab.HomFunctor(A) in -- Functor Hom(A, -)
+      -- match (Ab, HomA) with
+      --   | (?Some(ab_cat), ?Some(hom_func)) ->
+      --       ?Some(promote_to_exact_functor(hom_func, ab_cat, ab_cat).is_exact)
+      --   | _ -> ?None
+      ?None -- Placeholder (Hom(A,-) is exact in Ab)
+    ],
+
+    --[[ Example: Visualize the category Ab ]]
+    ab_cat_wire: () -> ?(@Wire.WireDiagram) [ ->
+      let maybe_cat = @Abelian.example.AbCat() in
+      match maybe_cat with
+        | ?Some(cat) -> ?Some(abelian_to_wire(cat).wire_diagram)
+        | ?None -> ?None
+    ]
+  }
+} 

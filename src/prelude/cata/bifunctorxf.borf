@@ -1,0 +1,219 @@
+--[[
+  Bifunctor Transformations (BifunctorXf)
+
+  This module defines transformations involving bifunctors.
+  Key transformations include deriving regular functors by fixing one argument
+  (currying/uncurrying related concepts) and visualizing bifunctors.
+]]--
+
+@BifunctorXf: {
+  typ: {
+    !CurriedFunctorFromBiLeft  -- Functor T(c, -): D -> E for fixed c
+    !CurriedFunctorFromBiRight -- Functor T(-, d): C -> E for fixed d
+    !BifunctorToWireMap
+  }
+
+  op: {
+    -- Inherited ops
+  }
+
+  fn: {
+    -- Core transformation functions
+    curry_bifunctor_left
+    curry_bifunctor_right
+    bifunctor_to_wire
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@BifunctorXf, @Bifunctor, true), -- Depends on Bifunctor
+    (@BifunctorXf, @Cat, true),       -- Depends on Category
+    (@BifunctorXf, @CatXf, true),      -- Depends on Functors
+    (@BifunctorXf, @Wire, true),       -- Depends on Wire diagrams
+    (@BifunctorXf, @WireXf, true),     -- Depends on Wire transformations
+    (@BifunctorXf, @Linear, true),     -- Depends on Linear types
+    (@BifunctorXf, @T, true)           -- Depends on Type system
+  }
+
+  --------------------------------------------------
+  -- Core Transformation Types
+  --------------------------------------------------
+
+  !CurriedFunctorFromBiLeft: {
+    _type: "CurriedFunctorFromBiLeft",
+    bifunctor: @Bifunctor.!Bifunctor,
+    fixed_object_c: @Cat.!Object, -- The fixed object from category C
+    resulting_functor: @CatXf.!Functor -- The functor T(c, -): D -> E
+  }
+
+  !CurriedFunctorFromBiRight: {
+    _type: "CurriedFunctorFromBiRight",
+    bifunctor: @Bifunctor.!Bifunctor,
+    fixed_object_d: @Cat.!Object, -- The fixed object from category D
+    resulting_functor: @CatXf.!Functor -- The functor T(-, d): C -> E
+  }
+
+  !BifunctorToWireMap: {
+    _type: "BifunctorToWireMap",
+    bifunctor: @Bifunctor.!Bifunctor,
+    wire_diagram: @Wire.WireDiagram -- Diagram showing T with two inputs
+  }
+
+  --------------------------------------------------
+  -- Core Transformation Functions
+  --------------------------------------------------
+
+  --[[
+    curry_bifunctor_left fixes the first argument `c` of a bifunctor T
+    to produce a regular functor T(c, -): D -> E.
+  ]]--
+  curry_bifunctor_left: @Bifunctor.!Bifunctor * @Cat.!Object -> !CurriedFunctorFromBiLeft [
+    bi c_obj ->
+    let catD = bi.source_category2 in
+    let catE = bi.target_category in
+
+    -- Define the object mapping: d -> T(c, d)
+    let map_obj_curried = [d_obj -> bi.map_obj(c_obj, d_obj)] in
+
+    -- Define the morphism mapping: (g: d->d') -> T(id_c, g)
+    let map_morph_curried = [g -> @Bifunctor.map_second(bi, g)(c_obj)] in
+
+    -- Create the resulting functor
+    let functor_name = bi.name + "(" + (c_obj.name |? "c") + ", -)" in
+    let curried_functor = @CatXf.functor(
+      functor_name,
+      catD,               -- Source category is D
+      catE,               -- Target category is E
+      map_obj_curried,
+      map_morph_curried
+    ) in
+
+    {
+      _type: "CurriedFunctorFromBiLeft",
+      bifunctor: bi,
+      fixed_object_c: c_obj,
+      resulting_functor: curried_functor
+    }
+  ]
+
+  --[[
+    curry_bifunctor_right fixes the second argument `d` of a bifunctor T
+    to produce a regular functor T(-, d): C -> E.
+  ]]--
+  curry_bifunctor_right: @Bifunctor.!Bifunctor * @Cat.!Object -> !CurriedFunctorFromBiRight [
+    bi d_obj ->
+    let catC = bi.source_category1 in
+    let catE = bi.target_category in
+
+    -- Define the object mapping: c -> T(c, d)
+    let map_obj_curried = [c_obj -> bi.map_obj(c_obj, d_obj)] in
+
+    -- Define the morphism mapping: (f: c->c') -> T(f, id_d)
+    let map_morph_curried = [f -> @Bifunctor.map_first(bi, f)(d_obj)] in
+
+    -- Create the resulting functor
+    let functor_name = bi.name + "(-, " + (d_obj.name |? "d") + ")" in
+    let curried_functor = @CatXf.functor(
+      functor_name,
+      catC,               -- Source category is C
+      catE,               -- Target category is E
+      map_obj_curried,
+      map_morph_curried
+    ) in
+
+    {
+      _type: "CurriedFunctorFromBiRight",
+      bifunctor: bi,
+      fixed_object_d: d_obj,
+      resulting_functor: curried_functor
+    }
+  ]
+
+  --[[
+    bifunctor_to_wire transforms a bifunctor into a wire diagram representation,
+    showing it as a box with two inputs and one output.
+  ]]--
+  bifunctor_to_wire: @Bifunctor.!Bifunctor -> !BifunctorToWireMap [
+    bi ->
+    let c_name = bi.source_category1.name |? "C" in
+    let d_name = bi.source_category2.name |? "D" in
+    let e_name = bi.target_category.name |? "E" in
+
+    -- Create a box representing the bifunctor T: C x D -> E
+    let box_label = bi.name + ": " + c_name + " x " + d_name + " -> " + e_name in
+    let boxT = @Wire.create_box(box_label, [], []) in -- Inputs/Outputs handled implicitly or via ports
+
+    -- Represent inputs C and D and output E schematically
+    let boxC = @Wire.create_box(c_name, [], []) in
+    let boxD = @Wire.create_box(d_name, [], []) in
+    let boxE = @Wire.create_box(e_name, [], []) in
+
+    -- Position boxes
+    let boxC = @Wire.set_box_position(boxC, 0.0, 1.0) in
+    let boxD = @Wire.set_box_position(boxD, 0.0, -1.0) in
+    let boxT = @Wire.set_box_position(boxT, 2.0, 0.0) in
+    let boxE = @Wire.set_box_position(boxE, 4.0, 0.0) in
+
+    -- Connect inputs to the bifunctor box and box to output
+    let wire_in_c = @Wire.connect(boxC, boxT, T.Any, ?None, ?None, ?None, ?Some("in1")) in
+    let wire_in_d = @Wire.connect(boxD, boxT, T.Any, ?None, ?None, ?None, ?Some("in2")) in
+    let wire_out_e = @Wire.connect(boxT, boxE, T.Any, ?None, ?Some("out"), ?None, ?None) in
+
+    let diagram = @Wire.create_diagram(
+        [boxC, boxD, boxT, boxE],
+        [wire_in_c, wire_in_d, wire_out_e],
+        [], []
+    ) in
+    let laid_out_diagram = @Wire.auto_layout(diagram) in
+
+    {
+      _type: "BifunctorToWireMap",
+      bifunctor: bi,
+      wire_diagram: laid_out_diagram
+    }
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping (Conceptual)
+  --------------------------------------------------
+
+  structure: {
+    law: {
+      currying_left_preserves_functoriality: [map ->
+        -- Check if the derived functor satisfies functor laws
+        @CatXf.check_functor_laws(map.resulting_functor)
+      ],
+      currying_right_preserves_functoriality: [map ->
+        -- Check if the derived functor satisfies functor laws
+        @CatXf.check_functor_laws(map.resulting_functor)
+      ]
+      -- Could add laws relating currying and bimap
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    curry_product_left: () -> ?(@CatXf.!Functor) [ ->
+      let maybe_bi = @Bifunctor.example.product_bifunctor_example() in
+      match maybe_bi with
+        | ?Some(bi) ->
+            -- Assume 'SomeObject' exists in the category
+            let some_obj = @Cat.get_object(bi.source_category1, "SomeObject") in
+            ?Some(curry_bifunctor_left(bi, some_obj).resulting_functor)
+        | ?None -> ?None
+    ],
+
+    product_bifunctor_wire: () -> ?(@Wire.WireDiagram) [ ->
+      let maybe_bi = @Bifunctor.example.product_bifunctor_example() in
+      match maybe_bi with
+        | ?Some(bi) -> ?Some(bifunctor_to_wire(bi).wire_diagram)
+        | ?None -> ?None
+    ]
+  }
+} 

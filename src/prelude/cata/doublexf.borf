@@ -1,0 +1,210 @@
+--[[
+  Double Category Transformations (DoubleXf)
+
+  This module defines transformations involving double categories.
+  This includes double functors, mappings to other structures (like bicategories),
+  and potential visualizations.
+]]--
+
+@DoubleXf: {
+  typ: {
+    !DoubleFunctor
+    !DoubleToBicategoryMap
+    !DoubleToWireMap
+  }
+
+  op: {
+    -- Inherited ops
+  }
+
+  fn: {
+    -- Core transformation functions
+    double_functor -- Creates/defines a double functor
+    to_horizontal_bicategory -- Forgets vertical arrows (or treats as identities)
+    to_vertical_bicategory -- Forgets horizontal arrows (or treats as identities)
+    double_to_wire
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@DoubleXf, @Double, true),    -- Depends on Double Category
+    (@DoubleXf, @Bicategory, true),-- Depends on Bicategory
+    (@DoubleXf, @Cat, true),        -- Depends on Category
+    (@DoubleXf, @CatXf, true),      -- Depends on Functors
+    (@DoubleXf, @Wire, true),       -- Depends on Wire diagrams
+    (@DoubleXf, @WireXf, true),     -- Depends on Wire transformations
+    (@DoubleXf, @Linear, true),     -- Depends on Linear types
+    (@DoubleXf, @T, true)           -- Depends on Type system
+  }
+
+  --------------------------------------------------
+  -- Core Transformation Types
+  --------------------------------------------------
+
+  --[[
+    !DoubleFunctor maps between double categories, preserving all structures:
+    objects, horizontal/vertical morphisms, squares, and all compositions.
+  ]]--
+  !DoubleFunctor: {
+    _type: "DoubleFunctor",
+    name: S,
+    source_dc: @Double.!DoubleCategory,
+    target_dc: @Double.!DoubleCategory,
+    map_obj: (@Double.!DCObject -> @Double.!DCObject),
+    map_h_morph: (@Double.!DCHorizontalMorphism -> @Double.!DCHorizontalMorphism),
+    map_v_morph: (@Double.!DCVerticalMorphism -> @Double.!DCVerticalMorphism),
+    map_square: (@Double.!DCSquare -> @Double.!DCSquare),
+    preserves_structure: Bool -- Checks if composition/identities are preserved
+  }
+
+  !DoubleToBicategoryMap: {
+    _type: "DoubleToBicategoryMap",
+    source_dc: @Double.!DoubleCategory,
+    resulting_bicategory: @Bicategory.!Bicategory,
+    mapping_type: Enum["Horizontal", "Vertical"] -- How the mapping was done
+  }
+
+  !DoubleToWireMap: {
+    _type: "DoubleToWireMap",
+    source_dc: @Double.!DoubleCategory,
+    wire_diagram: @Wire.WireDiagram
+  }
+
+  --------------------------------------------------
+  -- Core Transformation Functions
+  --------------------------------------------------
+
+  --[[
+    double_functor constructor (validation is complex).
+  ]]--
+  double_functor: S * @Double.!DoubleCategory * @Double.!DoubleCategory * ... -> !DoubleFunctor [
+    name src tgt map_fns ->
+    -- Placeholder: requires checking preservation of all compositions and identities.
+    { ... name: name, source_dc: src, target_dc: tgt, ..., preserves_structure: true }
+  ]
+
+  --[[
+    to_horizontal_bicategory creates a bicategory from a double category
+    by focusing on the horizontal structure.
+    - Objects of Bicategory = Objects of Double Category
+    - 1-cells of Bicategory = Horizontal Morphisms of Double Category
+    - 2-cells of Bicategory (f -> g) = Squares of Double Category with vertical identities
+      (Squares of shape id_v ⋆h α ⋆h id_v)
+  ]]--
+  to_horizontal_bicategory: @Double.!DoubleCategory -> !DoubleToBicategoryMap [
+    dc ->
+    -- Placeholder: Requires constructing the bicategory components
+    -- Need to define horizontal composition of squares with vertical identities
+    -- as the 2-cell composition in the resulting bicategory.
+    let bicat_name = dc.name + "-HBi" in
+    let objects = dc.objects |> map [obj -> @Bicategory.object(obj.name)] in
+    -- ... more construction needed ...
+    let resulting_bi = @Bicategory.bicategory(bicat_name, ...) in
+    {
+      _type: "DoubleToBicategoryMap",
+      source_dc: dc,
+      resulting_bicategory: resulting_bi,
+      mapping_type: "Horizontal"
+    }
+  ]
+
+  --[[
+    to_vertical_bicategory creates a bicategory from a double category
+    by focusing on the vertical structure.
+    - Objects of Bicategory = Objects of Double Category
+    - 1-cells of Bicategory = Vertical Morphisms of Double Category
+    - 2-cells of Bicategory (u -> v) = Squares of Double Category with horizontal identities
+  ]]--
+  to_vertical_bicategory: @Double.!DoubleCategory -> !DoubleToBicategoryMap [
+    dc ->
+    -- Placeholder: Similar construction to horizontal, but swapping roles.
+    let bicat_name = dc.name + "-VBi" in
+    let objects = dc.objects |> map [obj -> @Bicategory.object(obj.name)] in
+    -- ... more construction needed ...
+    let resulting_bi = @Bicategory.bicategory(bicat_name, ...) in
+    {
+      _type: "DoubleToBicategoryMap",
+      source_dc: dc,
+      resulting_bicategory: resulting_bi,
+      mapping_type: "Vertical"
+    }
+  ]
+
+  --[[
+    double_to_wire attempts to visualize a double category.
+    This is complex. A simple approach might just list components or
+    try to draw a representative square.
+  ]]--
+  double_to_wire: @Double.!DoubleCategory -> !DoubleToWireMap [
+    dc ->
+    -- Simple approach: Draw one representative square if possible
+    let maybe_square = dc.squares |> first in
+    let diagram = match maybe_square with
+      | ?Some(sq) ->
+          let boxA = @Wire.create_box(sq.source_obj.name, [], []) in
+          let boxB = @Wire.create_box(@Double.target_h(sq.top).name, [], []) in
+          let boxC = @Wire.create_box(@Double.target_v(sq.left).name, [], []) in
+          let boxD = @Wire.create_box(sq.target_obj.name, [], []) in
+          let boxAlpha = @Wire.create_box(sq.name, [], [], style: ?Some({ shape: ?Some("rectangle") })) in
+
+          -- Position crudely
+          let boxA = @Wire.set_box_position(boxA, 0.0, 2.0) in
+          let boxB = @Wire.set_box_position(boxB, 2.0, 2.0) in
+          let boxC = @Wire.set_box_position(boxC, 0.0, 0.0) in
+          let boxD = @Wire.set_box_position(boxD, 2.0, 0.0) in
+          let boxAlpha = @Wire.set_box_position(boxAlpha, 1.0, 1.0) in
+
+          let wire_f = @Wire.connect(boxA, boxB, T.Any, ?Some(sq.top.name)) in
+          let wire_g = @Wire.connect(boxC, boxD, T.Any, ?Some(sq.bottom.name)) in
+          let wire_u = @Wire.connect(boxA, boxC, T.Any, ?Some(sq.left.name)) in
+          let wire_v = @Wire.connect(boxB, boxD, T.Any, ?Some(sq.right.name)) in
+          -- Connect corners to the center square label? Optional.
+
+          @Wire.create_diagram([boxA, boxB, boxC, boxD, boxAlpha], [wire_f, wire_g, wire_u, wire_v], [], [])
+      | ?None ->
+          -- Fallback: Just represent the category name
+          @Wire.create_diagram([@Wire.create_box(dc.name + " (DoubleCat)", [], [])], [], [], [])
+    in
+    let laid_out_diagram = @Wire.auto_layout(diagram) in
+    {
+      _type: "DoubleToWireMap",
+      source_dc: dc,
+      wire_diagram: laid_out_diagram
+    }
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping (Conceptual)
+  --------------------------------------------------
+
+  structure: {
+    law: {
+      -- Laws would ensure transformations preserve relevant structures.
+      -- E.g., double_functor preserves all compositions.
+      -- E.g., to_horizontal_bicategory correctly maps compositions.
+      placeholder: [map -> true]
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    cat_dbl_to_wire: () -> ?(@Wire.WireDiagram) [ ->
+      let maybe_dc = @Double.example.CatDbl() in
+      match maybe_dc with
+        | ?Some(dc) -> ?Some(double_to_wire(dc).wire_diagram)
+        | ?None -> ?None
+    ],
+    cat_dbl_to_hbi: () -> ?(@Bicategory.!Bicategory) [ ->
+      let maybe_dc = @Double.example.CatDbl() in
+      match maybe_dc with
+        | ?Some(dc) -> ?Some(to_horizontal_bicategory(dc).resulting_bicategory)
+        | ?None -> ?None
+    ]
+  }
+} 

@@ -1,0 +1,225 @@
+--[[
+  Yoneda Lemma
+
+  This module focuses on the Yoneda Lemma and related structures,
+  primarily the Yoneda embedding.
+
+  The Yoneda Lemma states that for a locally small category C and a functor
+  F: C^op -> Set (a presheaf), there is a natural isomorphism between
+  Nat(Hom_C(-, c), F) and F(c), where Nat denotes the set of natural transformations.
+  Nat(Y(c), F) ≅ F(c)
+
+  A consequence is that the Yoneda embedding Y: C -> [C^op, Set] is fully faithful.
+  Y(c) = Hom_C(-, c)
+  Y(f: c -> d) = Hom_C(-, f): Hom_C(-, c) -> Hom_C(-, d)
+]]--
+
+@Yoneda: {
+  typ: {
+    !YonedaEmbedding
+    !RepresentablePresheaf -- Functor Hom_C(-, c): C^op -> Set
+    !PresheafCategory -- Category [C^op, Set]
+  }
+
+  op: {
+    -- Inherited ops
+  }
+
+  fn: {
+    -- Core functions
+    yoneda_embedding -- Constructs the Yoneda embedding functor Y
+    apply_yoneda_obj -- Applies Y to an object c -> Hom(-, c)
+    apply_yoneda_morph -- Applies Y to a morphism f -> Hom(-, f)
+
+    -- Lemma related functions (conceptual)
+    yoneda_iso_elements -- Access F(c) via the isomorphism
+    yoneda_iso_nat_trans -- Access Nat(Y(c), F) via the isomorphism
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Yoneda, @Cat, true),       -- Depends on Category
+    (@Yoneda, @CatXf, true),      -- Depends on Functors, Natural Transformations
+    (@Yoneda, @Linear, true),
+    (@Yoneda, @T, true),
+    -- Requires a notion of the category Set (or similar base)
+    (@Yoneda, @Set, true) -- Assuming a Set category module exists
+  }
+
+  --------------------------------------------------
+  -- Core Yoneda Types
+  --------------------------------------------------
+
+  --[[
+    !RepresentablePresheaf is the functor Hom_C(-, c): C^op -> Set.
+    It's a specific type of functor.
+  ]]--
+  !RepresentablePresheaf: {
+    _type: "RepresentablePresheaf",
+    base_functor: @CatXf.!Functor, -- The actual functor C^op -> Set
+    representing_object: @Cat.!Object -- The object c in C
+  }
+
+  --[[
+    !PresheafCategory is the category of functors [C^op, Set].
+    Objects are functors (presheaves), morphisms are natural transformations.
+  ]]--
+  !PresheafCategory: {
+    _type: "PresheafCategory",
+    base_category: @Cat.!Category, -- The category C
+    functor_category: @Cat.!Category -- The resulting category [C^op, Set]
+  }
+
+  --[[
+    !YonedaEmbedding is the functor Y: C -> [C^op, Set].
+  ]]--
+  !YonedaEmbedding: {
+    _type: "YonedaEmbedding",
+    base_functor: @CatXf.!Functor, -- The Yoneda functor itself
+    source_category: @Cat.!Category, -- Category C
+    target_presheaf_category: !PresheafCategory -- Category [C^op, Set]
+    is_fully_faithful: Bool -- Property implied by Yoneda Lemma
+  }
+
+  --------------------------------------------------
+  -- Core Functions
+  --------------------------------------------------
+
+  --[[
+    apply_yoneda_obj computes the representable presheaf Hom_C(-, c)
+    for a given object c in C.
+  ]]--
+  apply_yoneda_obj: @Cat.!Category * @Cat.!Object -> !RepresentablePresheaf [
+    catC c ->
+    let C_op = @Cat.opposite(catC) in
+    let SetCat = @Set.category in -- Assuming Set category
+
+    -- Object mapping: x (in C^op) -> Hom_C(x, c) (an object in Set)
+    let map_obj_yc = [x_op -> @Set.hom_object(catC, x_op.original, c)] in
+
+    -- Morphism mapping: (f_op: x->y in C^op) -> Hom_C(f, c): Hom_C(y, c) -> Hom_C(x, c)
+    -- Hom_C(f, c) = precomposition with f: y -> x
+    let map_morph_yc = [f_op ->
+        let f = f_op.original in -- f: y -> x
+        @Set.hom_precompose_morphism(catC, f, c)
+    ] in
+
+    let yc_functor = @CatXf.functor(
+      "Hom(-, " + (c.name |? "c") + ")",
+      C_op, SetCat,
+      map_obj_yc, map_morph_yc
+    ) in
+
+    {
+      _type: "RepresentablePresheaf",
+      base_functor: yc_functor,
+      representing_object: c
+    }
+  ]
+
+  --[[
+    apply_yoneda_morph computes the natural transformation Hom_C(-, f)
+    for a morphism f: c -> d in C.
+    Hom_C(-, f): Hom_C(-, c) -> Hom_C(-, d)
+    Component at x: Hom_C(x, f): Hom_C(x, c) -> Hom_C(x, d)
+    Hom_C(x, f)(h: x -> c) = f ∘ h : x -> d
+  ]]--
+  apply_yoneda_morph: @Cat.!Category * @Cat.!Morphism -> @CatXf.!NaturalTransformation [
+    catC f_morph ->
+    let c = @Cat.dom(catC, f_morph) in
+    let d = @Cat.cod(catC, f_morph) in
+    let Yc = apply_yoneda_obj(catC, c).base_functor in
+    let Yd = apply_yoneda_obj(catC, d).base_functor in
+
+    -- Components: x_op -> (Hom_C(x, f): Hom_C(x, c) -> Hom_C(x, d))
+    let components_yf = [x_op ->
+        @Set.hom_postcompose_morphism(catC, x_op.original, f_morph)
+    ] in
+
+    @CatXf.natural_transformation(
+      "Hom(-, " + (f_morph.name |? "f") + ")",
+      Yc, Yd, components_yf
+    )
+  ]
+
+  --[[
+    yoneda_embedding constructs the Yoneda embedding functor Y: C -> [C^op, Set].
+  ]]--
+  yoneda_embedding: @Cat.!Category -> !YonedaEmbedding [
+    catC ->
+    let C_op = @Cat.opposite(catC) in
+    let SetCat = @Set.category in
+
+    -- Construct the presheaf category [C^op, Set]
+    let presheaf_cat_obj = @CatXf.functor_category(C_op, SetCat) in
+    let presheaf_cat = {
+        _type: "PresheafCategory",
+        base_category: catC,
+        functor_category: presheaf_cat_obj
+    } in
+
+    -- Object map: c -> Y(c) = Hom_C(-, c)
+    let map_obj_y = [c -> apply_yoneda_obj(catC, c).base_functor] in
+    -- Morphism map: f -> Y(f) = Hom_C(-, f)
+    let map_morph_y = [f -> apply_yoneda_morph(catC, f)] in
+
+    let y_functor = @CatXf.functor(
+      "YonedaEmbedding",
+      catC, presheaf_cat.functor_category,
+      map_obj_y, map_morph_y
+    ) in
+
+    {
+      _type: "YonedaEmbedding",
+      base_functor: y_functor,
+      source_category: catC,
+      target_presheaf_category: presheaf_cat,
+      is_fully_faithful: true -- From Yoneda Lemma
+    }
+  ]
+
+  -- Lemma functions (conceptual - require Nat and F(c) access)
+  yoneda_iso_elements: !RepresentablePresheaf * @CatXf.!Functor -> @Set.!Object [ ... -> ... ]
+  yoneda_iso_nat_trans: !RepresentablePresheaf * @CatXf.!Functor -> @Set.!Morphism [...] -- Morphism between Nat(Y(c),F) and F(c)
+
+  --------------------------------------------------
+  -- Structure Mapping
+  --------------------------------------------------
+
+  --[[
+    Structure mapping for Yoneda.
+    Focuses on the properties of the Yoneda embedding and the statement of the Lemma.
+  ]]--
+  structure: {
+    components: {
+      YonedaEmbedding: !YonedaEmbedding
+    },
+    law: {
+      lemma: [Yc F c ->
+        -- Nat(Y(c), F) is naturally isomorphic to F(c)
+        -- Requires types for Nat and evaluation F(c)
+        true -- Placeholder for the isomorphism statement
+      ],
+      embedding_fully_faithful: [Y ->
+        -- The Yoneda embedding Y is fully faithful
+        -- Hom_C(c, d) ≅ Nat(Y(c), Y(d))
+        Y.is_fully_faithful
+      ]
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    yoneda_for_set: () -> ?(!YonedaEmbedding) [ ->
+      -- let SetCat = @Set.category in
+      -- ?Some(yoneda_embedding(SetCat))
+      ?None
+    ]
+  }
+} 

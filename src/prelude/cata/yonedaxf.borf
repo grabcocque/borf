@@ -1,0 +1,137 @@
+--[[
+  Yoneda Transformations (YonedaXf)
+
+  This module defines transformations related to the Yoneda Lemma and embedding.
+  Primarily focuses on visualizing the embedding or the natural isomorphism.
+]]--
+
+@YonedaXf: {
+  typ: {
+    !YonedaEmbeddingToWireMap
+    !YonedaLemmaIsomorphismWireMap
+  }
+
+  op: {
+    -- Inherited ops
+  }
+
+  fn: {
+    -- Core transformation functions
+    yoneda_embedding_to_wire
+    yoneda_lemma_iso_to_wire
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@YonedaXf, @Yoneda, true),   -- Depends on Yoneda
+    (@YonedaXf, @Cat, true),        -- Depends on Category
+    (@YonedaXf, @CatXf, true),      -- Depends on Functors, Nat Trans
+    (@YonedaXf, @Wire, true),       -- Depends on Wire diagrams
+    (@YonedaXf, @WireXf, true),     -- Depends on Wire transformations
+    (@YonedaXf, @Linear, true),
+    (@YonedaXf, @T, true)
+  }
+
+  --------------------------------------------------
+  -- Core Transformation Types
+  --------------------------------------------------
+
+  !YonedaEmbeddingToWireMap: {
+    _type: "YonedaEmbeddingToWireMap",
+    yoneda_embedding: @Yoneda.!YonedaEmbedding,
+    wire_diagram: @Wire.WireDiagram -- Diagram showing Y: C -> [C^op, Set]
+  }
+
+  !YonedaLemmaIsomorphismWireMap: {
+    _type: "YonedaLemmaIsomorphismWireMap",
+    -- Representing Nat(Hom(-,c), F) ≅ F(c)
+    representing_object: @Cat.!Object, -- Object c
+    presheaf: @CatXf.!Functor,         -- Presheaf F: C^op -> Set
+    wire_diagram: @Wire.WireDiagram
+  }
+
+  --------------------------------------------------
+  -- Core Transformation Functions
+  --------------------------------------------------
+
+  --[[
+    yoneda_embedding_to_wire visualizes the Yoneda embedding functor.
+  ]]--
+  yoneda_embedding_to_wire: @Yoneda.!YonedaEmbedding -> !YonedaEmbeddingToWireMap [
+    Y ->
+    let catC = Y.source_category in
+    let catPsh = Y.target_presheaf_category.functor_category in
+
+    -- Use the generic functor_diagram from WireXf
+    let diagram = @WireXf.functor_diagram(Y.base_functor) in
+
+    -- Add specific labels
+    let diagram = @Wire.add_label(diagram, "Y: " + catC.name + " -> [" + catC.name + "^op, Set]", {})
+
+    {
+      _type: "YonedaEmbeddingToWireMap",
+      yoneda_embedding: Y,
+      wire_diagram: diagram
+    }
+  ]
+
+  --[[
+    yoneda_lemma_iso_to_wire visualizes the natural isomorphism
+    Nat(Hom(-,c), F) ≅ F(c).
+  ]]--
+  yoneda_lemma_iso_to_wire:
+    @Cat.!Object * @CatXf.!Functor -> !YonedaLemmaIsomorphismWireMap [
+    c F ->
+    -- Requires access to Set category, Nat construction etc.
+    let Yc = @Yoneda.apply_yoneda_obj(@Cat.get_category_of(c), c) in -- Hom(-, c)
+    let Fc = @CatXf.apply_functor_obj(F, c) in -- F(c) - requires eval
+    let NatYcF = @CatXf.natural_transformation_object(Yc, F) in -- Nat(Y(c), F)
+
+    -- Create boxes
+    let boxNat = @Wire.create_box("Nat(" + Yc.name + ", " + F.name + ")", [], []) in
+    let boxFc = @Wire.create_box("F(" + c.name + ")", [], []) in
+    let boxIso = @Wire.create_box("≅", [], []) in -- Isomorphism symbol
+
+    -- Position and connect
+    -- ... layout ...
+    let wire1 = @Wire.connect(boxNat, boxIso, T.Any) in
+    let wire2 = @Wire.connect(boxIso, boxFc, T.Any) in
+
+    let diagram = @Wire.create_diagram([boxNat, boxFc, boxIso], [wire1, wire2], [], []) in
+    let laid_out_diagram = @Wire.auto_layout(diagram) in
+
+    {
+      _type: "YonedaLemmaIsomorphismWireMap",
+      representing_object: c,
+      presheaf: F,
+      wire_diagram: laid_out_diagram
+    }
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping (Conceptual)
+  --------------------------------------------------
+
+  structure: {
+    law: {
+      -- Check visualizations reflect the isomorphism.
+      placeholder: [map -> true]
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    yoneda_embedding_wire_set: () -> ?(@Wire.WireDiagram) [ ->
+      let maybe_Y = @Yoneda.example.yoneda_for_set() in
+      match maybe_Y with
+        | ?Some(y) -> ?Some(yoneda_embedding_to_wire(y).wire_diagram)
+        | ?None -> ?None
+    ]
+  }
+} 
