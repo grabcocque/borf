@@ -1,11 +1,98 @@
 --[[
-  Generators
+  GENERATORS - Process Data Efficiently Without Memory Overload
 
-  Efficient iterators that produce values on demand, allowing for infinite streams,
-  lazy evaluation, and memory-efficient data processing.
+  Generators create on-demand data streams that:
+  
+  - Handle large datasets with minimal memory
+  - Work with infinite sequences (like event streams)
+  - Calculate values only when needed (lazy evaluation)
+  - Process data item-by-item for consistent performance
+  - Support powerful transformations and pipelines
+  
+  QUICK EXAMPLES:
+  
+  # Basic number generator
+  ```borf
+  let numbers = range(1, 10)  // Creates 1,2,3,...,10
+  for_each(numbers, [n -> print(n)])  // Prints each number
+  ```
+  
+  # Efficient data pipeline
+  ```borf
+  let result = range(1, 100)
+    |> [g -> map(g, [x -> x * 2])]         // Double each number
+    |> [g -> filter(g, [x -> x % 3 == 0])] // Keep multiples of 3
+    |> [g -> take(g, 5)]                   // Take only first 5
+    |> collect                             // Convert to array
+  
+  print(result)  // [6, 12, 18, 24, 30]
+  ```
+  
+  # Process large files without memory issues
+  ```borf
+  // Read large log file line by line
+  let log_lines = from_file("access_log.txt")
+    |> [g -> filter(g, [line -> line.contains("ERROR")])]
+    |> [g -> map(g, [line -> extract_error_info(line)])]
+  
+  // Each line processed individually - works with terabytes
+  for_each(log_lines, [error -> alert_system(error)])
+  ```
+  
+  # Stream processing dashboard
+  ```borf
+  // Continuous sensor readings
+  let temps = sensor_stream("temperature")
+    |> [g -> map(g, [t -> convert_celsius(t)])]
+    |> [g -> rolling_average(g, 10)]  // 10-point average
+  
+  // Update UI in real-time
+  for_each(temps, [avg -> update_dashboard(avg)])
+  ```
 ]]--
 
 @Generator: {
+  --[[
+    PERFORMANCE TIPS & BEST PRACTICES
+    
+    DO:
+    ✅ Process data in pipelines (|> operator makes this clean)
+    ✅ Use take() before collect() on large/infinite generators
+    ✅ Prefer for_each() over collect() when possible
+    ✅ Process files line-by-line with generators
+    ✅ Keep transformations (map, filter) pure
+    
+    DON'T:
+    ❌ Call collect() on infinite generators
+    ❌ Create complex transformations that modify external state
+    ❌ Reuse generators after consuming them (use rewind() if needed)
+    ❌ Put expensive operations inside generator transformations
+    ❌ Create deeply nested generators (use flatMap instead)
+    
+    COMMON PATTERNS:
+    
+    1. Data Processing Pipeline
+    ```
+    data_source() 
+      |> [g -> filter(g, is_valid)]
+      |> [g -> map(g, transform)]
+      |> [g -> take(g, limit)]
+      |> terminal_operation
+    ```
+    
+    2. Chunked Processing (for large datasets)
+    ```
+    process_in_chunks(data_source(), chunk_size, processor)
+    ```
+    
+    3. Lazy File Processing
+    ```
+    file_to_lines(filename)
+      |> process_pipeline
+      |> for_each(save_result)
+    ```
+  ]]--
+
   typ: {
     -- Core generator type
     Generator
@@ -75,20 +162,21 @@
   vis: E |> [e -> true]
 
   deps: {
-    (@Generator, @T, true),           -- Add dependency on Type system
-    (@Generator, @Kleisli, true),     -- Add dependency on Kleisli arrows
-    (@Generator, @Task, true),        -- Add dependency on Task for async generators
-    (@Generator, @Cat, true),         -- Add dependency on Category
-    (@Generator, @Prim, true)         -- Add dependency on Prim
+    (@Generator, @Prim, true)  -- Add dependency on Prim
   }
 
   --------------------------------------------------
-  -- Core Generator Types
+  -- CORE TYPES
   --------------------------------------------------
 
   --[[
-    Generator represents a sequence of values that can be produced on demand.
-    It uses the arrow pattern for composition.
+    Generator: On-demand data producer
+    
+    Use generators when you need to:
+    - Process large files without loading everything into memory
+    - Work with infinite data streams (sensors, events, etc.)
+    - Create data pipelines with clean, readable code
+    - Improve performance by processing only what you need
   ]]--
   Generator: {
     value_type: a,             -- The type of values produced
@@ -100,8 +188,9 @@
   }
 
   --[[
-    GeneratorState represents the current state of a generator.
-    It can be either Yielded with a value or Completed.
+    GeneratorState: Represents the current state of a generator
+    
+    Either contains a yielded value or indicates completion
   ]]--
   GeneratorState: {
     _type: S,           -- "yielded" or "completed"
@@ -110,7 +199,7 @@
   }
 
   --[[
-    Yielded represents a successful yield from a generator.
+    Yielded: Represents a successfully produced value
   ]]--
   Yielded: {
     _type: "yielded",
@@ -119,7 +208,7 @@
   }
 
   --[[
-    Completed represents a generator that has finished producing values.
+    Completed: Indicates the generator has no more values
   ]]--
   Completed: {
     _type: "completed",
@@ -128,7 +217,7 @@
   }
 
   --[[
-    GeneratorMap represents a mapping operation on a generator.
+    GeneratorMap: Transforms values with a mapping function
   ]]--
   GeneratorMap: {
     _type: "map",
@@ -137,7 +226,7 @@
   }
 
   --[[
-    GeneratorFilter represents a filtering operation on a generator.
+    GeneratorFilter: Keeps only values matching a condition
   ]]--
   GeneratorFilter: {
     _type: "filter",
@@ -146,7 +235,7 @@
   }
 
   --[[
-    GeneratorTake represents a limited generator that takes only a certain number of items.
+    GeneratorTake: Limits number of values from a generator
   ]]--
   GeneratorTake: {
     _type: "take",
@@ -155,7 +244,7 @@
   }
 
   --[[
-    GeneratorZip represents a combination of two generators.
+    GeneratorZip: Combines values from two generators as pairs
   ]]--
   GeneratorZip: {
     _type: "zip",
@@ -164,7 +253,8 @@
   }
 
   --[[
-    GeneratorFlatMap represents a Kleisli composition for generators.
+    GeneratorFlatMap: Transforms each value into a new generator
+    and flattens results into a single stream
   ]]--
   GeneratorFlatMap: {
     _type: "flatMap",
@@ -173,7 +263,7 @@
   }
 
   --[[
-    RangeGenerator produces a range of numeric values.
+    RangeGenerator: Creates a sequence of numbers
   ]]--
   RangeGenerator: {
     _type: "range",
@@ -183,7 +273,7 @@
   }
 
   --[[
-    RepeatGenerator produces the same value indefinitely.
+    RepeatGenerator: Repeats a value a specified number of times
   ]]--
   RepeatGenerator: {
     _type: "repeat",
@@ -192,7 +282,7 @@
   }
 
   --[[
-    CycleGenerator cycles through an array of values indefinitely.
+    CycleGenerator: Cycles through a collection of values
   ]]--
   CycleGenerator: {
     _type: "cycle",
@@ -201,11 +291,25 @@
   }
 
   --------------------------------------------------
-  -- Constructor Functions
+  -- CREATING GENERATORS
   --------------------------------------------------
 
   --[[
-    generator creates a new generator from a next function and initial state.
+    generator: Creates a custom generator from a function and initial state
+    
+    Use this to create specialized generators with custom logic.
+    
+    Example: Create a generator that yields random numbers:
+    ```
+    let random_gen = generator(
+      [_ -> {
+        _type: "yielded", 
+        value: Prim.random_int(1, 100),
+        next_state: null
+      }],
+      null
+    )
+    ```
   ]]--
   generator: (Any -> GeneratorState.a) * Any -> Generator.a [next_fn initial_state ->
     {
@@ -219,7 +323,15 @@
   ]
 
   --[[
-    from_array creates a generator from an array.
+    from_array: Creates a generator from an array
+    
+    This allows array-like access to any collection, with on-demand processing.
+    
+    Example: Process array items lazily
+    ```
+    let items = from_array([1, 2, 3, 4, 5])
+    for_each(items, [item -> process(item)])
+    ```
   ]]--
   from_array: [a] -> Generator.a [arr ->
     generator(
@@ -239,7 +351,18 @@
   ]
 
   --[[
-    from_function creates a generator from a function that produces values.
+    from_function: Creates a generator from a function that produces values
+    
+    Perfect for dynamically generated data or computed sequences.
+    
+    Example: Generate values from a function
+    ```
+    // Generate powers of 2: 2, 4, 8, 16, ...
+    let powers_of_2 = from_function(
+      [n -> n > 1000 ? null : Math.pow(2, n)], 
+      1
+    )
+    ```
   ]]--
   from_function: (Any -> a | Null) * Any -> Generator.a [fn initial_state ->
     generator(
@@ -256,7 +379,15 @@
   ]
 
   --[[
-    range creates a generator producing a range of integers.
+    range: Creates a generator producing a range of integers
+    
+    Use for numeric sequences, iterations, and counting.
+    
+    Example: Iterate through a range of values
+    ```
+    // Count from 1 to 10 by 2s: 1, 3, 5, 7, 9
+    let odd_numbers = range(1, 10, 2)
+    ```
   ]]--
   range: Z * (Z | Null) * Z -> Generator.Z [start end step ->
     let end_value = end in
@@ -278,7 +409,15 @@
   ]
 
   --[[
-    repeat creates a generator that repeats a value.
+    repeat: Creates a generator that repeats a value
+    
+    Useful for filling, testing, and creating fixed sequences.
+    
+    Example: Repeat a value a specific number of times
+    ```
+    // Generate "test" 5 times
+    let test_strings = repeat("test", 5)
+    ```
   ]]--
   repeat: a * (Z | Null) -> Generator.a [value count ->
     generator(
@@ -298,7 +437,15 @@
   ]
 
   --[[
-    cycle creates a generator that cycles through an array indefinitely.
+    cycle: Creates a generator that cycles through an array indefinitely
+    
+    Perfect for repeating patterns, round-robin processing, and looping behaviors.
+    
+    Example: Cycle through a list of values
+    ```
+    // Generate colors in repeating pattern: "red", "green", "blue", "red", ...
+    let colors = cycle(["red", "green", "blue"])
+    ```
   ]]--
   cycle: [a] -> Generator.a [values ->
     if Prim.length(values) == 0 {
@@ -321,11 +468,20 @@
   ]
 
   --------------------------------------------------
-  -- State Control Functions
+  -- CONTROLLING GENERATOR STATE
   --------------------------------------------------
 
   --[[
-    next advances the generator and returns the next state.
+    next: Advances the generator and returns the next state
+    
+    This is the core function for generator iteration.
+    
+    Example: Manual iteration of a generator
+    ```
+    let count = range(1, 5)
+    let result = next(count)
+    print(result.value)  // 1
+    ```
   ]]--
   next: Generator.a -> GeneratorState.a [gen ->
     let apply_transformations = [gen state ->
@@ -367,7 +523,15 @@
   ]
 
   --[[
-    peek returns the next value without advancing the generator.
+    peek: Returns the next value without advancing the generator
+    
+    Useful for looking ahead without consuming values.
+    
+    Example: Check the next value without consuming it
+    ```
+    let numbers = range(1, 10)
+    let next_value = peek(numbers)  // Returns 1 but doesn't consume it
+    ```
   ]]--
   peek: Generator.a -> a | Null [gen ->
     let result = next(gen) in
@@ -382,8 +546,21 @@
   ]
 
   --[[
-    rewind resets the generator to its initial state.
-    Note: Only works for generators that can be rewound.
+    rewind: Resets the generator to its initial state
+    
+    Use to restart iteration from the beginning.
+    
+    Example: Reuse a generator from the start
+    ```
+    let numbers = range(1, 3)
+    collect(numbers)  // [1, 2, 3]
+    
+    // Now numbers is exhausted
+    rewind(numbers)   // Reset to beginning
+    collect(numbers)  // [1, 2, 3] again
+    ```
+    
+    Note: Only works for generators that can be rewound (arrays, ranges, etc.)
   ]]--
   rewind: Generator.a -> Generator.a [gen ->
     -- Check the generator type to determine if it can be rewound
@@ -407,11 +584,31 @@
   ]
 
   --------------------------------------------------
-  -- Transformation Functions
+  -- TRANSFORMING GENERATORS
   --------------------------------------------------
 
   --[[
-    map applies a transformation function to each value in the generator.
+    map: Transform values as they flow through your pipeline
+    
+    Perfect for:
+    - Converting data formats
+    - Extracting specific fields
+    - Calculations and computations
+    - Data normalization
+    
+    Example: Transform data in a pipeline
+    ```
+    // Calculate squares and format them
+    let number_info = range(1, 5)
+      |> [g -> map(g, [n -> {
+        original: n,
+        squared: n * n,
+        is_even: n % 2 == 0
+      }])]
+      |> collect
+    
+    // [{original: 1, squared: 1, is_even: false}, {original: 2, squared: 4, is_even: true}, ...]
+    ```
   ]]--
   map: Generator.a * (a -> b) -> Generator.b [gen transform ->
     {
@@ -427,7 +624,28 @@
   ]
 
   --[[
-    filter keeps only values that satisfy a predicate.
+    filter: Keep only values matching your criteria
+    
+    Essential for:
+    - Cleaning data (removing invalid entries)
+    - Finding specific data subsets
+    - Implementing business logic rules
+    - Error handling (skip problematic records)
+    
+    Example: Multiple filter conditions
+    ```
+    // For user data, find active premium subscribers
+    let premium_users = user_database()
+      |> [g -> filter(g, [user -> 
+        // Apply multiple conditions
+        user.status == "active" && 
+        user.subscription_type == "premium" &&
+        !user.payment_overdue
+      ])]
+      |> collect
+    
+    send_promotion(premium_users)
+    ```
   ]]--
   filter: Generator.a * (a -> Bool) -> Generator.a [gen predicate ->
     {
@@ -443,7 +661,16 @@
   ]
 
   --[[
-    take limits the generator to a certain number of values.
+    take: Limits the generator to a certain number of values
+    
+    Perfect for pagination, limiting results, or truncating streams.
+    
+    Example: Limit the number of values produced
+    ```
+    let numbers = range(1, 100)      // 1-100
+    let first_ten = take(numbers, 10) // Only first 10 numbers
+    collect(first_ten)  // [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    ```
   ]]--
   take: Generator.a * Z -> Generator.a [gen count ->
     {
@@ -459,7 +686,16 @@
   ]
 
   --[[
-    drop skips a certain number of values in the generator.
+    drop: Skips a certain number of values in the generator
+    
+    Useful for pagination, skipping headers, or advancing to relevant data.
+    
+    Example: Skip the first few values
+    ```
+    let numbers = range(1, 10)
+    let skip_first_5 = drop(numbers, 5)
+    collect(skip_first_5)  // [6, 7, 8, 9, 10]
+    ```
   ]]--
   drop: Generator.a * Z -> Generator.a [gen count ->
     -- Advance the generator by count values
@@ -477,7 +713,17 @@
   ]
 
   --[[
-    zip combines two generators into one that produces pairs of values.
+    zip: Combines two generators into one that produces pairs of values
+    
+    Useful for pairing related data streams, coordinates, or parallel processing.
+    
+    Example: Combine values from two generators
+    ```
+    let numbers = range(1, 3)
+    let letters = from_array(["a", "b", "c"])
+    let pairs = zip(numbers, letters)
+    collect(pairs)  // [(1, "a"), (2, "b"), (3, "c")]
+    ```
   ]]--
   zip: Generator.a * Generator.b -> Generator.(a * b) [gen1 gen2 ->
     generator(
@@ -503,8 +749,7 @@
   ]
 
   --[[
-    compose_linear applies a linear function that returns a generator to each element of a generator,
-    flattening the results into a single generator using linear composition.
+    compose_linear: Internal helper for composing generators efficiently
   ]]--
   compose_linear: Generator.a * (a -o> Generator.b) -> Generator.b [gen_a linear_fn ->
     generator(
@@ -546,9 +791,20 @@
   ]
 
   --[[
-    Applies a function that returns a generator to each element of a generator,
-    flattening the results into a single generator (legacy monadic pattern).
-    Now implemented using linear types internally.
+    flatMap: Transforms values into new generators and flattens them
+    
+    Perfect for nested data, tree structures, or complex transformations.
+    
+    Example: Create nested streams and flatten them
+    ```
+    // For each number 1-3, generate that many repeated values
+    let numbers = range(1, 3)
+    let repeats = flatMap(numbers, [n -> 
+      // Creates generators of [1], [2,2], [3,3,3]
+      repeat(n, n)
+    ])
+    collect(repeats)  // [1, 2, 2, 3, 3, 3]
+    ```
   ]]--
   flatMap: Generator.a * (a -> Generator.b) -> Generator.b [gen_a fn ->
     -- Wrap the regular function in a linear one
@@ -557,12 +813,34 @@
   ]
 
   --------------------------------------------------
-  -- Consumption Functions
+  -- CONSUMING GENERATORS
   --------------------------------------------------
 
   --[[
-    collect gathers all values from a generator into an array.
-    Warning: Only use this with finite generators!
+    collect: Convert a generator to an array with all values
+    
+    When to use:
+    - At the end of your generator pipeline to get results
+    - When you need to use array functions or pass to other code
+    - For batching or visualization of final data
+    
+    When NOT to use:
+    - With infinite generators (will run forever)
+    - With extremely large datasets (defeats memory benefits)
+    - When you only need to perform an action on each item
+    
+    Example: Basic collection pattern
+    ```
+    // Process a million records efficiently, then collect
+    let results = range(1, 1000000)
+      |> [g -> filter(g, is_important)]
+      |> [g -> map(g, process_data)]
+      |> [g -> take(g, 100)]  // Limit before collecting
+      |> collect
+    ```
+    
+    IMPORTANT: Always use take() before collect() on potentially large generators
+    to avoid memory issues.
   ]]--
   collect: Generator.a -> [a] [gen ->
     let result = [] in
@@ -582,7 +860,16 @@
   ]
 
   --[[
-    reduce folds the generator values into a single result.
+    reduce: Folds the generator values into a single result
+    
+    Perfect for aggregations, summaries, and calculations over streams.
+    
+    Example: Calculate a sum of all values
+    ```
+    let numbers = range(1, 5)
+    let sum = reduce(numbers, [acc n -> acc + n], 0)
+    // sum = 15 (1+2+3+4+5)
+    ```
   ]]--
   reduce: Generator.a * (b * a -> b) * b -> b [gen reducer initial ->
     let result = initial in
@@ -602,7 +889,35 @@
   ]
 
   --[[
-    for_each executes a function for each value in the generator.
+    for_each: Process every item in a generator
+    
+    Perfect for:
+    - Performing actions (saving, updating, sending)
+    - Continuous processing of streams
+    - Side effects when you don't need a result array
+    - Processing huge datasets with consistent memory usage
+    
+    Example: Efficient batch processing
+    ```
+    // Process user data without holding everything in memory
+    let users = database_query_stream("SELECT * FROM users")
+      |> [g -> filter(g, [u -> u.needs_update])]
+      |> [g -> map(g, prepare_user_data)]
+    
+    // Process each user one at a time
+    for_each(users, [user -> 
+      try {
+        send_notification(user)
+        update_user_record(user.id)
+        log_success(user.id)
+      } catch e {
+        log_error(user.id, e)
+      }
+    ])
+    ```
+    
+    TIP: for_each is typically better than collect() + array.forEach() 
+    for large datasets since it maintains the memory efficiency of generators.
   ]]--
   for_each: Generator.a * (a -> ()) -> () [gen fn ->
     loop {
@@ -618,7 +933,16 @@
   ]
 
   --[[
-    find searches for a value in the generator that matches a predicate.
+    find: Searches for a value in the generator that matches a predicate
+    
+    Great for finding the first matching item in a stream.
+    
+    Example: Find first item matching a condition
+    ```
+    let numbers = range(1, 100)
+    let first_divisible_by_42 = find(numbers, [n -> n % 42 == 0])
+    // first_divisible_by_42 = 42
+    ```
   ]]--
   find: Generator.a * (a -> Bool) -> a | Null [gen predicate ->
     loop {
@@ -637,7 +961,16 @@
   ]
 
   --[[
-    any checks if any value in the generator satisfies a predicate.
+    any: Checks if any value in the generator satisfies a predicate
+    
+    Use to test if a condition exists anywhere in the stream.
+    
+    Example: Check if any value satisfies a condition
+    ```
+    let numbers = range(1, 10)
+    let has_even = any(numbers, [n -> n % 2 == 0])
+    // has_even = true
+    ```
   ]]--
   any: Generator.a * (a -> Bool) -> Bool [gen predicate ->
     loop {
@@ -656,7 +989,16 @@
   ]
 
   --[[
-    all checks if all values in the generator satisfy a predicate.
+    all: Checks if all values in the generator satisfy a predicate
+    
+    Perfect for validating entire streams or ensuring conditions.
+    
+    Example: Verify all values satisfy a condition
+    ```
+    let numbers = range(1, 10)
+    let all_positive = all(numbers, [n -> n > 0])
+    // all_positive = true
+    ```
   ]]--
   all: Generator.a * (a -> Bool) -> Bool [gen predicate ->
     loop {
@@ -675,11 +1017,21 @@
   ]
 
   --------------------------------------------------
-  -- Utility Functions
+  -- UTILITY FUNCTIONS
   --------------------------------------------------
 
   --[[
-    count returns the number of elements in a generator.
+    count: Returns the number of elements in a generator
+    
+    Useful for measuring finite sequences.
+    
+    Example: Count the number of items
+    ```
+    let filtered = range(1, 100) 
+      |> [g -> filter(g, [n -> n % 7 == 0])]
+    let count_result = count(filtered)  // 14
+    ```
+    
     Warning: Only use with finite generators!
   ]]--
   count: Generator.a -> Z [gen ->
@@ -687,7 +1039,17 @@
   ]
 
   --[[
-    is_empty checks if a generator is empty.
+    is_empty: Checks if a generator is empty
+    
+    Use to validate input before processing.
+    
+    Example: Check if a generator has any values
+    ```
+    let results = get_search_results(query)
+    if (is_empty(results)) {
+      print("No results found")
+    }
+    ```
   ]]--
   is_empty: Generator.a -> Bool [gen ->
     let next_result = next(gen) in
@@ -702,26 +1064,56 @@
   ]
 
   --[[
-    to_array converts a generator to an array.
+    to_array: Converts a generator to an array
+    
     Alias for collect.
+    
+    Example: Convert a generator to an array
+    ```
+    let evens = range(1, 10) 
+      |> [g -> filter(g, [n -> n % 2 == 0])]
+    let even_array = to_array(evens)  // [2, 4, 6, 8, 10]
+    ```
   ]]--
   to_array: Generator.a -> [a] [gen ->
     collect(gen)
   ]
 
   --------------------------------------------------
-  -- Generator Composition
+  -- GENERATOR COMPOSITION
   --------------------------------------------------
 
   --[[
-    Pipe operator for chaining generator transformations
+    Pipe operator: Chains generator transformations
+    
+    Perfect for building processing pipelines with clean syntax.
+    
+    Example: Create a data processing pipeline
+    ```
+    let results = range(1, 100)
+      |> [g -> filter(g, [n -> n % 3 == 0])]
+      |> [g -> map(g, [n -> n * n])]
+      |> [g -> take(g, 5)]
+      |> collect
+    // [9, 36, 81, 144, 225]
+    ```
   ]]--
   |>: Generator.a * (Generator.a -> Generator.b) -> Generator.b [gen transform ->
     transform(gen)
   ]
 
   --[[
-    Concatenate two generators
+    Concatenate: Combines two generators sequentially
+    
+    Use to join streams together end-to-end.
+    
+    Example: Combine multiple generators
+    ```
+    let first_half = range(1, 5)
+    let second_half = range(6, 10)
+    let combined = first_half ++ second_half
+    collect(combined)  // [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    ```
   ]]--
   ++: Generator.a * Generator.a -> Generator.a [gen1 gen2 ->
     generator(
@@ -766,171 +1158,281 @@
   ]
 
   --------------------------------------------------
-  -- Generators as Arrows
-  --------------------------------------------------
-
-  --[[
-    Structure mapping that establishes generators as arrows.
-
-    This creates a Kleisli arrow-based structure where generators
-    are composable, transformable streams of values.
-  ]]--
-  structure: {
-    -- Arrow structure for generators
-    arr: [f ->
-      generator(
-        [state ->
-          {
-            _type: "yielded",
-            value: f(state),
-            next_state: state + 1
-          }
-        ],
-        0
-      )
-    ],
-
-    compose: [g1 g2 ->
-      generator(
-        [state ->
-          let result1 = next(state.g1) in
-
-          if result1._type == "completed" {
-            { _type: "completed", value: null, next_state: null }
-          } else {
-            -- Feed the result into the second generator
-            let g2_with_input = {
-              ...state.g2,
-              state: result1.value
-            } in
-
-            let result2 = next(g2_with_input) in
-
-            {
-              _type: result2._type,
-              value: result2.value,
-              next_state: {
-                g1: { ...state.g1, state: result1.next_state },
-                g2: state.g2
-              }
-            }
-          }
-        ],
-        { g1: g1, g2: g2 }
-      )
-    ],
-
-    first: [g ->
-      generator(
-        [state ->
-          let result = next(state.generator) in
-
-          if result._type == "completed" {
-            { _type: "completed", value: null, next_state: null }
-          } else {
-            {
-              _type: "yielded",
-              value: (result.value, state.b),
-              next_state: {
-                generator: { ...state.generator, state: result.next_state },
-                b: state.b
-              }
-            }
-          }
-        ],
-        { generator: g, b: null }
-      )
-    ],
-
-    -- Helper functions
-    id: [x -> x],
-    constgen: [x -> repeat(x, null)],
-
-    -- Laws for generator arrows
-    law: {
-      -- Arrow laws
-      composition: [f g x ->
-        -- arr(f >>> g) == arr(f) >>> arr(g)
-        let composed_fn = [y -> g(f(y))] in
-        let composed_arr = arr(composed_fn) in
-        let sequenced_arr = compose(arr(f), arr(g)) in
-
-        next(composed_arr).value == next(sequenced_arr).value
-      ],
-
-      identity: [g ->
-        -- arr(id) >>> g == g == g >>> arr(id)
-        let id_arr = arr(id) in
-
-        compose(id_arr, g) == g && compose(g, id_arr) == g
-      ],
-
-      association: [g1 g2 g3 ->
-        -- (g1 >>> g2) >>> g3 == g1 >>> (g2 >>> g3)
-        compose(compose(g1, g2), g3) == compose(g1, compose(g2, g3))
-      ]
-    }
-  }
-
-  --------------------------------------------------
-  -- Examples
+  -- PRACTICAL EXAMPLES
   --------------------------------------------------
 
   example: {
     --[[
-      Example 1: Generating Fibonacci numbers
+      Example 1: Efficient CSV Data Processing
+      
+      Process large CSV files with minimal memory footprint
     ]]--
-    fibonacci_generator: () -> Generator.Z [->
-      generator(
-        [state ->
-          {
-            _type: "yielded",
-            value: state.current,
-            next_state: {
-              current: state.next,
-              next: state.current + state.next
-            }
-          }
-        ],
-        { current: 0, next: 1 }
-      )
-    ],
-
-    --[[
-      Example 2: Processing a stream of data
-    ]]--
-    data_processing: () -> [Z] [->
-      -- Create a range of numbers
-      let numbers = range(1, 100, 1) in
-
-      -- Process them with a pipeline
-      let result = numbers
-        |> [g -> map(g, [x -> x * 2])]           -- Double each number
-        |> [g -> filter(g, [x -> x % 3 == 0])]   -- Keep only multiples of 3
-        |> [g -> take(g, 10)]                    -- Take only the first 10
+    process_csv: S * (Map -> Map) -> [Map] [filename transform ->
+      -- Open file as line-by-line generator (never loads entire file)
+      let lines = file_to_lines(filename) in
+      
+      -- Extract header and create parser
+      let header = next(lines).value in
+      let header_fields = parse_csv_header(header) in
+      
+      -- Process the file efficiently
+      lines
+        -- Parse each line into object
+        |> [g -> map(g, [line -> parse_csv_line(line, header_fields)])]
+        
+        -- Skip invalid records
+        |> [g -> filter(g, [record -> is_valid_record(record)])]
+        
+        -- Apply custom transformations
+        |> [g -> map(g, transform)]
+        
+        -- Get all records (each processed individually)
         |> collect
-
-      result
     ],
-
+    
     --[[
-      Example 3: Infinite streams with lazy evaluation
+      Example 2: Real-time Data Dashboard
+      
+      Create an infinite stream processor for sensor data
     ]]--
-    infinite_stream: () -> Z [->
-      -- Create an infinite stream of random numbers
-      let random_numbers = generator(
-        [_ ->
-          {
-            _type: "yielded",
-            value: Prim.random_int(1, 100),
-            next_state: null
+    sensor_dashboard: S * Z -> () [sensor_id update_interval ->
+      -- Create an infinite generator for sensor readings
+      let readings = sensor_stream(sensor_id) in
+      
+      -- Calculate rolling statistics
+      let processed = readings
+        -- Convert raw values
+        |> [g -> map(g, normalize_reading)]
+        
+        -- Calculate rolling average (last 10 readings)
+        |> [g -> window(g, 10)]
+        |> [g -> map(g, [window -> {
+          avg: avg(window),
+          min: min(window),
+          max: max(window),
+          trend: calculate_trend(window)
+        }])] in
+      
+      -- Update dashboard in real-time (forever)
+      loop {
+        -- Get next computed value
+        let stats = next(processed).value in
+        
+        -- Update different dashboard components
+        update_chart(stats)
+        update_gauge(stats.avg)
+        
+        -- Check for anomalies
+        if stats.avg > THRESHOLD {
+          trigger_alert(stats)
+        }
+        
+        -- Wait before next update
+        sleep(update_interval)
+      }
+    ],
+    
+    --[[
+      Example 3: Log File Analyzer
+      
+      Efficiently analyze massive log files
+    ]]--
+    analyze_logs: S * S * (Map -> ()) -> Map [log_path pattern reporter ->
+      -- Counters and stats
+      let stats = {
+        total_lines: 0,
+        matched_lines: 0,
+        errors_by_type: {},
+        response_times: []
+      } in
+      
+      -- Process log file line by line
+      let lines = file_to_lines(log_path) in
+      
+      for_each(lines, [line ->
+        -- Update total count
+        stats.total_lines = stats.total_lines + 1
+        
+        -- Only process lines matching our pattern
+        if line.contains(pattern) {
+          -- Extract useful information
+          let entry = parse_log_entry(line)
+          
+          -- Update statistics
+          stats.matched_lines = stats.matched_lines + 1
+          
+          -- Group by error type
+          if entry.error_type {
+            stats.errors_by_type[entry.error_type] = 
+              (stats.errors_by_type[entry.error_type] || 0) + 1
           }
-        ],
-        null
+          
+          -- Track response times
+          if entry.response_time {
+            stats.response_times = stats.response_times + [entry.response_time]
+          }
+          
+          -- Report individual entries
+          reporter(entry)
+        }
+      ])
+      
+      -- Calculate summary statistics
+      stats.avg_response_time = avg(stats.response_times)
+      stats.max_response_time = max(stats.response_times)
+      
+      stats
+    ],
+    
+    --[[
+      Example 4: Paginated API Client 
+      
+      Process API results that come in multiple pages
+    ]]--
+    paginated_api: S * Map * (Map -> Map) -> [Map] [endpoint params transform ->
+      -- Function to fetch a page of results
+      let fetch_page = [page_num ->
+        -- Combine base params with pagination
+        let page_params = {
+          ...params,
+          page: page_num,
+          limit: 100
+        } in
+        
+        -- Make actual API request
+        let response = api_fetch(endpoint, page_params) in
+        
+        if response.items.length == 0 {
+          -- No more results
+          null
+        } else {
+          -- Return items from this page
+          response.items
+        }
+      ] in
+      
+      -- Create generator that lazily fetches pages as needed
+      let page_gen = from_function(fetch_page, 1) in
+      
+      -- Flatten pages into stream of individual items
+      flatMap(page_gen, [page -> from_array(page)])
+        -- Apply transformations to each item
+        |> [g -> map(g, transform)]
+        -- Filter if needed
+        |> [g -> filter(g, [item -> item != null])]
+        -- Collect all results
+        |> collect
+    ],
+    
+    --[[
+      Example 5: Data ETL Pipeline
+      
+      Extract, transform and load data between systems
+    ]]--
+    data_etl: S * S * Z -> Map [source_db target_db batch_size ->
+      -- Track metrics
+      let metrics = {
+        processed: 0,
+        succeeded: 0,
+        failed: 0,
+        start_time: now()
+      } in
+      
+      -- Create source data generator (efficient query)
+      let records = db_query_stream(
+        source_db, 
+        "SELECT * FROM large_table WHERE status = 'ready'"
       ) in
-
-      -- Find the first number that meets our criteria
-      find(random_numbers, [x -> x > 90 && x < 95])
+      
+      -- Process in batches for better performance
+      loop {
+        -- Take next batch (memory efficient)
+        let batch = records 
+          |> [g -> take(g, batch_size)] 
+          |> collect in
+        
+        -- Exit when no more records
+        if batch.length == 0 {
+          break
+        }
+        
+        -- Transform each record
+        let transformed = batch |> [record ->
+          try {
+            let result = transform_for_target(record) in
+            metrics.succeeded = metrics.succeeded + 1
+            result
+          } catch e {
+            log_error("Transform failed", e)
+            metrics.failed = metrics.failed + 1
+            null
+          }
+        ] |> [rec -> rec != null] in
+        
+        -- Bulk insert to target
+        if transformed.length > 0 {
+          db_bulk_insert(target_db, "target_table", transformed)
+        }
+        
+        -- Update metrics
+        metrics.processed = metrics.processed + batch.length
+        
+        -- Progress update
+        log_info("Processed ${metrics.processed} records")
+      }
+      
+      -- Calculate final metrics
+      metrics.duration = now() - metrics.start_time
+      metrics.throughput = metrics.processed / (metrics.duration / 1000)
+      
+      metrics
+    ],
+    
+    --[[
+      Example 6: Streaming Data Analytics
+      
+      Calculate statistics on a data stream in real-time
+    ]]--
+    stream_analytics: Generator.a * (a -> ()) -> () [data_stream reporter ->
+      -- Initialize analytics
+      let stats = {
+        count: 0,
+        sum: 0,
+        min: null,
+        max: null,
+        recent: [],
+        categories: {}
+      } in
+      
+      -- Continuously process stream
+      for_each(data_stream, [item ->
+        -- Update running stats
+        stats.count = stats.count + 1
+        stats.sum = stats.sum + item.value
+        stats.min = stats.min == null ? item.value : Math.min(stats.min, item.value)
+        stats.max = stats.max == null ? item.value : Math.max(stats.max, item.value)
+        
+        -- Track recent values (keep last 100)
+        stats.recent = stats.recent + [item.value]
+        if stats.recent.length > 100 {
+          stats.recent = drop(stats.recent, 1)
+        }
+        
+        -- Update category counts
+        let cat = item.category || "unknown"
+        stats.categories[cat] = (stats.categories[cat] || 0) + 1
+        
+        -- Calculate derived metrics
+        let current_stats = {
+          ...stats,
+          avg: stats.sum / stats.count,
+          median: median(stats.recent),
+          trend: stats.recent.length >= 10 ? detect_trend(stats.recent) : "unknown"
+        }
+        
+        -- Report the current statistics
+        reporter(current_stats)
+      ])
     ]
   }
 }
