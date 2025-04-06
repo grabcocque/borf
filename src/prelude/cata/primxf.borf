@@ -1,0 +1,553 @@
+--[[
+  Primitive Transformations
+
+  This module defines transformations between primitive operations and other 
+  categorical structures, establishing the foundational interface between
+  Borf's computational primitives and various mathematical frameworks.
+]]--
+
+@PrimXf: {
+  typ: {
+    -- Transformation types
+    PrimitiveTransformation ValueTransform TypeTransform
+    
+    -- Structure transformations
+    ComputationalCategory ResourceCategory
+    
+    -- Special transformations
+    LinearTransformation MonoidalTransformation
+  }
+
+  op: {
+    -- Transformation operators
+    ==> <== <=> ~~
+    
+    -- Function composition
+    o >>> <<< ||| &&&
+  }
+
+  fn: {
+    -- Category transformations
+    to_theory from_theory
+    to_linear from_linear
+    to_monoidal from_monoidal
+    
+    -- Type transformations
+    type_to_object type_from_object
+    linear_to_resource linear_from_resource
+    
+    -- Function transformations
+    fn_to_morphism fn_from_morphism
+    linear_fn_to_linear_morphism linear_morphism_to_linear_fn
+    
+    -- Collection transformations
+    list_to_functor list_from_functor
+    seq_to_functor seq_from_functor
+    set_to_functor set_from_functor
+    map_to_bifunctor map_from_bifunctor
+    
+    -- Resource management
+    track_resources release_resources lift_linear
+    
+    -- Advanced transformations
+    curry_transform uncurry_transform
+    yoneda_embedding
+    functor_composition
+    natural_transform
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@PrimXf, @T, true),          -- Add dependency on Type system
+    (@PrimXf, @Prim, true),       -- Add dependency on Primitives module
+    (@PrimXf, @Cata.Theory, true), -- Add dependency on Category theory module
+    (@PrimXf, @Cata.Linear, true)  -- Add dependency on Linear category module
+  }
+
+  --------------------------------------------------
+  -- Primitive to Category Theory Transformations
+  --------------------------------------------------
+
+  --[[
+    to_theory transforms the primitive computational structure into a 
+    computational category in category theory formalism.
+  ]]--
+  to_theory: @Prim -> @Cata.Theory.ComputationalCategory [prim_system ->
+    let comp_cat = @Cata.Theory.new_computational_category() in
+    
+    -- Map the basic morphism structure
+    @Cata.Theory.add_morphisms(comp_cat, {
+      objects: T.Type_0,
+      id: [a -> [x -> x]],
+      compose: [f g -> [x -> g(f(x))]]
+    }) |>
+    
+    -- Add monoidal structure for products
+    [cat -> @Cata.Theory.add_monoidal_structure(cat, {
+      tensor: [a b -> (a * b)],
+      unit: @Prim.Unit,
+      tensor_morphism: [f g -> [pair -> (f(pair.0), g(pair.1))]]
+    })] |>
+    
+    -- Add closed structure for function types
+    [cat -> @Cata.Theory.add_closed_structure(cat, {
+      internal_hom: [a b -> (a -> b)],
+      eval: [(f, x) -> f(x)],
+      curry: [f -> [a -> [b -> f(a, b)]]]
+    })] |>
+    
+    -- Add resource structure for linear types
+    [cat -> @Cata.Theory.add_resource_structure(cat, {
+      linear_type: [a -> !a],
+      consume: @Prim.consume,
+      clone: @Prim.clone
+    })]
+  ]
+
+  --[[
+    from_theory transforms a computational category from category theory
+    into primitive computational structures.
+  ]]--
+  from_theory: @Cata.Theory.ComputationalCategory -> @Prim [theory_cat ->
+    -- Create basic primitives mapping
+    let prim_map = {
+      -- Map objects to types
+      types: @Cata.Theory.objects(theory_cat) |> fold [acc obj ->
+        acc cup {obj: map_object_to_type(obj)}
+      ] {},
+      
+      -- Map morphisms to functions
+      functions: @Cata.Theory.morphisms(theory_cat) |> fold [acc morph ->
+        acc cup {morph.name: map_morphism_to_function(morph)}
+      ] {},
+      
+      -- Map monoidal structure
+      monoidal: @Cata.Theory.get_monoidal_structure(theory_cat) |> [m ->
+        if m then
+          {
+            product: m.tensor,
+            unit: m.unit
+          }
+        else
+          {}
+      ]
+    } in
+    
+    -- Return a wrapped primitive structure
+    prim_map
+  ]
+
+  --------------------------------------------------
+  -- Primitive to Linear Category Transformations
+  --------------------------------------------------
+  
+  --[[
+    to_linear transforms primitive operations into a linear category where
+    linear types and operations are represented explicitly.
+  ]]--
+  to_linear: @Prim -> @Cata.Linear.LinearCategory [prim ->
+    let linear_cat = @Cata.Linear.new_category() in
+    
+    -- Add types as objects
+    @Prim.typ |> fold [cat typ ->
+      @Cata.Linear.add_object(cat, typ)
+    ] linear_cat |>
+    
+    -- Add linear functions as linear morphisms
+    [cat -> @Prim.fn |> fold [c f ->
+      if is_linear_function(f) then
+        @Cata.Linear.add_linear_morphism(c, f, domain(f), codomain(f))
+      else
+        c
+    ] cat] |>
+    
+    -- Add resource structure
+    [cat -> @Cata.Linear.add_resource_structure(cat, {
+      linear_type: [a -> !a],
+      consume: @Prim.consume,
+      borrow: [a -> &a]
+    })]
+  ]
+  
+  --[[
+    from_linear transforms a linear category back to primitives,
+    preserving linearity constraints.
+  ]]--
+  from_linear: @Cata.Linear.LinearCategory -> @Prim [linear_cat ->
+    -- Extract objects and morphisms
+    let objects = @Cata.Linear.objects(linear_cat) in
+    let morphisms = @Cata.Linear.morphisms(linear_cat) in
+    
+    -- Create primitive mappings
+    let primitive_types = objects |> fold [acc obj ->
+      acc cup {obj.name: map_linear_object_to_type(obj)}
+    ] {} in
+    
+    let primitive_functions = morphisms |> fold [acc morph ->
+      acc cup {morph.name: map_linear_morphism_to_function(morph)}
+    ] {} in
+    
+    -- Return combined mappings
+    {types: primitive_types, functions: primitive_functions}
+  ]
+
+  --------------------------------------------------
+  -- Primitive to Monoidal Category Transformations
+  --------------------------------------------------
+  
+  --[[
+    to_monoidal transforms primitive operations with product types
+    into a monoidal category.
+  ]]--
+  to_monoidal: @Prim -> @Cata.Theory.MonoidalCategory [prim ->
+    let monoidal_cat = @Cata.Theory.new_monoidal_category() in
+    
+    -- Define the monoidal structure
+    @Cata.Theory.add_monoidal_structure(monoidal_cat, {
+      tensor: [a b -> (a * b)],
+      unit: @Prim.Unit,
+      associator: [a b c -> [((a, b), c) -> (a, (b, c))]],
+      left_unitor: [a -> [(unit, a) -> a]],
+      right_unitor: [a -> [(a, unit) -> a]]
+    }) |>
+    
+    -- Add primitive operations that respect monoidal structure
+    [cat -> @Prim.fn |> fold [c f ->
+      if respects_monoidal_structure(f) then
+        @Cata.Theory.add_monoidal_morphism(c, f)
+      else
+        c
+    ] cat]
+  ]
+  
+  --[[
+    from_monoidal transforms a monoidal category back to primitives
+    with product types.
+  ]]--
+  from_monoidal: @Cata.Theory.MonoidalCategory -> @Prim [monoidal_cat ->
+    -- Extract monoidal structure
+    let tensor = @Cata.Theory.get_tensor(monoidal_cat) in
+    let unit = @Cata.Theory.get_unit(monoidal_cat) in
+    
+    -- Create primitive mappings for product types
+    let product_mapping = {
+      tensor: tensor,
+      unit: unit,
+      pair_constructor: [a b -> (a, b)],
+      first: [(a, b) -> a],
+      second: [(a, b) -> b]
+    } in
+    
+    -- Return merged with other primitives
+    product_mapping
+  ]
+
+  --------------------------------------------------
+  -- Type Transformations
+  --------------------------------------------------
+  
+  --[[
+    type_to_object transforms a Borf type to a categorical object
+  ]]--
+  type_to_object: T.Type -> @Cata.Theory.Object [typ ->
+    @Cata.Theory.new_object(typ.name, {
+      properties: typ.properties,
+      operations: get_operations_for_type(typ)
+    })
+  ]
+  
+  --[[
+    type_from_object transforms a categorical object to a Borf type
+  ]]--
+  type_from_object: @Cata.Theory.Object -> T.Type [obj ->
+    T.Type {
+      name: obj.name,
+      properties: obj.properties,
+      constructors: obj.constructors
+    }
+  ]
+  
+  --[[
+    linear_to_resource transforms a linear type to a resource type
+  ]]--
+  linear_to_resource: !a -> @Cata.Linear.Resource(a) [!value ->
+    @Cata.Linear.new_resource(value, {
+      track_id: @Cata.Linear.new_tracking_id(),
+      acquire: [-> value],
+      release: [v -> @Prim.consume(v)]
+    })
+  ]
+  
+  --[[
+    linear_from_resource transforms a resource back to a linear type
+  ]]--
+  linear_from_resource: @Cata.Linear.Resource(a) -> !a [resource ->
+    let value = @Cata.Linear.extract(resource) in
+    value  -- Linear by construction
+  ]
+
+  --------------------------------------------------
+  -- Function Transformations
+  --------------------------------------------------
+  
+  --[[
+    fn_to_morphism transforms a primitive function to a categorical morphism
+  ]]--
+  fn_to_morphism: (a -> b) -> @Cata.Theory.Morphism [fn ->
+    @Cata.Theory.new_morphism(
+      type_to_object(typeof(domain(fn))),
+      type_to_object(typeof(codomain(fn))),
+      fn
+    )
+  ]
+  
+  --[[
+    fn_from_morphism transforms a categorical morphism to a primitive function
+  ]]--
+  fn_from_morphism: @Cata.Theory.Morphism -> (a -> b) [morphism ->
+    morphism.function
+  ]
+  
+  --[[
+    linear_fn_to_linear_morphism transforms a linear function to a linear morphism
+  ]]--
+  linear_fn_to_linear_morphism: (a -o> b) -> @Cata.Linear.LinearMorphism [fn ->
+    @Cata.Linear.new_linear_morphism(
+      type_to_object(typeof(domain(fn))),
+      type_to_object(typeof(codomain(fn))),
+      fn,
+      {consumes_input: true}
+    )
+  ]
+  
+  --[[
+    linear_morphism_to_linear_fn transforms a linear morphism to a linear function
+  ]]--
+  linear_morphism_to_linear_fn: @Cata.Linear.LinearMorphism -> (a -o> b) [morphism ->
+    morphism.function
+  ]
+
+  --------------------------------------------------
+  -- Collection Transformations
+  --------------------------------------------------
+  
+  --[[
+    list_to_functor transforms the list constructor into a functor
+  ]]--
+  list_to_functor: [a] -> @Cata.Theory.Functor [list ->
+    @Cata.Theory.new_functor({
+      fmap: [f -> [xs -> xs |> @Prim.map f]],
+      preserves_id: true,
+      preserves_composition: true
+    })
+  ]
+  
+  --[[
+    list_from_functor reconstructs a list from a functor representation
+  ]]--
+  list_from_functor: @Cata.Theory.Functor -> (a -> [a]) [functor ->
+    [a -> [a] |> [xs -> functor.fmap([x -> x])(xs)]]
+  ]
+  
+  --[[
+    seq_to_functor transforms the sequence constructor into a functor
+  ]]--
+  seq_to_functor: Seq(a) -> @Cata.Theory.Functor [seq ->
+    @Cata.Theory.new_functor({
+      fmap: [f -> [xs -> xs |> @Prim.map f]],
+      preserves_id: true,
+      preserves_composition: true
+    })
+  ]
+  
+  --[[
+    seq_from_functor reconstructs a sequence from a functor representation
+  ]]--
+  seq_from_functor: @Cata.Theory.Functor -> (a -> Seq(a)) [functor ->
+    [a -> Seq(a) |> [xs -> functor.fmap([x -> x])(xs)]]
+  ]
+  
+  --[[
+    set_to_functor transforms the set constructor into a functor
+  ]]--
+  set_to_functor: {a} -> @Cata.Theory.Functor [set ->
+    @Cata.Theory.new_functor({
+      fmap: [f -> [xs -> xs |> @Prim.map f]],
+      preserves_id: true,
+      preserves_composition: true
+    })
+  ]
+  
+  --[[
+    set_from_functor reconstructs a set from a functor representation
+  ]]--
+  set_from_functor: @Cata.Theory.Functor -> (a -> {a}) [functor ->
+    [a -> {a} |> [xs -> functor.fmap([x -> x])(xs)]]
+  ]
+  
+  --[[
+    map_to_bifunctor transforms the map constructor into a bifunctor
+  ]]--
+  map_to_bifunctor: (k:-> v) -> @Cata.Theory.Bifunctor [map ->
+    @Cata.Theory.new_bifunctor({
+      bimap: [f g -> [m -> m |> @Prim.fold [acc k v -> @Prim.insert(acc, f(k), g(v))] {}]],
+      preserves_id: true,
+      preserves_composition: true
+    })
+  ]
+  
+  --[[
+    map_from_bifunctor reconstructs a map from a bifunctor representation
+  ]]--
+  map_from_bifunctor: @Cata.Theory.Bifunctor -> ((a -> c) * (b -> d) -> ((a:-> b) -> (c:-> d))) [bifunctor ->
+    [f g -> [m -> bifunctor.bimap(f, g)(m)]]
+  ]
+
+  --------------------------------------------------
+  -- Resource Management
+  --------------------------------------------------
+  
+  --[[
+    track_resources adds resource tracking to a value
+  ]]--
+  track_resources: !a -o> @Cata.Linear.Tracked(a) [!value ->
+    @Cata.Linear.track(value, {
+      id: @Cata.Linear.new_tracking_id(),
+      acquired: true,
+      release_fn: [v -> @Prim.consume(v)]
+    })
+  ]
+  
+  --[[
+    release_resources releases tracked resources
+  ]]--
+  release_resources: @Cata.Linear.Tracked(a) -o> () [tracked ->
+    @Cata.Linear.release(tracked)
+  ]
+  
+  --[[
+    lift_linear lifts a non-linear function to operate on linear values
+  ]]--
+  lift_linear: (a -> b) -> (!a -o> !b) [f ->
+    [!x -> !f(x)]
+  ]
+
+  --------------------------------------------------
+  -- Advanced Transformations
+  --------------------------------------------------
+  
+  --[[
+    curry_transform implements the curry transformation for functions
+  ]]--
+  curry_transform: ((a * b) -> c) -> (a -> (b -> c)) [f ->
+    [a -> [b -> f(a, b)]]
+  ]
+  
+  --[[
+    uncurry_transform implements the uncurry transformation for functions
+  ]]--
+  uncurry_transform: (a -> (b -> c)) -> ((a * b) -> c) [f ->
+    [(a, b) -> f(a)(b)]
+  ]
+  
+  --[[
+    yoneda_embedding implements the Yoneda embedding for types
+  ]]--
+  yoneda_embedding: a -> ((a -> b) -> b) [a ->
+    [f -> f(a)]
+  ]
+  
+  --[[
+    functor_composition composes two functors
+  ]]--
+  functor_composition: @Cata.Theory.Functor * @Cata.Theory.Functor -> @Cata.Theory.Functor [f g ->
+    @Cata.Theory.new_functor({
+      fmap: [h -> [x -> g.fmap(h)(f.fmap([y -> y])(x))]],
+      preserves_id: f.preserves_id && g.preserves_id,
+      preserves_composition: f.preserves_composition && g.preserves_composition
+    })
+  ]
+  
+  --[[
+    natural_transform creates a natural transformation between functors
+  ]]--
+  natural_transform: @Cata.Theory.Functor * @Cata.Theory.Functor * ((a -> b) -> (c -> d)) -> @Cata.Theory.NaturalTransformation [f g transform ->
+    @Cata.Theory.new_natural_transformation({
+      domain: f,
+      codomain: g,
+      components: transform,
+      naturality: check_naturality(f, g, transform)
+    })
+  ]
+
+  --------------------------------------------------
+  -- Helper Functions
+  --------------------------------------------------
+  
+  -- Helper function to check if a function is linear
+  is_linear_function: (a -> b) -> Bool [f ->
+    f is (c -o> d)
+  ]
+  
+  -- Helper function to get domain of a function
+  domain: (a -> b) -> T.Type [f ->
+    typeof(parse_function_type(f).0)
+  ]
+  
+  -- Helper function to get codomain of a function
+  codomain: (a -> b) -> T.Type [f ->
+    typeof(parse_function_type(f).1)
+  ]
+  
+  -- Helper function to parse a function type
+  parse_function_type: (a -> b) -> (T.Type * T.Type) [f ->
+    let typ = typeof(f) in
+    (typ.domain, typ.codomain)
+  ]
+  
+  -- Helper to map a linear object to a type
+  map_linear_object_to_type: @Cata.Linear.Object -> T.Type [obj ->
+    T.Type {name: obj.name, properties: obj.properties}
+  ]
+  
+  -- Helper to map a linear morphism to a function
+  map_linear_morphism_to_function: @Cata.Linear.LinearMorphism -> (a -o> b) [morph ->
+    morph.function
+  ]
+  
+  -- Helper to get operations for a type
+  get_operations_for_type: T.Type -> [{name: S, signature: T.Type}] [typ ->
+    @Prim.fn |> fold [acc f ->
+      if domain(f) == typ then
+        acc cup [{name: f.name, signature: typeof(f)}]
+      else
+        acc
+    ] []
+  ]
+  
+  -- Helper to convert object to type
+  map_object_to_type: @Cata.Theory.Object -> T.Type [obj ->
+    T.Type {name: obj.name, properties: obj.data?.properties or {}}
+  ]
+  
+  -- Helper to convert morphism to function
+  map_morphism_to_function: @Cata.Theory.Morphism -> (a -> b) [morph ->
+    morph.function
+  ]
+  
+  -- Helper to check if function respects monoidal structure
+  respects_monoidal_structure: (a -> b) -> Bool [f ->
+    -- Check if this is a product-preserving function
+    false  -- Simplified implementation
+  ]
+  
+  -- Helper to check naturality condition
+  check_naturality: @Cata.Theory.Functor * @Cata.Theory.Functor * ((a -> b) -> (c -> d)) -> Bool [f g t ->
+    false  -- Simplified implementation
+  ]
+} 

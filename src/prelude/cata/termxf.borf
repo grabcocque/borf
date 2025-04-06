@@ -1,0 +1,1025 @@
+--[[
+  Termination Analysis Transformations
+
+  This module defines transformations between termination analysis structures
+  and other categorical frameworks, enabling rigorous reasoning about termination
+  properties and their relationship to rewriting, type systems, and logic.
+]]--
+
+@TermXf: {
+  typ: {
+    -- Transformation types
+    EvidenceTransform AgentTransform AnalysisTransform
+    
+    -- Framework transformations
+    TermToLogic TermToRW TermToProof
+    
+    -- Analysis transformations
+    IncrementalAnalysis ParallelAnalysis
+  }
+
+  op: {
+    -- Transformation operators
+    ==> <== <=> ~~
+    
+    -- Analysis composition operators
+    >>> <<< +++ &&&
+  }
+
+  fn: {
+    -- Termination analysis transformations
+    to_theory from_theory
+    to_rw from_rw
+    to_logic from_logic
+    to_proof from_proof
+    
+    -- Evidence transformations
+    evidence_to_formula formula_to_evidence
+    evidence_to_witness witness_to_evidence
+    
+    -- Agent transformations
+    agent_to_functor functor_to_agent
+    agent_to_inference inference_to_agent
+    compose_agents parallel_agents
+    
+    -- Analysis transformations
+    analysis_to_trace trace_to_analysis
+    analysis_to_rewriting rewriting_to_analysis
+    incremental_analysis staged_analysis
+    
+    -- Category-specific transformations
+    to_kripke from_kripke
+    to_coalgebra from_coalgebra
+    to_topos from_topos
+    
+    -- Specific domain transformations
+    termination_to_safety safety_to_termination
+    termination_to_liveness liveness_to_termination
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@TermXf, @T, true),         -- Add dependency on Type system
+    (@TermXf, @Term, true),      -- Add dependency on Termination module
+    (@TermXf, @RW, true),        -- Add dependency on Rewrite system module
+    (@TermXf, @INet, true),      -- Add dependency on Interaction Net module
+    (@TermXf, @Cata.Theory, true), -- Add dependency on Category theory module
+    (@TermXf, @Logic, true)      -- Add dependency on Logic module
+  }
+
+  --------------------------------------------------
+  -- Termination Analysis to Category Theory Transformations
+  --------------------------------------------------
+
+  --[[
+    to_theory transforms a termination analysis structure into a 
+    categorical representation, preserving its incremental evidence-gathering
+    structure.
+  ]]--
+  to_theory: @Term -> @Cata.Theory.EvidenceCategory [term_system ->
+    let evidence_cat = @Cata.Theory.new_evidence_category() in
+    
+    -- Add basic category structure
+    @Cata.Theory.add_morphisms(evidence_cat, {
+      objects: @Term.Evidence,
+      id: [e -> @Term.no_op_analysis(e)],
+      compose: [step1 step2 -> @Term.compose_steps(step1, step2)]
+    }) |>
+    
+    -- Add evidence-specific structures
+    [cat -> @Cata.Theory.add_evidence_structure(cat, {
+      join: @Term.evidence_join,
+      meet: @Term.evidence_meet,
+      refines: @Term.refines
+    })] |>
+    
+    -- Add agent structure
+    [cat -> @Cata.Theory.add_agent_structure(cat, {
+      action: @Term.agent_action,
+      concurrent: @Term.concurrent_analysis
+    })]
+  ]
+
+  --[[
+    from_theory transforms a categorical evidence category back into
+    a concrete termination analysis structure.
+  ]]--
+  from_theory: @Cata.Theory.EvidenceCategory -> @Term [theory_cat ->
+    -- Extract the termination structure
+    let ev_structure = @Cata.Theory.get_evidence_structure(theory_cat) in
+    let agent_structure = @Cata.Theory.get_agent_structure(theory_cat) in
+    
+    -- Create a termination system from the categorical structure
+    {
+      evidence_join: ev_structure.join,
+      evidence_meet: ev_structure.meet,
+      refines_evidence: ev_structure.refines,
+      agent_action: agent_structure.action,
+      concurrent_analysis: agent_structure.concurrent
+    }
+  ]
+
+  --------------------------------------------------
+  -- Termination Analysis to Logical Framework Transformations
+  --------------------------------------------------
+  
+  --[[
+    to_logic transforms termination evidence into a logical formula
+    that represents the same knowledge about termination properties.
+  ]]--
+  to_logic: @Term.Evidence -> @Logic.Formula [evidence ->
+    -- Create appropriate logical formula based on evidence
+    let base_formula = 
+      if evidence.terminating == ?Some(true) then
+        @Logic.atom("terminates", [evidence.net |> @INet.to_string])
+      else if evidence.terminating == ?Some(false) then
+        @Logic.neg(@Logic.atom("terminates", [evidence.net |> @INet.to_string]))
+      else
+        @Logic.unknown
+    in
+    
+    -- Add evidence to support the conclusion
+    let with_cycles = 
+      if evidence.cycles |> length > 0 then
+        @Logic.and(base_formula, @Logic.atom("has_cycle", [evidence.net |> @INet.to_string]))
+      else
+        base_formula
+    in
+    
+    let with_patterns =
+      evidence.matched_patterns |> fold [formula pattern ->
+        if pattern.is_terminating then
+          @Logic.and(formula, @Logic.atom("matches_terminating_pattern", [pattern.pattern |> @RW.to_string]))
+        else
+          @Logic.and(formula, @Logic.atom("matches_non_terminating_pattern", [pattern.pattern |> @RW.to_string]))
+      ] with_cycles
+    in
+    
+    -- Add confidence as a modality
+    @Logic.modal("confidence", 
+      evidence.confidence |> @Prim.to_string, 
+      with_patterns
+    )
+  ]
+  
+  --[[
+    from_logic transforms a logical formula about termination
+    into termination evidence.
+  ]]--
+  from_logic: @Logic.Formula -> @Term.Evidence [formula ->
+    -- Extract termination conclusion
+    let terminating = 
+      if @Logic.entails(formula, @Logic.atom("terminates", ["_"])) then
+        ?Some(true)
+      else if @Logic.entails(formula, @Logic.neg(@Logic.atom("terminates", ["_"]))) then
+        ?Some(false)
+      else
+        ?None
+    in
+    
+    -- Extract confidence
+    let confidence = 
+      if @Logic.is_modal(formula, "confidence") then
+        @Logic.modal_value(formula, "confidence") |> float_parse
+      else
+        0.5  -- Default confidence
+    in
+    
+    -- Extract cycle information
+    let has_cycle = @Logic.entails(formula, @Logic.atom("has_cycle", ["_"])) in
+    let cycles = 
+      if has_cycle then
+        [{
+          states: [],  -- Would extract actual states in a real implementation
+          length: 1
+        }]
+      else
+        []
+    in
+    
+    -- Extract pattern information
+    let patterns = extract_patterns(formula) in
+    
+    -- Create evidence
+    {
+      net: dummy_net(),  -- Would extract actual net in a real implementation
+      terminating: terminating,
+      confidence: confidence,
+      witness: ?None,
+      cycles: cycles,
+      size_metrics: {
+        initial_size: 0,
+        current_size: 0,
+        growth_rate: 0.0
+      },
+      matched_patterns: patterns,
+      visited_states: []
+    }
+  ]
+
+  --------------------------------------------------
+  -- Termination Analysis to Rewrite System Transformations
+  --------------------------------------------------
+  
+  --[[
+    to_rw transforms termination analysis to a rewrite system,
+    where evidence refinement steps become rewrite rules.
+  ]]--
+  to_rw: @Term.AnalysisTrace -> @RW.RuleSet [trace ->
+    let rules = trace.steps |> map [step ->
+      -- Create pattern from input evidence
+      let pattern = evidence_to_pattern(step.input_evidence) in
+      
+      -- Create replacement from output evidence
+      let replacement = evidence_to_pattern(step.output_evidence) in
+      
+      -- Create rule
+      @RW.create_rule(pattern, replacement)
+    ] in
+    
+    -- Create a ruleset
+    @RW.create_ruleset(rules)
+  ]
+  
+  --[[
+    from_rw transforms a rewrite system to a termination analysis
+    structure, where rewrite rules become evidence refinement steps.
+  ]]--
+  from_rw: @RW.RuleSet -> @Term.AnalysisTrace [ruleset ->
+    let initial_evidence = create_initial_evidence() in
+    
+    -- Convert rules to analysis steps
+    let steps = ruleset.rules |> map [rule ->
+      -- Create input evidence from rule pattern
+      let input_evidence = pattern_to_evidence(rule.0) in
+      
+      -- Create output evidence from rule replacement
+      let output_evidence = pattern_to_evidence(rule.1) in
+      
+      -- Create analysis step
+      {
+        input_evidence: input_evidence,
+        output_evidence: output_evidence,
+        agent: {
+          name: "RuleAgent",
+          analyze: [e -> output_evidence],
+          confidence_threshold: 0.5,
+          max_steps: 1,
+          specialization: "rule"
+        },
+        action: "Apply rewrite rule",
+        transformation: [_ -> output_evidence]
+      }
+    ] in
+    
+    -- Create analysis trace
+    {
+      initial_evidence: initial_evidence,
+      steps: steps,
+      final_evidence: 
+        if steps |> length > 0
+        then steps |> last |> [step -> step.output_evidence]
+        else initial_evidence,
+      duration_ms: 0,
+      successful: true
+    }
+  ]
+
+  --------------------------------------------------
+  -- Termination Analysis to Proof System Transformations
+  --------------------------------------------------
+  
+  --[[
+    to_proof transforms termination evidence into a formal proof object
+  ]]--
+  to_proof: @Term.Evidence -> @Cata.Theory.Proof [evidence ->
+    -- Base case: evidence is a proven fact
+    if evidence.terminating == ?Some(true) then
+      create_termination_proof(evidence)
+    else if evidence.terminating == ?Some(false) then
+      create_non_termination_proof(evidence)
+    else
+      create_partial_proof(evidence)
+  ]
+  
+  --[[
+    from_proof transforms a formal proof into termination evidence
+  ]]--
+  from_proof: @Cata.Theory.Proof -> @Term.Evidence [proof ->
+    -- Extract evidence from the proof
+    if proof.conclusion == "terminates" then
+      {
+        net: extract_net_from_proof(proof),
+        terminating: ?Some(true),
+        confidence: 1.0,
+        witness: create_witness_from_proof(proof),
+        cycles: [],
+        size_metrics: extract_metrics_from_proof(proof),
+        matched_patterns: [],
+        visited_states: []
+      }
+    else if proof.conclusion == "non_terminates" then
+      {
+        net: extract_net_from_proof(proof),
+        terminating: ?Some(false),
+        confidence: 1.0,
+        witness: create_witness_from_proof(proof),
+        cycles: extract_cycles_from_proof(proof),
+        size_metrics: extract_metrics_from_proof(proof),
+        matched_patterns: [],
+        visited_states: []
+      }
+    else
+      {
+        net: extract_net_from_proof(proof),
+        terminating: ?None,
+        confidence: 0.5,
+        witness: ?None,
+        cycles: [],
+        size_metrics: {
+          initial_size: 0,
+          current_size: 0,
+          growth_rate: 0.0
+        },
+        matched_patterns: [],
+        visited_states: []
+      }
+  ]
+
+  --------------------------------------------------
+  -- Agent Transformations
+  --------------------------------------------------
+  
+  --[[
+    agent_to_functor transforms an analysis agent to a functor between
+    evidence categories
+  ]]--
+  agent_to_functor: @Term.Agent -> @Cata.Theory.Functor [agent ->
+    @Cata.Theory.new_functor({
+      map_obj: [evidence -> agent.analyze(evidence)],
+      map_morph: [step -> 
+        {
+          input_evidence: agent.analyze(step.input_evidence),
+          output_evidence: agent.analyze(step.output_evidence),
+          agent: agent,
+          action: "Transform " + step.action,
+          transformation: agent.analyze |> compose(step.transformation, _)
+        }
+      ],
+      preserves_id: true,
+      preserves_composition: true
+    })
+  ]
+  
+  --[[
+    functor_to_agent transforms a functor to an analysis agent
+  ]]--
+  functor_to_agent: @Cata.Theory.Functor -> @Term.Agent [functor ->
+    {
+      name: "FunctorAgent",
+      analyze: [evidence -> functor.map_obj(evidence)],
+      confidence_threshold: 0.5,
+      max_steps: 1,
+      specialization: "functor"
+    }
+  ]
+  
+  --[[
+    agent_to_inference transforms an analysis agent to a logical inference rule
+  ]]--
+  agent_to_inference: @Term.Agent -> @Logic.InferenceRule [agent ->
+    @Logic.new_inference_rule(
+      [evidence -> evidence_to_formula(evidence)],         -- Premise extractor
+      [evidence -> evidence_to_formula(agent.analyze(evidence))], -- Conclusion generator
+      "Agent" + agent.name                                 -- Rule name
+    )
+  ]
+  
+  --[[
+    inference_to_agent transforms a logical inference rule to an analysis agent
+  ]]--
+  inference_to_agent: @Logic.InferenceRule -> @Term.Agent [rule ->
+    {
+      name: rule.name,
+      analyze: [evidence -> 
+        let formula = evidence_to_formula(evidence) in
+        let conclusion = rule.conclude(formula) in
+        formula_to_evidence(conclusion)
+      ],
+      confidence_threshold: 0.5,
+      max_steps: 1,
+      specialization: "inference"
+    }
+  ]
+  
+  --[[
+    compose_agents sequentially composes two analysis agents
+  ]]--
+  compose_agents: @Term.Agent * @Term.Agent -> @Term.Agent [agent1 agent2 ->
+    {
+      name: agent1.name + ">" + agent2.name,
+      analyze: [evidence -> agent2.analyze(agent1.analyze(evidence))],
+      confidence_threshold: max(agent1.confidence_threshold, agent2.confidence_threshold),
+      max_steps: agent1.max_steps + agent2.max_steps,
+      specialization: "composite"
+    }
+  ]
+  
+  --[[
+    parallel_agents composes two agents to run in parallel
+  ]]--
+  parallel_agents: @Term.Agent * @Term.Agent -> @Term.Agent [agent1 agent2 ->
+    {
+      name: agent1.name + "||" + agent2.name,
+      analyze: [evidence -> 
+        let result1 = agent1.analyze(evidence) in
+        let result2 = agent2.analyze(evidence) in
+        @Term.combine_evidence(result1, result2)
+      ],
+      confidence_threshold: max(agent1.confidence_threshold, agent2.confidence_threshold),
+      max_steps: max(agent1.max_steps, agent2.max_steps),
+      specialization: "parallel"
+    }
+  ]
+
+  --------------------------------------------------
+  -- Analysis Transformations
+  --------------------------------------------------
+  
+  --[[
+    analysis_to_trace transforms an analysis process to an execution trace
+  ]]--
+  analysis_to_trace: (@Term.Evidence -> @Term.Evidence) -> @Term.AnalysisTrace [analysis ->
+    let initial = create_initial_evidence() in
+    let final = analysis(initial) in
+    
+    {
+      initial_evidence: initial,
+      steps: [{
+        input_evidence: initial,
+        output_evidence: final,
+        agent: {
+          name: "AnalysisAgent",
+          analyze: analysis,
+          confidence_threshold: 0.5,
+          max_steps: 1,
+          specialization: "analysis"
+        },
+        action: "Complete analysis",
+        transformation: analysis
+      }],
+      final_evidence: final,
+      duration_ms: 0,
+      successful: final.terminating != ?None
+    }
+  ]
+  
+  --[[
+    trace_to_analysis transforms an execution trace to an analysis process
+  ]]--
+  trace_to_analysis: @Term.AnalysisTrace -> (@Term.Evidence -> @Term.Evidence) [trace ->
+    [evidence ->
+      -- Find the most applicable step
+      let step = trace.steps |> find [s -> evidence_similar(s.input_evidence, evidence)] in
+      
+      if step then
+        step.transformation(evidence)
+      else
+        evidence
+    ]
+  ]
+  
+  --[[
+    analysis_to_rewriting transforms an analysis to a rewriting process
+  ]]--
+  analysis_to_rewriting: (@Term.Evidence -> @Term.Evidence) -> (@RW.alpha -> @RW.rho) [analysis ->
+    [pattern ->
+      -- Convert pattern to evidence
+      let evidence = pattern_to_evidence(pattern) in
+      
+      -- Apply analysis
+      let result = analysis(evidence) in
+      
+      -- Convert result back to pattern
+      evidence_to_pattern(result)
+    ]
+  ]
+  
+  --[[
+    rewriting_to_analysis transforms a rewriting process to an analysis
+  ]]--
+  rewriting_to_analysis: (@RW.alpha -> @RW.rho) -> (@Term.Evidence -> @Term.Evidence) [rewrite ->
+    [evidence ->
+      -- Convert evidence to pattern
+      let pattern = evidence_to_pattern(evidence) in
+      
+      -- Apply rewrite
+      let result = rewrite(pattern) in
+      
+      -- Convert result back to evidence
+      pattern_to_evidence(result)
+    ]
+  ]
+  
+  --[[
+    incremental_analysis creates an incremental analysis process
+  ]]--
+  incremental_analysis: [@Term.Agent] -> (@Term.Evidence -> @Term.Evidence) [agents ->
+    [initial_evidence ->
+      agents |> fold [evidence agent ->
+        agent.analyze(evidence)
+      ] initial_evidence
+    ]
+  ]
+  
+  --[[
+    staged_analysis creates a staged analysis with checkpoints
+  ]]--
+  staged_analysis: [@Term.Agent] * (Z -> Bool) -> (@Term.Evidence -> @Term.Evidence) [agents checkpoint ->
+    [initial_evidence ->
+      agents |> fold_with_index [evidence agent idx ->
+        let next_evidence = agent.analyze(evidence) in
+        
+        if checkpoint(idx) then
+          -- At checkpoint, verify and potentially save state
+          check_progress(next_evidence, evidence, idx)
+        else
+          next_evidence
+      ] initial_evidence
+    ]
+  ]
+
+  --------------------------------------------------
+  -- Category-Specific Transformations
+  --------------------------------------------------
+  
+  --[[
+    to_kripke transforms termination evidence to a Kripke structure
+    for modal reasoning about termination properties
+  ]]--
+  to_kripke: @Term.Evidence -> @Logic.KripkeStructure [evidence ->
+    -- Create a Kripke structure from the evidence
+    let states = evidence.visited_states |> map [state ->
+      {
+        net: state,
+        valuation: state_to_valuation(state, evidence)
+      }
+    ] in
+    
+    let transitions = create_transitions(states) in
+    
+    @Logic.new_kripke_structure(states, transitions)
+  ]
+  
+  --[[
+    from_kripke transforms a Kripke structure to termination evidence
+  ]]--
+  from_kripke: @Logic.KripkeStructure -> @Term.Evidence [kripke ->
+    -- Extract termination evidence from a Kripke structure
+    let states = kripke.states |> map [state -> state.net] in
+    
+    let terminates = kripke |> @Logic.check_property(@Logic.eventually(@Logic.atom("normal_form"))) in
+    
+    {
+      net: states[0],
+      terminating: terminates ? ?Some(true) : ?Some(false),
+      confidence: 1.0,
+      witness: ?None,
+      cycles: extract_cycles_from_kripke(kripke),
+      size_metrics: {
+        initial_size: calculate_size(states[0]),
+        current_size: calculate_size(states |> last),
+        growth_rate: calculate_growth_rate(states)
+      },
+      matched_patterns: [],
+      visited_states: states
+    }
+  ]
+  
+  --[[
+    to_coalgebra transforms termination analysis to a coalgebraic model
+    representing the possible behaviors of the interaction net
+  ]]--
+  to_coalgebra: @Term.AnalysisTrace -> @Cata.Theory.Coalgebra [trace ->
+    @Cata.Theory.new_coalgebra({
+      carrier: @Term.Evidence,
+      functor: "PowerSet",
+      structure: [evidence -> 
+        let agents = extract_agents(trace) in
+        
+        agents |> map [agent ->
+          agent.analyze(evidence)
+        ] |> to_set
+      ]
+    })
+  ]
+  
+  --[[
+    from_coalgebra transforms a coalgebraic model to a termination analysis
+  ]]--
+  from_coalgebra: @Cata.Theory.Coalgebra -> @Term.AnalysisTrace [coalgebra ->
+    let initial = create_initial_evidence() in
+    let possible_next = coalgebra.structure(initial) |> from_set in
+    
+    let steps = generate_steps(initial, possible_next, coalgebra) in
+    
+    {
+      initial_evidence: initial,
+      steps: steps,
+      final_evidence: steps |> last |> [step -> step.output_evidence],
+      duration_ms: 0,
+      successful: true
+    }
+  ]
+  
+  --[[
+    to_topos transforms termination analysis to a topos of termination properties
+  ]]--
+  to_topos: @Term -> @Cata.Theory.Topos [term_system ->
+    @Cata.Theory.new_topos({
+      objects: @Term.Evidence,
+      morphisms: @Term.AnalysisStep,
+      subobject_classifier: {
+        object: @Term.Evidence,
+        true_morphism: [e -> e],
+        characteristic: [e1 e2 -> @Term.refines_evidence(e1, e2)]
+      }
+    })
+  ]
+  
+  --[[
+    from_topos transforms a topos to a termination analysis system
+  ]]--
+  from_topos: @Cata.Theory.Topos -> @Term [topos ->
+    {
+      refines_evidence: topos.subobject_classifier.characteristic,
+      evidence_join: extract_join_from_topos(topos),
+      evidence_meet: extract_meet_from_topos(topos)
+    }
+  ]
+
+  --------------------------------------------------
+  -- Domain-Specific Transformations
+  --------------------------------------------------
+  
+  --[[
+    termination_to_safety transforms termination properties to safety properties
+  ]]--
+  termination_to_safety: @Term.Evidence -> @Logic.SafetyProperty [evidence ->
+    @Logic.new_safety_property(
+      "Termination" + (evidence.terminating == ?Some(true) ? "Proven" : "Unknown"),
+      [state -> 
+        -- A state is safe if it's in normal form or can reach normal form
+        @INet.is_normal_form(state) or can_reach_normal_form(state)
+      ]
+    )
+  ]
+  
+  --[[
+    safety_to_termination transforms safety properties to termination properties
+  ]]--
+  safety_to_termination: @Logic.SafetyProperty -> @Term.Evidence [safety ->
+    -- Create evidence from safety property
+    {
+      net: dummy_net(),
+      terminating: safety.always_safe ? ?Some(true) : ?None,
+      confidence: safety.confidence,
+      witness: ?None,
+      cycles: [],
+      size_metrics: {
+        initial_size: 0,
+        current_size: 0,
+        growth_rate: 0.0
+      },
+      matched_patterns: [],
+      visited_states: []
+    }
+  ]
+  
+  --[[
+    termination_to_liveness transforms termination to liveness properties
+  ]]--
+  termination_to_liveness: @Term.Evidence -> @Logic.LivenessProperty [evidence ->
+    @Logic.new_liveness_property(
+      "EventuallyTerminates",
+      [state -> 
+        -- Eventually the system will reach a normal form
+        @Logic.eventually(@Logic.atom("normal_form"))
+      ]
+    )
+  ]
+  
+  --[[
+    liveness_to_termination transforms liveness to termination properties
+  ]]--
+  liveness_to_termination: @Logic.LivenessProperty -> @Term.Evidence [liveness ->
+    -- Create evidence from liveness property
+    {
+      net: dummy_net(),
+      terminating: liveness.eventually_true ? ?Some(true) : ?None,
+      confidence: liveness.confidence,
+      witness: ?None,
+      cycles: [],
+      size_metrics: {
+        initial_size: 0,
+        current_size: 0,
+        growth_rate: 0.0
+      },
+      matched_patterns: [],
+      visited_states: []
+    }
+  ]
+
+  --------------------------------------------------
+  -- Helper Functions
+  --------------------------------------------------
+  
+  --[[
+    Helper function to convert evidence to a logical formula
+  ]]--
+  evidence_to_formula: @Term.Evidence -> @Logic.Formula [evidence ->
+    -- Convert evidence to formula (simplified implementation)
+    to_logic(evidence)
+  ]
+  
+  --[[
+    Helper function to convert formula to evidence
+  ]]--
+  formula_to_evidence: @Logic.Formula -> @Term.Evidence [formula ->
+    -- Convert formula to evidence (simplified implementation)
+    from_logic(formula)
+  ]
+  
+  --[[
+    Helper function to create a termination proof
+  ]]--
+  create_termination_proof: @Term.Evidence -> @Cata.Theory.Proof [evidence ->
+    @Cata.Theory.new_proof({
+      conclusion: "terminates",
+      premises: [],
+      rule: "TerminationAnalysis",
+      subproofs: []
+    })
+  ]
+  
+  --[[
+    Helper function to create a non-termination proof
+  ]]--
+  create_non_termination_proof: @Term.Evidence -> @Cata.Theory.Proof [evidence ->
+    @Cata.Theory.new_proof({
+      conclusion: "non_terminates",
+      premises: [],
+      rule: "NonTerminationAnalysis",
+      subproofs: []
+    })
+  ]
+  
+  --[[
+    Helper function to create a partial proof
+  ]]--
+  create_partial_proof: @Term.Evidence -> @Cata.Theory.Proof [evidence ->
+    @Cata.Theory.new_proof({
+      conclusion: "unknown",
+      premises: [],
+      rule: "IncompleteAnalysis",
+      subproofs: []
+    })
+  ]
+  
+  --[[
+    Helper function to extract a net from a proof
+  ]]--
+  extract_net_from_proof: @Cata.Theory.Proof -> @INet.Net [proof ->
+    -- Extract net from proof (simplified implementation)
+    dummy_net()
+  ]
+  
+  --[[
+    Helper function to create a witness from a proof
+  ]]--
+  create_witness_from_proof: @Cata.Theory.Proof -> ?(@Term.TerminationWitness | @Term.NonTermWitness) [proof ->
+    ?None  -- Simplified implementation
+  ]
+  
+  --[[
+    Helper function to extract cycles from a proof
+  ]]--
+  extract_cycles_from_proof: @Cata.Theory.Proof -> [{states: [@INet.Net], length: Z}] [proof ->
+    []  -- Simplified implementation
+  ]
+  
+  --[[
+    Helper function to extract metrics from a proof
+  ]]--
+  extract_metrics_from_proof: @Cata.Theory.Proof -> {initial_size: Z, current_size: Z, growth_rate: Float} [proof ->
+    {
+      initial_size: 0,
+      current_size: 0,
+      growth_rate: 0.0
+    }  -- Simplified implementation
+  ]
+  
+  --[[
+    Helper function to create initial evidence
+  ]]--
+  create_initial_evidence: () -> @Term.Evidence [->
+    {
+      net: dummy_net(),
+      terminating: ?None,
+      confidence: 0.0,
+      witness: ?None,
+      cycles: [],
+      size_metrics: {
+        initial_size: 0,
+        current_size: 0,
+        growth_rate: 0.0
+      },
+      matched_patterns: [],
+      visited_states: [dummy_net()]
+    }
+  ]
+  
+  --[[
+    Helper function to convert evidence to pattern
+  ]]--
+  evidence_to_pattern: @Term.Evidence -> @RW.Pattern [evidence ->
+    @RW.create_pattern(evidence.net)  -- Simplified implementation
+  ]
+  
+  --[[
+    Helper function to convert pattern to evidence
+  ]]--
+  pattern_to_evidence: @RW.Pattern -> @Term.Evidence [pattern ->
+    -- Simplified implementation
+    {
+      net: dummy_net(),
+      terminating: ?None,
+      confidence: 0.0,
+      witness: ?None,
+      cycles: [],
+      size_metrics: {
+        initial_size: 0,
+        current_size: 0,
+        growth_rate: 0.0
+      },
+      matched_patterns: [{
+        pattern: pattern,
+        is_terminating: false
+      }],
+      visited_states: [dummy_net()]
+    }
+  ]
+  
+  --[[
+    Helper function to check if two evidence objects are similar
+  ]]--
+  evidence_similar: @Term.Evidence * @Term.Evidence -> Bool [e1 e2 ->
+    e1.net == e2.net  -- Simplified implementation
+  ]
+  
+  --[[
+    Helper function to check progress
+  ]]--
+  check_progress: @Term.Evidence * @Term.Evidence * Z -> @Term.Evidence [new old idx ->
+    -- Check if we're making progress (simplified implementation)
+    new
+  ]
+  
+  --[[
+    Helper function to convert state to valuation
+  ]]--
+  state_to_valuation: @INet.Net * @Term.Evidence -> {S: Bool} [state evidence ->
+    {
+      "normal_form": @INet.is_normal_form(state),
+      "has_cycle": evidence.cycles |> length > 0
+    }  -- Simplified implementation
+  ]
+  
+  --[[
+    Helper function to create transitions
+  ]]--
+  create_transitions: [{net: @INet.Net, valuation: {S: Bool}}] -> {(Z * Z)} [states ->
+    -- Create transitions between states (simplified implementation)
+    {(0, 0)}
+  ]
+  
+  --[[
+    Helper function to extract cycles from Kripke structure
+  ]]--
+  extract_cycles_from_kripke: @Logic.KripkeStructure -> [{states: [@INet.Net], length: Z}] [kripke ->
+    []  -- Simplified implementation
+  ]
+  
+  --[[
+    Helper function to calculate size
+  ]]--
+  calculate_size: @INet.Net -> Z [net ->
+    0  -- Simplified implementation
+  ]
+  
+  --[[
+    Helper function to calculate growth rate
+  ]]--
+  calculate_growth_rate: [@INet.Net] -> Float [states ->
+    0.0  -- Simplified implementation
+  ]
+  
+  --[[
+    Helper function to extract agents from trace
+  ]]--
+  extract_agents: @Term.AnalysisTrace -> [@Term.Agent] [trace ->
+    trace.steps |> map [step -> step.agent]
+  ]
+  
+  --[[
+    Helper function to convert to set
+  ]]--
+  to_set: [a] -> {a} [list ->
+    -- Convert list to set (simplified implementation)
+    {}
+  ]
+  
+  --[[
+    Helper function to convert from set
+  ]]--
+  from_set: {a} -> [a] [set ->
+    -- Convert set to list (simplified implementation)
+    []
+  ]
+  
+  --[[
+    Helper function to generate steps
+  ]]--
+  generate_steps: @Term.Evidence * [@Term.Evidence] * @Cata.Theory.Coalgebra -> [@Term.AnalysisStep] [initial possible coalgebra ->
+    []  -- Simplified implementation
+  ]
+  
+  --[[
+    Helper function to extract join from topos
+  ]]--
+  extract_join_from_topos: @Cata.Theory.Topos -> (@Term.Evidence * @Term.Evidence -> @Term.Evidence) [topos ->
+    [e1 e2 -> e1]  -- Simplified implementation
+  ]
+  
+  --[[
+    Helper function to extract meet from topos
+  ]]--
+  extract_meet_from_topos: @Cata.Theory.Topos -> (@Term.Evidence * @Term.Evidence -> @Term.Evidence) [topos ->
+    [e1 e2 -> e1]  -- Simplified implementation
+  ]
+  
+  --[[
+    Helper function to check if state can reach normal form
+  ]]--
+  can_reach_normal_form: @INet.Net -> Bool [state ->
+    true  -- Simplified implementation
+  ]
+  
+  --[[
+    Helper function to create a dummy net
+  ]]--
+  dummy_net: () -> @INet.Net [->
+    @INet.empty_net()  -- Simplified implementation
+  ]
+  
+  --[[
+    Helper function to get last element
+  ]]--
+  last: [a] -> a [list ->
+    list[length(list) - 1]  -- Simplified implementation
+  ]
+  
+  --[[
+    Helper function to fold with index
+  ]]--
+  fold_with_index: [a] * (b * a * Z -> b) * b -> b [list f init ->
+    -- Fold with index (simplified implementation)
+    list |> fold [acc x -> acc] init
+  ]
+  
+  --[[
+    Helper function to extract patterns from formula
+  ]]--
+  extract_patterns: @Logic.Formula -> [{pattern: @RW.Pattern, is_terminating: Bool}] [formula ->
+    []  -- Simplified implementation
+  ]
+  
+  --[[
+    Helper function to parse float
+  ]]--
+  float_parse: S -> Float [s ->
+    0.0  -- Simplified implementation
+  ]
+  
+  --[[
+    Helper function for function composition
+  ]]--
+  compose: (a -> b) * (b -> c) -> (a -> c) [f g ->
+    [x -> g(f(x))]
+  ]
+} 

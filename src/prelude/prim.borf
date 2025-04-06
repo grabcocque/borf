@@ -15,7 +15,9 @@
 ]]--
 
 @Prim: {
-  deps: {}
+  deps: {
+    (@Prim, @Cat, true)        -- Add dependency on Category theory
+  }
 
   typ: {
     -- Base Types
@@ -98,6 +100,101 @@
   tau: T.tau
 
   vis: E |> [e -> true]
+
+  --------------------------------------------------
+  -- Structure Mapping to Computational Category
+  --------------------------------------------------
+  
+  --[[
+    Structure mapping that establishes @Prim as a computational 
+    category with resource tracking capabilities. This mapping 
+    connects the primitive operations of Borf to categorical 
+    concepts, providing a mathematical foundation for the language's
+    computational model.
+    
+    This forms a symmetric monoidal closed category with additional
+    structure for linear types and resource management.
+  ]]--
+  structure: {
+    -- Map Prim to a computational category
+    objects: T.Type_0,
+    morphisms: [a b -> (a -> b)],
+    linear_morphisms: [a b -> (a -o> b)],
+    
+    -- Base category structure
+    dom: [f -> f.domain],
+    cod: [f -> f.codomain],
+    id: [a -> [x -> x]],
+    compose: [f g -> compose(f, g)],
+    
+    -- Monoidal structure (for product types)
+    tensor: [a b -> (a * b)],
+    unit: Unit,
+    tensor_morphism: [f g -> [pair -> (f(pair.0), g(pair.1))]],
+    
+    -- Closed structure (for function types)
+    internal_hom: [a b -> (a -> b)],
+    eval: [(a -> b) * a -> b],
+    curry: [(a * b -> c) -> (a -> (b -> c))],
+    
+    -- Linear structure (for resource types)
+    linear_type: [a -> !a],
+    consume_morphism: consume,
+    clone_morphism: clone,
+    
+    -- Special structures for Borf primitives
+    collection_functors: {
+      list: [a -> [a]],
+      sequence: [a -> Seq(a)],
+      set: [a -> {a}],
+      map: [k v -> (k:-> v)]
+    },
+    
+    -- Natural transformations between structures
+    natural_transformations: {
+      list_to_seq: [a -> ([a] -> Seq(a))],
+      seq_to_list: [a -> (Seq(a) -> [a])],
+      list_to_set: [a -> ([a] -> {a})]
+    },
+    
+    -- Categorical laws
+    laws: {
+      -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
+      associativity: forall [f g h ->
+        compose(compose(f, g), h) == compose(f, compose(g, h))
+      ],
+      
+      -- Identity: id ∘ f = f = f ∘ id
+      identity: forall [f ->
+        compose(id, f) == f && compose(f, id) == f
+      ],
+      
+      -- Linear composition preserves resources
+      linear_composition: forall [f g ->
+        let f_lin = f is (a -o> b) in
+        let g_lin = g is (b -o> c) in
+        f_lin && g_lin implies (compose(f, g) is (a -o> c))
+      ],
+      
+      -- Monoidal coherence laws
+      tensor_associativity: forall [a b c ->
+        ((a * b) * c) =~ (a * (b * c))
+      ],
+      
+      tensor_identity: forall [a ->
+        (a * Unit) =~ a && (Unit * a) =~ a
+      ],
+      
+      -- Resource tracking laws
+      consume_linear: forall [a ->
+        (consume is (!a -o> Unit))
+      ],
+      
+      clone_non_linear: forall [a ->
+        not (a is !b) implies (clone is (a -> a))
+      ]
+    }
+  }
 
   --[[
     Core Operations

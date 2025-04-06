@@ -1,45 +1,63 @@
 --[[
   Termination Analysis
 
-  This module provides tools for analyzing whether programs will terminate.
-  It detects cycles in reduction sequences, performs bounded evaluation,
-  and verifies IO completion, ensuring that programs have well-defined
-  behavior and don't enter infinite loops without progress.
-
-  Notation:
-  - 'a -o> b' indicates a function that consumes its input (linear)
-  - '!a' represents a linear type
+  This module provides tools for analyzing the termination properties
+  of interaction nets, focusing on detecting non-termination, finding
+  termination proofs, and gathering evidence through analysis agents.
 ]]--
 
-
 @Term: {
-  B; P; P -> P w; P -> Bool pi; Net -> Net step; !Net -o> Net red; Net -> Bool normal; !Net -o> [Net] history
-
   typ: {
-    -- Types of termination results
-    TermResult       -- Information about termination behavior
-    CycleInfo        -- Information about detected cycles
-    BoundedResult    -- Result of bounded evaluation
-    TerminationProof -- Formal proof of termination
-    TermWitness      -- Witness for termination or non-termination
+    -- Evidence types
+    Evidence           -- Evidence about potential non-termination
+    TerminationWitness -- Witness of termination
+    NonTermWitness     -- Witness of non-termination
+    
+    -- Analysis types
+    Analysis         -- A termination analysis process
+    AnalysisStep     -- A single step in analysis
+    AnalysisTrace    -- A sequence of analysis steps
+    
+    -- Agent types
+    Agent           -- An analysis agent that gathers evidence
+    CycleDetector   -- Agent that detects reduction cycles
+    SizeAnalyzer    -- Agent that analyzes term growth
+    PatternMatcher  -- Agent that detects non-terminating patterns
   }
 
   op: {
-    terminates detect_cycles apply_k reaches_normal_form has_cycle
-    io_processed io_agents_processed io_terminates
-    explain_termination smart_terminate bounded_eval find_minimum_cycle
-    analyze_convergence structural_termination stage_analysis
-    measure_complexity live_variables analyze_recursion
-    construct_proof find_counterexample
+    -- Evidence operators
+    + & |  -- Evidence combination operators
+    
+    -- Analysis operators
+    >> << ==> <==
+    
+    -- Logical operators
+    => && || !
   }
 
   fn: {
-    terminates detect_cycles apply_k reaches_normal_form has_cycle
-    io_processed io_agents_processed io_terminates range
-    explain_termination smart_terminate bounded_eval find_minimum_cycle
-    analyze_convergence structural_termination stage_analysis
-    measure_complexity live_variables analyze_recursion
-    construct_proof find_counterexample
+    -- Evidence management
+    gather_evidence combine_evidence sufficient_evidence contradictory_evidence
+    
+    -- Cycle detection
+    detect_cycle has_cycle cycle_length
+    
+    -- Size analysis
+    size_growth bounded_growth unbounded_growth
+    
+    -- Pattern analysis
+    match_pattern known_nonterminating
+    
+    -- Agent management
+    create_agent run_agent agent_evidence agent_confidence
+    
+    -- Termination analysis
+    analyze_termination prove_termination disprove_termination
+    maybe_terminates trace_reduction critical_pattern
+    
+    -- Verification
+    verify_termination verify_nontermination
   }
 
   E: typ cup op cup fn
@@ -48,350 +66,437 @@
 
   vis: E |> [e -> true]
 
-  --[[
-    Core Termination Analysis
-  ]]--
+  deps: {
+    (@Term, @T, true),    -- Add dependency on Type system
+    (@Term, @RW, true),   -- Add dependency on Rewrite system
+    (@Term, @INet, true), -- Add dependency on Interaction Net module
+    (@Term, @Cat, true)   -- Add dependency on Category theory
+  }
 
+  --------------------------------------------------
+  -- Structure Mapping to Termination Analysis Category
+  --------------------------------------------------
+  
   --[[
-    Determines if a net will eventually terminate (reach normal form or cycle)
+    Structure mapping that establishes @Term as a termination analysis category.
+    
+    In this categorical structure:
+    - Objects are evidence collections about termination properties of interaction nets
+    - Morphisms are analysis steps that transform evidence into more refined evidence
+    - Identity is the "no-op" analysis that leaves evidence unchanged
+    - Composition represents sequential application of analysis steps
+    
+    This categorical structure formalizes the process of incrementally gathering
+    and refining evidence about the termination properties of interaction nets.
   ]]--
-  terminates: Net -> Bool
-
-  --[[
-    Detects cycles in a sequence of net states, returning pairs of indices
-    where the same net state appears multiple times. Uses a hash-based approach
-    for better performance than the quadratic comparison.
-  ]]--
-  detect_cycles: [Net] -> {(Z * Z)}
-
-  --[[
-    Applies at most k reduction steps to a net (consuming the net)
-  ]]--
-  apply_k: Z * !Net -o> Net [k n ->
-    n iff k <= 0 or_else n |> Red.step |> apply_k (k - 1)
-  ]
-
-  --[[
-    Implementation of termination analysis:
-    A net terminates if it either reaches normal form or cycles back to a previous state
-  ]]--
-  terminates: Net [n ->
-    n |> reaches_normal_form or
-    n |> Red.history |> has_cycle
-  ]
-
-  --[[
-    Checks if a net eventually reaches normal form
-    (exists some finite number of steps after which it's fully reduced)
-  ]]--
-  reaches_normal_form: Net -> Bool [n ->
-    -- Try increasing bounds exponentially for efficiency
-    [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024] |> Prim.exists [k ->
-      n |> apply_k k |> Red.normal
-    ]
-  ]
-
-  --[[
-    Checks if a reduction history contains a cycle
-  ]]--
-  has_cycle: [Net] -> Bool [history ->
-    history |> detect_cycles |> Std.ne
-  ]
-
-  --[[
-    Generate a range of integers from start to end (inclusive)
-  ]]--
-  range: Z * Z -> [Z] [start end ->
-    [] iff start > end or_else [start] (start + 1) |> range end |> Prim.concat
-  ]
-
-  --[[
-    Implementation of cycle detection:
-    Uses a hash-based approach to find duplicates more efficiently
-  ]]--
-  detect_cycles: [Net] [nets ->
-    {
-      -- Create a mapping from net hashes to their positions
-      nets |> Prim.with_index |> Prim.fold {} [acc (net, idx) ->
-        net |> Prim.hash -> h
-        acc |> Prim.update h [existing -> existing ++ [idx]] iff acc |> Prim.has_key h or_else
-        acc |> Prim.insert h [idx]
-      ] -> hash_map
-
-      -- Extract cycles from positions with the same hash
-      hash_map |> Prim.fold {} [acc (_, positions) ->
-        positions |> Prim.length -> l
-        acc iff l <= 1 or_else
-        acc ++ {positions |> Prim.combinations 2}
+  structure: {
+    -- Map Term to a category
+    objects: Evidence,
+    morphisms: [e1 e2 -> AnalysisStep(e1, e2)],
+    
+    -- Base category structure
+    dom: [step -> step.input_evidence],
+    cod: [step -> step.output_evidence],
+    id: [e -> no_op_analysis(e)],
+    compose: [step1 step2 -> compose_steps(step1, step2)],
+    
+    -- Termination-specific structure
+    evidence_join: [e1 e2 -> combine_evidence(e1, e2)],
+    evidence_meet: [e1 e2 -> intersect_evidence(e1, e2)],
+    
+    -- Agent structure
+    agent_action: [agent evidence -> run_agent(agent, evidence)],
+    concurrent_analysis: [agents evidence -> run_multiple_agents(agents, evidence)],
+    
+    -- Evidence ordering
+    refines: [e1 e2 -> refines_evidence(e1, e2)],
+    
+    -- Category laws
+    laws: {
+      -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
+      associativity: forall [f g h ->
+        compose(compose(f, g), h) == compose(f, compose(g, h))
+      ],
+      
+      -- Identity: id ∘ f = f = f ∘ id
+      identity: forall [f ->
+        compose(id(dom(f)), f) == f && compose(f, id(cod(f))) == f
+      ],
+      
+      -- Evidence combination is commutative: e1 + e2 = e2 + e1
+      evidence_commutative: forall [e1 e2 ->
+        evidence_join(e1, e2) == evidence_join(e2, e1)
+      ],
+      
+      -- Evidence combination is associative: (e1 + e2) + e3 = e1 + (e2 + e3)
+      evidence_associative: forall [e1 e2 e3 ->
+        evidence_join(evidence_join(e1, e2), e3) == evidence_join(e1, evidence_join(e2, e3))
+      ],
+      
+      -- Running the same agent twice with the same evidence produces the same result
+      agent_idempotence: forall [agent e ->
+        let action = agent_action(agent, e) in
+        agent_action(agent, cod(action)) == id(cod(action))
       ]
     }
-  ]
+  }
 
   --[[
-    Finds the smallest cycle in a reduction sequence
+    Evidence about the termination properties of an interaction net
   ]]--
-  find_minimum_cycle: [Net] -> (Z * Z) [nets ->
-    nets |> detect_cycles -> cycles
-    cycles |> Prim.fold (0, 0) [min_cycle (i, j) ->
-      (i, j) iff min_cycle |> Prim.eq (0, 0) or_else
-      (i, j) iff (j - i) < (min_cycle[1] - min_cycle[0]) or_else min_cycle
-    ]
-  ]
+  Evidence: {
+    net: @INet.Net,                 -- The net being analyzed
+    terminating: ?Bool,             -- True if proven terminating, False if proven non-terminating, None if unknown
+    confidence: Float,              -- Confidence level (0.0 to 1.0)
+    witness: ?TerminationWitness | ?NonTermWitness,  -- Witness if available
+    cycles: [{                      -- Detected reduction cycles
+      states: [@INet.Net],
+      length: Z
+    }],
+    size_metrics: {                 -- Size evolution metrics
+      initial_size: Z,
+      current_size: Z,
+      growth_rate: Float
+    },
+    matched_patterns: [{            -- Matched known patterns
+      pattern: @RW.Pattern,
+      is_terminating: Bool
+    }],
+    visited_states: [@INet.Net]     -- States visited during analysis
+  }
 
   --[[
-    Provides a detailed explanation of why a program does not terminate
+    A witness of termination (typically a well-founded ordering)
   ]]--
-  explain_termination: Net -> S [n ->
-    n |> terminates -> does_terminate
+  TerminationWitness: {
+    ordering: @INet.Net * @INet.Net -> Bool,  -- Well-founded ordering on nets
+    measure: @INet.Net -> Z,                  -- Measure that decreases with each step
+    proof: S                                  -- Human-readable explanation
+  }
 
-    "Program terminates successfully." iff does_terminate or_else
+  --[[
+    A witness of non-termination (typically a reduction cycle or divergent pattern)
+  ]]--
+  NonTermWitness: {
+    cycle: ?[@INet.Net],                 -- Reduction cycle if one exists
+    divergent_pattern: ?@RW.Pattern,     -- Pattern that causes divergence
+    growth_proof: ?([@INet.Net] -> Float)  -- Function showing unbounded growth
+  }
+
+  --[[
+    A single step in termination analysis
+  ]]--
+  AnalysisStep: {
+    input_evidence: Evidence,             -- Evidence before the step
+    output_evidence: Evidence,            -- Evidence after the step
+    agent: Agent,                         -- Agent that performed the step
+    action: S,                            -- Description of the action taken
+    transformation: Evidence -> Evidence  -- The actual transformation
+  }
+
+  --[[
+    A complete termination analysis trace
+  ]]--
+  AnalysisTrace: {
+    initial_evidence: Evidence,
+    steps: [AnalysisStep],
+    final_evidence: Evidence,
+    duration_ms: Z,
+    successful: Bool
+  }
+
+  --[[
+    An agent that analyzes termination properties
+  ]]--
+  Agent: {
+    name: S,
+    analyze: Evidence -> Evidence,
+    confidence_threshold: Float,
+    max_steps: Z,
+    specialization: "cycle" | "size" | "pattern"
+  }
+
+  --[[
+    No-op analysis that leaves evidence unchanged (identity morphism)
+  ]]--
+  no_op_analysis: Evidence -> AnalysisStep [e ->
     {
-      n |> Red.history -> history
-      history |> has_cycle -> has_cycles
-
-      {
-        history |> find_minimum_cycle -> (cycle_start, cycle_end)
-        "Program does not terminate due to a cycle between steps " ++
-        cycle_start |> Prim.to_str ++ " and " ++
-        cycle_end |> Prim.to_str ++ "."
-      } iff has_cycles or_else "Program might not terminate within reasonable bounds."
+      input_evidence: e,
+      output_evidence: e,
+      agent: {
+        name: "NoOp",
+        analyze: [x -> x],
+        confidence_threshold: 0.0,
+        max_steps: 0,
+        specialization: "none"
+      },
+      action: "No operation",
+      transformation: [x -> x]
     }
   ]
 
   --[[
-    Smarter termination check that applies increasingly large bounds
-    and returns detailed information about the termination behavior
+    Composes two analysis steps into a single step
   ]]--
-  smart_terminate: !Net -o> {status: S, steps: Z, normal_form: Bool, cycle: (Z * Z)} [n ->
-    -- Try with exponentially increasing bounds
-    [10, 100, 1000, 10000] |> Prim.find_map [bound ->
-      n |> bounded_eval bound -> result
-      result iff result.normal_form or_else null
-    ] -> bounded_result
-
-    {status: "Terminated", steps: bounded_result.steps, normal_form: true, cycle: (0, 0)} iff bounded_result or_else
-    {
-      n |> Red.history -> history
-      history |> has_cycle -> has_cycles
-
+  compose_steps: AnalysisStep * AnalysisStep -> AnalysisStep [step1 step2 ->
+    if step1.output_evidence != step2.input_evidence then
+      error("Cannot compose steps: output of first != input of second")
+    else
       {
-        history |> find_minimum_cycle -> cycle
-        {status: "Cycles", steps: history |> Prim.length, normal_form: false, cycle: cycle}
-      } iff has_cycles or_else {status: "Unknown", steps: history |> Prim.length, normal_form: false, cycle: (0, 0)}
+        input_evidence: step1.input_evidence,
+        output_evidence: step2.output_evidence,
+        agent: {
+          name: step1.agent.name + "+" + step2.agent.name,
+          analyze: [e -> step2.agent.analyze(step1.agent.analyze(e))],
+          confidence_threshold: max(step1.agent.confidence_threshold, step2.agent.confidence_threshold),
+          max_steps: step1.agent.max_steps + step2.agent.max_steps,
+          specialization: "composite"
+        },
+        action: step1.action + " then " + step2.action,
+        transformation: [e -> step2.transformation(step1.transformation(e))]
+      }
+  ]
+
+  --[[
+    Combines two pieces of evidence into a more comprehensive evidence
+  ]]--
+  combine_evidence: Evidence * Evidence -> Evidence [e1 e2 ->
+    -- Combine evidence e1 and e2, taking the stronger conclusion if available
+    {
+      net: e1.net,  -- Assume both refer to the same net
+      terminating: 
+        if e1.terminating == ?Some(true) or e2.terminating == ?Some(true) then
+          ?Some(true)
+        else if e1.terminating == ?Some(false) or e2.terminating == ?Some(false) then
+          ?Some(false)
+        else
+          ?None,
+      confidence: max(e1.confidence, e2.confidence),
+      witness: e1.witness or e2.witness,
+      cycles: e1.cycles cup e2.cycles,
+      size_metrics: {
+        initial_size: e1.size_metrics.initial_size,
+        current_size: max(e1.size_metrics.current_size, e2.size_metrics.current_size),
+        growth_rate: max(e1.size_metrics.growth_rate, e2.size_metrics.growth_rate)
+      },
+      matched_patterns: e1.matched_patterns cup e2.matched_patterns,
+      visited_states: unique(e1.visited_states cup e2.visited_states)
     }
   ]
 
   --[[
-    Evaluates a net for at most k steps and returns information about the result (consuming the net)
+    Finds the common evidence between two pieces of evidence
   ]]--
-  bounded_eval: Z * !Net -o> {steps: Z, normal_form: Bool, result: Net} [k n ->
-    k |> range 0 |> Prim.find_map [i ->
-      n |> apply_k i -> result
-      {steps: i, normal_form: true, result: result} iff result |> Red.normal or_else null
-    ] or {steps: k, normal_form: false, result: n |> apply_k k}
+  intersect_evidence: Evidence * Evidence -> Evidence [e1 e2 ->
+    -- Intersection of evidence, taking only what both agree on
+    {
+      net: e1.net,  -- Assume both refer to the same net
+      terminating: 
+        if e1.terminating == e2.terminating then
+          e1.terminating
+        else
+          ?None,
+      confidence: min(e1.confidence, e2.confidence),
+      witness: (e1.witness == e2.witness) ? e1.witness : ?None,
+      cycles: e1.cycles cap e2.cycles,
+      size_metrics: {
+        initial_size: e1.size_metrics.initial_size,
+        current_size: min(e1.size_metrics.current_size, e2.size_metrics.current_size),
+        growth_rate: min(e1.size_metrics.growth_rate, e2.size_metrics.growth_rate)
+      },
+      matched_patterns: e1.matched_patterns cap e2.matched_patterns,
+      visited_states: e1.visited_states cap e2.visited_states
+    }
   ]
 
   --[[
-    Advanced Termination Analysis
+    Checks if evidence e1 refines evidence e2 (has more information)
   ]]--
+  refines_evidence: Evidence * Evidence -> Bool [e1 e2 ->
+    -- e1 refines e2 if it has at least as much information
+    e1.confidence >= e2.confidence &&
+    subset(e2.visited_states, e1.visited_states) &&
+    subset(e2.cycles, e1.cycles) &&
+    subset(e2.matched_patterns, e1.matched_patterns)
+  ]
 
   --[[
-    Analyzes the convergence rate of a reduction sequence
+    Run a single analysis agent to gather evidence
   ]]--
-  analyze_convergence: !Net -o> {terminates: Bool, bound: ?Z, rate: ?S} [n ->
-    n |> smart_terminate -> result
+  run_agent: Agent * Evidence -> AnalysisStep [agent evidence ->
+    let new_evidence = agent.analyze(evidence) in
+    {
+      input_evidence: evidence,
+      output_evidence: new_evidence,
+      agent: agent,
+      action: "Run " + agent.name,
+      transformation: agent.analyze
+    }
+  ]
 
-    result.normal_form -> [
+  --[[
+    Run multiple agents concurrently and combine their evidence
+  ]]--
+  run_multiple_agents: [Agent] * Evidence -> AnalysisStep [agents evidence ->
+    let results = agents |> map [agent -> run_agent(agent, evidence)] in
+    let combined_evidence = results |> map [step -> step.output_evidence] |> fold combine_evidence evidence in
+    
+    {
+      input_evidence: evidence,
+      output_evidence: combined_evidence,
+      agent: {
+        name: "MultiAgent",
+        analyze: [e -> combined_evidence],
+        confidence_threshold: 0.0,
+        max_steps: 0,
+        specialization: "composite"
+      },
+      action: "Run multiple agents concurrently",
+      transformation: [_ -> combined_evidence]
+    }
+  ]
+
+  --[[
+    Main function to analyze termination of an interaction net
+  ]]--
+  analyze_termination: @INet.Net -> AnalysisTrace [net ->
+    -- Create initial evidence
+    let initial = {
+      net: net,
+      terminating: ?None,
+      confidence: 0.0,
+      witness: ?None,
+      cycles: [],
+      size_metrics: {
+        initial_size: calculate_size(net),
+        current_size: calculate_size(net),
+        growth_rate: 0.0
+      },
+      matched_patterns: [],
+      visited_states: [net]
+    } in
+    
+    -- Create analysis agents
+    let agents = [
       {
-        terminates: true,
-        bound: ?Some(result.steps),
-        rate: ?Some("Converges in " ++ result.steps |> Prim.to_str ++ " steps")
-      }
-    ] or_else [
-      result.status |> Prim.eq "Cycles" -> [
-        cycle_length = result.cycle[1] - result.cycle[0]
-        {
-          terminates: false,
-          bound: ?None,
-          rate: ?Some("Cycles with period " ++ cycle_length |> Prim.to_str)
-        }
-      ] or_else [
-        {
-          terminates: false,
-          bound: ?None,
-          rate: ?None
-        }
-      ]
-    ]
-  ]
-
-  --[[
-    Uses structural properties of the net to determine termination
-  ]]--
-  structural_termination: Net -> Bool [n ->
-    -- Check if the net has recursive patterns that might not terminate
-    n |> analyze_recursion -> recursive_patterns
-    recursive_patterns |> Prim.is_empty or
-    recursive_patterns |> Prim.all [pattern -> pattern.decreasing]
-  ]
-
-  --[[
-    Analyzes a net in stages, identifying different phases of execution
-  ]]--
-  stage_analysis: !Net -o> [{stage: Z, property: S, terminates: Bool}] [n ->
-    -- Identify major stages in the reduction process
-    n |> Red.history -> history
-
-    -- Find significant changes in the net structure
-    history |> Prim.zip(history |> Prim.tail) |> Prim.with_index |> Prim.filter [((prev, curr), i) ->
-      -- Detect significant structural changes
-      prev |> Net.complexity curr |> Net.complexity |> Prim.sub |> Prim.abs > 5 or
-      prev |> Net.agent_count curr |> Net.agent_count |> Prim.sub |> Prim.abs > 2
-    ] |> Prim.map [((_, _), i) -> i] -> stage_boundaries
-
-    -- Analyze each stage
-    stage_boundaries |> Prim.cons(0) |> Prim.map [stage_start ->
-      stage_end = stage_boundaries |> Prim.find [s -> s > stage_start] |> Prim.default(history |> Prim.length - 1)
-
-      stage_net = history[stage_start]
-      stage_terminates = stage_net |> terminates
-
+        name: "CycleDetector",
+        analyze: detect_cycles,
+        confidence_threshold: 0.9,
+        max_steps: 100,
+        specialization: "cycle"
+      },
       {
-        stage: stage_start,
-        property: "Stage " ++ stage_start |> Prim.to_str ++ " to " ++ stage_end |> Prim.to_str,
-        terminates: stage_terminates
-      }
-    ]
-  ]
-
-  --[[
-    Measures the computational complexity of the net reduction
-  ]]--
-  measure_complexity: !Net -o> {steps: Z, space: Z, work: Z} [n ->
-    n |> bounded_eval 1000 -> result
-
-    -- Measure time (steps), space (max net size), and work (total operations)
-    steps = result.steps
-
-    result.result |> Net.history -> history
-    space = history |> Prim.map [state -> state |> Net.size] |> Prim.max
-
-    work = history |> Prim.map [state -> state |> Net.agent_count] |> Prim.sum
-
-    {steps: steps, space: space, work: work}
-  ]
-
-  --[[
-    Identifies the live variables at each reduction step
-  ]]--
-  live_variables: !Net -o> [{step: Z, live: [S]}] [n ->
-    n |> Red.history -> history
-
-    history |> Prim.with_index |> Prim.map [(state, i) ->
-      state |> Net.variables |> Net.filter_live -> live_vars
-      {step: i, live: live_vars}
-    ]
-  ]
-
-  --[[
-    Analyzes recursive patterns in the net for termination behavior
-  ]]--
-  analyze_recursion: Net -> [{pattern: Net, decreasing: Bool, measure: ?S}] [n ->
-    -- Find potential recursive patterns
-    n |> Net.detect_recursion -> recursive_components
-
-    recursive_components |> Prim.map [component ->
-      component |> Net.find_measure -> measure
-
-      has_measure = measure |> Prim.is_valid
-      decreasing = has_measure and (component |> Net.measure_decreases measure)
-
+        name: "SizeAnalyzer",
+        analyze: analyze_size_growth,
+        confidence_threshold: 0.8,
+        max_steps: 50,
+        specialization: "size"
+      },
       {
-        pattern: component,
-        decreasing: decreasing,
-        measure: measure
+        name: "PatternMatcher",
+        analyze: match_known_patterns,
+        confidence_threshold: 0.7,
+        max_steps: 30,
+        specialization: "pattern"
       }
-    ]
+    ] in
+    
+    -- Run the analysis
+    let start_time = current_time_ms() in
+    let steps = run_analysis(initial, agents, []) in
+    let end_time = current_time_ms() in
+    
+    -- Gather final evidence
+    let final_evidence = if steps |> length > 0 then
+      last(steps).output_evidence
+    else
+      initial
+    in
+    
+    {
+      initial_evidence: initial,
+      steps: steps,
+      final_evidence: final_evidence,
+      duration_ms: end_time - start_time,
+      successful: final_evidence.terminating != ?None
+    }
   ]
 
   --[[
-    Formal Verification
+    Run analysis until termination is determined or max steps reached
   ]]--
-
-  --[[
-    Attempts to construct a formal proof of termination
-  ]]--
-  construct_proof: Net -> ?TerminationProof [n ->
-    n |> terminates |> not -> [return ?None]
-
-    -- Analyze recursion patterns
-    n |> analyze_recursion -> recursive_patterns
-
-    recursive_patterns |> Prim.all [pattern -> pattern.decreasing] |> not -> [return ?None]
-
-    -- Construct a well-founded measure
-    recursive_patterns |> Prim.map [pattern -> pattern.measure] |> Net.combine_measures -> global_measure
-
-    ?Some({
-      measure: global_measure,
-      decreasing_steps: recursive_patterns |> Prim.map [pattern -> pattern.pattern],
-      proof_technique: "Well-founded recursion using " ++ global_measure |> Prim.to_str
-    })
+  run_analysis: Evidence * [Agent] * [AnalysisStep] -> [AnalysisStep] [evidence agents steps ->
+    -- Stop if we've proven termination or non-termination
+    if evidence.terminating != ?None then
+      steps
+    -- Stop if we've reached max steps
+    else if steps |> length >= 100 then
+      steps
+    else
+      -- Select the most promising agent
+      let agent = select_best_agent(agents, evidence) in
+      
+      -- Run the agent
+      let step = run_agent(agent, evidence) in
+      
+      -- Continue analysis with updated evidence
+      run_analysis(step.output_evidence, agents, steps + [step])
   ]
 
   --[[
-    Finds a counterexample to termination if one exists
+    Helper function to select the most promising agent
   ]]--
-  find_counterexample: Net -> ?TermWitness [n ->
-    n |> terminates -> [return ?None]
-
-    n |> Red.history -> history
-    history |> has_cycle -> [
-      history |> find_minimum_cycle -> (start, end)
-
-      ?Some({
-        witness_type: "Cycle",
-        start_state: history[start],
-        end_state: history[end],
-        explanation: "The state at step " ++ start |> Prim.to_str ++
-                    " is equivalent to the state at step " ++ end |> Prim.to_str
-      })
-    ] or_else [
-      ?Some({
-        witness_type: "Divergence",
-        start_state: n,
-        steps_examined: history |> Prim.length,
-        explanation: "No cycle detected but reduction exceeds reasonable bounds"
-      })
-    ]
+  select_best_agent: [Agent] * Evidence -> Agent [agents evidence ->
+    -- For simplicity, just use the first agent
+    -- In a real implementation, would use a heuristic
+    agents[0]
   ]
 
   --[[
-    IO Termination Analysis
+    Helper function to calculate the size of a net
   ]]--
-
-  --[[
-    Checks if an IO agent has been processed (completed its operation)
-  ]]--
-  io_processed: B -> Bool [b -> b |> IO.processed]
-
-  --[[
-    Verifies that all IO agents in a net have been processed
-  ]]--
-  io_agents_processed: Net -> Bool [n ->
-    B |> Std.List.filter [b -> b |> IO.io_agent] |> Std.List.filter [b -> b |> in n] |> Prim.forall [b -> b |> io_processed]
+  calculate_size: @INet.Net -> Z [net ->
+    -- Size is the number of agents plus the number of connections
+    let agents = @INet.agents(net) in
+    let connections = @INet.connections(net) in
+    
+    length(agents) + length(connections)
   ]
 
   --[[
-    Comprehensive termination check for IO programs:
-    1. The program must terminate (reach normal form or cycle)
-    2. The final state must be in normal form
-    3. All IO agents must have completed their operations
+    Helper function to detect cycles in reduction
   ]]--
-  io_terminates: Net -> Bool [n ->
-    n |> Red.red -> n_final
-    n |> terminates and
-    n_final |> Red.normal and
-    n_final |> io_agents_processed
+  detect_cycles: Evidence -> Evidence
+
+  --[[
+    Helper function to analyze size growth
+  ]]--
+  analyze_size_growth: Evidence -> Evidence
+
+  --[[
+    Helper function to match known patterns
+  ]]--
+  match_known_patterns: Evidence -> Evidence
+
+  --[[
+    Helper function to get current time in milliseconds
+  ]]--
+  current_time_ms: () -> Z
+
+  --[[
+    Helper function to get the last element of a list
+  ]]--
+  last: [a] -> a [xs ->
+    xs[length(xs) - 1]
   ]
+
+  --[[
+    Removes duplicates from a list
+  ]]--
+  unique: [a] -> [a]
+
+  --[[
+    Checks if one set is a subset of another
+  ]]--
+  subset: [a] * [a] -> Bool
 }
