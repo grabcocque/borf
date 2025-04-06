@@ -1,10 +1,10 @@
 --[[
   Free Category Transformations
-  
+
   This module defines transformations between free categories
   and other categorical structures, enabling the representation of
   graph-based and path-based computations in different frameworks.
-  
+
   These transformations use linear types instead of monadic patterns
   for precise resource tracking and composition.
 ]]--
@@ -15,7 +15,7 @@
     FreeFunctor
     FreeNaturalTransformation
     FreeAdjunction
-    
+
     -- Special functors
     GraphFunctor
     PathFunctor
@@ -25,7 +25,7 @@
   op: {
     -- Functor composition
     ∘
-    
+
     -- Free category operations
     ⊕  -- Path concatenation
     ⇒  -- Homomorphism application
@@ -37,40 +37,40 @@
     free_functor
     free_nat_transformation
     free_adjunction
-    
+
     -- Functor constructors
     graph_functor
     path_functor
     forgetful_functor
-    
+
     -- Natural transformation constructors
     free_to_cat_nt
     cat_to_free_nt
-    
+
     -- Adjunction constructors
     free_forgetful_adjunction
-    
+
     -- Functor operations
     apply_functor
     compose_functors
-    
+
     -- Natural transformation operations
     apply_nat_transformation
     vertical_composition
     horizontal_composition
-    
+
     -- Free category/Category transformations
     free_to_cat
     cat_to_free
-    
+
     -- Free category/Graph transformations
     free_to_graph
     graph_to_free
-    
+
     -- Path operations
     map_path
     fold_path
-    
+
     -- Graph operations
     map_graph
     fold_graph
@@ -94,7 +94,7 @@
 
   --[[
     FreeFunctor represents a functor from a free category to any category.
-    
+
     This captures transformations that preserve the free category structure
     while changing the underlying representation.
   ]]--
@@ -161,8 +161,8 @@
   --[[
     free_functor creates a functor from a free category to any category.
   ]]--
-  free_functor: S * @Free.!FreeCategory * @Cat.Category * 
-             (a -> c) * (@Free.!FreeMorphism -> (c -o> d)) -> 
+  free_functor: S * @Free.!FreeCategory * @Cat.Category *
+             (a -> c) * (@Free.!FreeMorphism -> (c -o> d)) ->
              FreeFunctor [
     name source target object_map morphism_map ->
     {
@@ -178,8 +178,8 @@
   --[[
     free_nat_transformation creates a natural transformation between free functors.
   ]]--
-  free_nat_transformation: S * FreeFunctor * FreeFunctor * 
-                        (a -> (c -o> d)) -> 
+  free_nat_transformation: S * FreeFunctor * FreeFunctor *
+                        (a -> (c -o> d)) ->
                         FreeNaturalTransformation [
     name source_functor target_functor components ->
     {
@@ -193,8 +193,8 @@
   --[[
     free_adjunction creates an adjunction involving free categories.
   ]]--
-  free_adjunction: S * FreeFunctor * FreeFunctor * 
-                FreeNaturalTransformation * FreeNaturalTransformation -> 
+  free_adjunction: S * FreeFunctor * FreeFunctor *
+                FreeNaturalTransformation * FreeNaturalTransformation ->
                 FreeAdjunction [
     name left right unit counit ->
     {
@@ -238,7 +238,7 @@
         source,
         target,
         [node -> node],  -- Map nodes to themselves
-        [morphism -> 
+        [morphism ->
           -- Map the path to a morphism in the target category
           map_path(morphism.path, target)
         ]
@@ -342,12 +342,12 @@
     if f.source != g.target {
       error("Cannot compose functors with incompatible categories")
     }
-    
+
     {
       source: g.source,
       target: f.target,
       object_map: [a -> f.object_map(g.object_map(a))],
-      morphism_map: [m -> 
+      morphism_map: [m ->
         let intermediate = g.morphism_map(m) in
         f.morphism_map(intermediate)
       ],
@@ -382,20 +382,20 @@
   --[[
     vertical_composition composes two natural transformations vertically.
   ]]--
-  vertical_composition: FreeNaturalTransformation * FreeNaturalTransformation -> 
+  vertical_composition: FreeNaturalTransformation * FreeNaturalTransformation ->
                       FreeNaturalTransformation [
     alpha beta ->
     if alpha.source != beta.target {
       error("Cannot compose natural transformations with incompatible functors")
     }
-    
+
     {
       source: beta.source,
       target: alpha.target,
-      components: [a -> 
+      components: [a ->
         let beta_component = beta.components(a) in
         let alpha_component = alpha.components(beta.target.object_map(a)) in
-        
+
         [c -o>
           alpha_component(beta_component(c))
         ]
@@ -407,16 +407,16 @@
   --[[
     horizontal_composition composes two natural transformations horizontally.
   ]]--
-  horizontal_composition: FreeNaturalTransformation * FreeNaturalTransformation -> 
+  horizontal_composition: FreeNaturalTransformation * FreeNaturalTransformation ->
                         FreeNaturalTransformation [
     alpha beta ->
     {
       source: compose_functors(alpha.source, beta.source),
       target: compose_functors(alpha.target, beta.target),
-      components: [a -> 
+      components: [a ->
         let beta_component = beta.components(a) in
         let alpha_component = alpha.components(beta.target.object_map(a)) in
-        
+
         [c -o>
           alpha_component(apply_functor(alpha.source, beta_component)(c))
         ]
@@ -479,9 +479,9 @@
   map_path: @Free.!Path * @Cat.Category -> (c -o> d) [
     path target ->
     match path {
-      @Free.!Path.Empty{node} -> 
+      @Free.!Path.Empty{node} ->
         @Cat.id(target, node),
-      @Free.!Path.Cons{edge, continuation} -> 
+      @Free.!Path.Cons{edge, continuation} ->
         let edge_morphism = edge_to_morphism(edge, target) in
         let continuation_morphism = map_path(continuation, target) in
         @Cat.compose(target, edge_morphism, continuation_morphism)
@@ -506,7 +506,7 @@
     path initial f ->
     match path {
       @Free.!Path.Empty{node} -> initial,
-      @Free.!Path.Cons{edge, continuation} -> 
+      @Free.!Path.Cons{edge, continuation} ->
         let rest = fold_path(continuation, initial, f) in
         f(edge, rest)
     }
@@ -592,9 +592,9 @@
       [a -> a],  -- Identity on objects
       [_ -> @Free.identity(@Free.standard_free, "a")]  -- Placeholder
     ) in
-    
+
     let right = forgetful_functor("Forgetful").base in
-    
+
     free_adjunction(
       name,
       left,
@@ -619,15 +619,15 @@
   --------------------------------------------------
 
   --[[
-    Structure mapping that establishes @FreeXf as a category of 
+    Structure mapping that establishes @FreeXf as a category of
     transformations between free categories and other categories.
-    
+
     In this categorical structure:
     - Objects are free functors
     - Morphisms are free natural transformations
     - Identity is the identity free natural transformation
     - Composition is vertical composition of free natural transformations
-    
+
     This enables rigorous transformation of graph-based and path-based
     computations between different categorical frameworks.
   ]]--
@@ -635,7 +635,7 @@
     -- Map FreeXf to a category
     objects: FreeFunctor,
     morphisms: FreeNaturalTransformation,
-    
+
     -- Core category structure
     dom: [nt -> nt.source],
     cod: [nt -> nt.target],
@@ -646,40 +646,40 @@
       [a -> [c -o> c]]
     )],
     compose: [alpha beta -> vertical_composition(alpha, beta)],
-    
+
     -- Laws
     law: {
       -- Basic category laws
-      identity: [nt -> 
-        vertical_composition(id(dom(nt)), nt) == nt && 
+      identity: [nt ->
+        vertical_composition(id(dom(nt)), nt) == nt &&
         vertical_composition(nt, id(cod(nt))) == nt
       ],
-      
-      associativity: [alpha beta gamma -> 
+
+      associativity: [alpha beta gamma ->
         vertical_composition(
-          vertical_composition(alpha, beta), 
+          vertical_composition(alpha, beta),
           gamma
         ) == vertical_composition(
-          alpha, 
+          alpha,
           vertical_composition(beta, gamma)
         )
       ],
-      
+
       -- Free functor laws
-      functor_identity: [f node -> 
-        f.morphism_map(@Free.identity(f.source, node)) == 
+      functor_identity: [f node ->
+        f.morphism_map(@Free.identity(f.source, node)) ==
         @Cat.id(f.target, f.object_map(node))
       ],
-      
+
       functor_composition: [f m1 m2 ->
-        f.morphism_map(@Free.compose(m1, m2)) == 
+        f.morphism_map(@Free.compose(m1, m2)) ==
         @Cat.compose(
           f.target,
           f.morphism_map(m1),
           f.morphism_map(m2)
         )
       ],
-      
+
       -- Natural transformation laws
       naturality: [nt node morphism ->
         @Cat.compose(
@@ -692,14 +692,14 @@
           apply_functor(nt.target, morphism)
         )
       ],
-      
+
       -- Adjunction laws
       unit_counit: [adj a ->
         let F = adj.left_functor in
         let G = adj.right_functor in
         let unit = adj.unit in
         let counit = adj.counit in
-        
+
         @Cat.compose(
           G.target,
           unit.components(a),
@@ -729,7 +729,7 @@
         @Free.standard_free,
         @Cat.structure,
         [node -> if node == "a" { Z } else { S }],  -- Map nodes to types
-        [morphism -> 
+        [morphism ->
           if morphism.source_node == "a" && morphism.target_node == "b" {
             [n -o> string(n)]  -- Int to String
           } else {
@@ -738,16 +738,16 @@
         ]
       )
     ],
-    
+
     --[[
       Example 2: Mapping a path to a morphism
     ]]--
     path_mapping_example: () -> (Z -o> S) [->
       let path = @Free.singleton_path(@Free.simple_graph, "e") in
-      
+
       map_path(path, @Cat.structure)
     ],
-    
+
     --[[
       Example 3: Creating a natural transformation between free functors
     ]]--
@@ -759,7 +759,7 @@
         [node -> Z],  -- Map all nodes to Int
         [_ -> [n -o> n + 1]]  -- Map all paths to increment
       ) in
-      
+
       let G = free_functor(
         "G",
         @Free.standard_free,
@@ -767,7 +767,7 @@
         [node -> Z],  -- Map all nodes to Int
         [_ -> [n -o> n * 2]]  -- Map all paths to doubling
       ) in
-      
+
       free_nat_transformation(
         "ExampleNT",
         F,
@@ -775,20 +775,20 @@
         [_ -> [n -o> n + 10]]  -- Component adds 10
       )
     ],
-    
+
     --[[
       Example 4: Folding over a path
     ]]--
     fold_path_example: () -> Z [->
       let path = @Free.path(["e"], @Free.simple_graph) in
-      
+
       fold_path(
         path,
         0,
         [edge count -> count + 1]
       )  -- Should return the length of the path
     ],
-    
+
     --[[
       Example 5: Creating the free-forgetful adjunction
     ]]--
@@ -796,4 +796,4 @@
       free_forgetful_adjunction("FreeForgetfulAdjunction")
     ]
   }
-} 
+}

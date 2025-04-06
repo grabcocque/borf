@@ -1,6 +1,6 @@
 --[[
   Computation Transformations
-  
+
   This module defines transformations between computation categories
   and other categorical structures, enabling the representation of
   effectful computations in different mathematical frameworks while
@@ -13,7 +13,7 @@
     ComputationFunctor
     ComputationNatTransformation
     ComputationAdjunction
-    
+
     -- Special functors
     KleisliFunctor
     StateFunctor
@@ -22,7 +22,7 @@
     ErrorFunctor
     AsyncFunctor
     IOFunctor
-    
+
     -- Computation transformation categories
     ComputationCategory
   }
@@ -30,7 +30,7 @@
   op: {
     -- Functor composition
     ∘
-    
+
     -- Effect operators
     >>= >> =<<
   }
@@ -40,7 +40,7 @@
     computation_functor
     computation_nat_transformation
     computation_adjunction
-    
+
     -- Functor constructors
     kleisli_functor
     state_functor
@@ -49,30 +49,30 @@
     error_functor
     async_functor
     io_functor
-    
+
     -- Natural transformation constructors
     kleisli_to_computation_nt
     computation_to_kleisli_nt
-    
+
     -- Adjunction constructors
     kleisli_computation_adjunction
-    
+
     -- Functor operations
     apply_functor
     compose_functors
-    
+
     -- Natural transformation operations
     apply_nat_transformation
     vertical_composition
     horizontal_composition
-    
+
     -- Category construction
     computation_category
-    
+
     -- Computation/Kleisli transformations
     computation_to_kleisli
     kleisli_to_computation
-    
+
     -- Effect transformations
     lift_effect
     transform_effect
@@ -96,7 +96,7 @@
 
   --[[
     ComputationFunctor represents a functor between computation categories.
-    
+
     This structure captures transformations that preserve the computational
     structure while changing the underlying effect representation.
   ]]--
@@ -138,8 +138,8 @@
   --[[
     computation_functor creates a functor between computation categories
   ]]--
-  computation_functor: S * @Cat.Category * @Cat.Category * (a -> b) * 
-                     (@Computation.Computation a b -> @Computation.Computation c d) -> 
+  computation_functor: S * @Cat.Category * @Cat.Category * (a -> b) *
+                     (@Computation.Computation a b -> @Computation.Computation c d) ->
                      ComputationFunctor [
     name source target obj_map comp_map ->
     {
@@ -155,8 +155,8 @@
   --[[
     computation_nat_transformation creates a natural transformation between computation functors
   ]]--
-  computation_nat_transformation: S * ComputationFunctor * ComputationFunctor * 
-                               (a -> @Computation.Computation a b) -> 
+  computation_nat_transformation: S * ComputationFunctor * ComputationFunctor *
+                               (a -> @Computation.Computation a b) ->
                                ComputationNatTransformation [
     name source_functor target_functor components ->
     {
@@ -170,8 +170,8 @@
   --[[
     computation_adjunction creates an adjunction between computation categories
   ]]--
-  computation_adjunction: S * ComputationFunctor * ComputationFunctor * 
-                       ComputationNatTransformation * ComputationNatTransformation -> 
+  computation_adjunction: S * ComputationFunctor * ComputationFunctor *
+                       ComputationNatTransformation * ComputationNatTransformation ->
                        ComputationAdjunction [
     name left right unit counit ->
     {
@@ -214,7 +214,7 @@
       @Computation.structure,
       [a -> a],
       [comp -> @Computation.state(
-        [a s -> 
+        [a s ->
           let result = comp.run(a) in
           (result, s)
         ]
@@ -272,7 +272,7 @@
   --[[
     apply_functor applies a computation functor to a computation
   ]]--
-  apply_functor: ComputationFunctor * @Computation.Computation a b -> 
+  apply_functor: ComputationFunctor * @Computation.Computation a b ->
                @Computation.Computation c d [
     functor comp ->
     functor.map_comp(comp)
@@ -310,7 +310,7 @@
   --[[
     vertical_composition composes two natural transformations vertically
   ]]--
-  vertical_composition: ComputationNatTransformation * ComputationNatTransformation -> 
+  vertical_composition: ComputationNatTransformation * ComputationNatTransformation ->
                       ComputationNatTransformation [
     alpha beta ->
     {
@@ -324,14 +324,14 @@
   --[[
     horizontal_composition composes two natural transformations horizontally
   ]]--
-  horizontal_composition: ComputationNatTransformation * ComputationNatTransformation -> 
+  horizontal_composition: ComputationNatTransformation * ComputationNatTransformation ->
                         ComputationNatTransformation [
     alpha beta ->
     {
       source_functor: compose_functors(alpha.source_functor, beta.source_functor),
       target_functor: compose_functors(alpha.target_functor, beta.target_functor),
       components: [a -> @Computation.chain(
-        beta.components(a), 
+        beta.components(a),
         [b -> alpha.components(beta.target_functor.map_obj(b))]
       )],
       naturality: alpha.naturality && beta.naturality
@@ -365,15 +365,15 @@
   --------------------------------------------------
 
   --[[
-    Structure mapping that establishes @ComputationXf as a category of 
+    Structure mapping that establishes @ComputationXf as a category of
     transformations between computation categories.
-    
+
     In this categorical structure:
     - Objects are computation functors
     - Morphisms are natural transformations between computation functors
     - Identity is the identity natural transformation
     - Composition is vertical composition of natural transformations
-    
+
     This structure enables rigorous transformation of effectful computations
     between different categorical representations.
   ]]--
@@ -381,7 +381,7 @@
     -- Map ComputationXf to a category
     objects: ComputationFunctor,
     morphisms: ComputationNatTransformation,
-    
+
     -- Base category structure
     dom: [nt -> nt.source_functor],
     cod: [nt -> nt.target_functor],
@@ -392,27 +392,27 @@
       [a -> @Computation.pure("Identity", a)]
     )],
     compose: [alpha beta -> vertical_composition(alpha, beta)],
-    
+
     -- Functor constructors
     kleisli_functor: kleisli_functor,
     state_functor: state_functor,
     reader_functor: reader_functor,
-    
+
     -- Natural transformation constructors
     kleisli_to_computation_nt: kleisli_to_computation_nt,
     computation_to_kleisli_nt: computation_to_kleisli_nt,
-    
+
     -- Functor operations
     apply_functor: apply_functor,
     compose_functors: compose_functors,
-    
+
     -- Laws of functorial transformations
     law: {
-      functor_identity: [f a -> 
-        apply_functor(f, @Computation.pure("Identity", a)) == 
+      functor_identity: [f a ->
+        apply_functor(f, @Computation.pure("Identity", a)) ==
         @Computation.pure("Identity", f.map_obj(a))
       ],
-      
+
       functor_composition: [f comp1 comp2 ->
         apply_functor(f, @Computation.chain(comp1, [a -> comp2])) ==
         @Computation.chain(
@@ -420,7 +420,7 @@
           [a -> apply_functor(f, comp2)]
         )
       ],
-      
+
       naturality: [nt f g a ->
         @Computation.chain(
           nt.components(a),
@@ -431,13 +431,13 @@
           nt.components
         )
       ],
-      
+
       adjunction_unit_counit: [adj a b ->
         let F = adj.left_functor in
         let G = adj.right_functor in
         let η = adj.unit in
         let ε = adj.counit in
-        
+
         @Computation.chain(
           η.components(a),
           [ga -> apply_functor(G, ε.components(ga))]
@@ -462,7 +462,7 @@
     pure_to_state: @Computation.Computation Z Z -> @Computation.Computation Z (Z * S) [comp ->
       apply_functor(state_functor("PureToState", "state"), comp)
     ],
-    
+
     --[[
       Example 2: Transforming a Kleisli arrow to a computation
     ]]--
@@ -471,4 +471,4 @@
       kleisli_to_computation(k)
     ]
   }
-} 
+}

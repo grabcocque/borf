@@ -1,10 +1,10 @@
 --[[
   Freyd Category
-  
+
   This module defines the Freyd category, which combines pure functions
   with effectful computations using linear types and profunctors. Freyd categories
   enable mixing pure and effectful code while maintaining categorical structure.
-  
+
   This implementation avoids monads by using linear types and direct composition
   rather than Kleisli arrows.
 ]]--
@@ -16,7 +16,7 @@
     !FreydMorphism
     !FreydProduct
     !FreydCoproduct
-    
+
     -- Specific effect types
     !Effect
     !Pure
@@ -39,23 +39,23 @@
     freyd_morphism
     compose
     id
-    
+
     -- Product/coproduct operations
     first
     second
     split
     par
-    
+
     -- Effect operations
     pure_to_effect
     effect_from_pure
     state_effect
     reader_effect
-    
+
     -- Strength operations
     left_strength
     right_strength
-    
+
     -- Utility functions
     apply
     uncurry
@@ -131,16 +131,16 @@
     !Effect represents a computational effect in the Freyd category.
   ]]--
   !Effect: !{
-    Pure: { 
+    Pure: {
       value: a                       -- Pure computation with no effects
     },
-    Linear: { 
+    Linear: {
       compute: (s -o> (a, s))        -- Linear computation with state
     },
-    State: { 
+    State: {
       run: (s -o> (a, s))            -- State computation
     },
-    Reader: { 
+    Reader: {
       run: (e -o> a)                 -- Reader computation
     }
   }
@@ -185,15 +185,15 @@
     if f.category != g.category {
       error("Cannot compose morphisms from different Freyd categories")
     }
-    
+
     if f.target != g.source {
       error("Composition type mismatch")
     }
-    
+
     freyd_morphism(
       f.source,
       g.target,
-      [(a, s) -> 
+      [(a, s) ->
         let (b, s') = f.morphism((a, s)) in
         g.morphism((b, s'))
       ],
@@ -223,11 +223,11 @@
   first: !FreydMorphism -> !FreydMorphism [f ->
     let (a, s1) = f.source in
     let (b, s2) = f.target in
-    
+
     freyd_morphism(
       ((a, c), s1),
       ((b, c), s2),
-      [((a, c), s) -> 
+      [((a, c), s) ->
         let (b, s') = f.morphism((a, s)) in
         ((b, c), s')
       ],
@@ -241,11 +241,11 @@
   second: !FreydMorphism -> !FreydMorphism [f ->
     let (a, s1) = f.source in
     let (b, s2) = f.target in
-    
+
     freyd_morphism(
       ((c, a), s1),
       ((c, b), s2),
-      [((c, a), s) -> 
+      [((c, a), s) ->
         let (b, s') = f.morphism((a, s)) in
         ((c, b), s')
       ],
@@ -260,21 +260,21 @@
     if f.category != g.category {
       error("Cannot split morphisms from different Freyd categories")
     }
-    
+
     let (a, s1) = f.source in
     let (b, s2) = f.target in
     let (c, s3) = g.source in
     let (d, s4) = g.target in
-    
+
     -- Ensure the state types match
     if s1 != s3 || s2 != s4 {
       error("State type mismatch in split")
     }
-    
+
     freyd_morphism(
       ((a, c), s1),
       ((b, d), s2),
-      [((a, c), s) -> 
+      [((a, c), s) ->
         let (b, s') = f.morphism((a, s)) in
         let (d, s'') = g.morphism((c, s')) in
         ((b, d), s'')
@@ -290,26 +290,26 @@
     if f.category != g.category {
       error("Cannot parallel morphisms from different Freyd categories")
     }
-    
+
     let (a, s1) = f.source in
     let (b, s2) = f.target in
     let (c, s3) = g.source in
     let (d, s4) = g.target in
-    
+
     -- Ensure the state types match
     if s1 != s3 || s2 != s4 {
       error("State type mismatch in par")
     }
-    
+
     freyd_morphism(
       (a + c, s1),
       (b + d, s2),
-      [(sum, s) -> 
+      [(sum, s) ->
         match sum with
-          | Left(a') -> 
+          | Left(a') ->
               let (b, s') = f.morphism((a', s)) in
               (Left(b), s')
-          | Right(c') -> 
+          | Right(c') ->
               let (d, s') = g.morphism((c', s)) in
               (Right(d), s')
       ],
@@ -364,11 +364,11 @@
   left_strength: !FreydMorphism -> !FreydMorphism [f ->
     let (a, s1) = f.source in
     let (b, s2) = f.target in
-    
+
     freyd_morphism(
       ((c, a), s1),
       ((c, b), s2),
-      [((c, a), s) -> 
+      [((c, a), s) ->
         let (b, s') = f.morphism((a, s)) in
         ((c, b), s')
       ],
@@ -382,11 +382,11 @@
   right_strength: !FreydMorphism -> !FreydMorphism [f ->
     let (a, s1) = f.source in
     let (b, s2) = f.target in
-    
+
     freyd_morphism(
       ((a, c), s1),
       ((b, c), s2),
-      [((a, c), s) -> 
+      [((a, c), s) ->
         let (b, s') = f.morphism((a, s)) in
         ((b, c), s')
       ],
@@ -464,32 +464,32 @@
 
   --[[
     Structure mapping that establishes @Freyd as a categorical structure.
-    
+
     In this structure:
     - Objects are pairs (a, s) where a is a value type and s is a state type
     - Morphisms are Freyd morphisms from (a, s) to (b, s)
     - Identity is the identity Freyd morphism
     - Composition is sequential composition of Freyd morphisms
-    
+
     This forms a proper Freyd category connecting pure functions with
     effects via linear types, avoiding monadic structure.
   ]]--
   structure: {
     -- Base category
     base: @Cat.structure,
-    
+
     -- Core Freyd category structure
     objects: (a, s),                 -- Objects are value-state pairs
     morphisms: !FreydMorphism,       -- Morphisms are Freyd morphisms
-    
+
     -- Core category operations
     dom: [f -> f.source],
     cod: [f -> f.target],
     id: id,
     compose: compose,
-    
+
     -- Freyd-specific operations
-    j: [f -> 
+    j: [f ->
       freyd_morphism(
         (j(dom(f)), s),
         (j(cod(f)), s),
@@ -497,13 +497,13 @@
         standard_freyd
       )
     ],
-    
+
     first: first,
     second: second,
-    
+
     -- Product structure
     product: {
-      prod: [(a, s_a) (b, s_b) -> 
+      prod: [(a, s_a) (b, s_b) ->
         if s_a != s_b {
           error("Product state mismatch")
         }
@@ -513,16 +513,16 @@
       pi2: [((a, b), s) -> id((b, s))],
       fanout: [f g -> split(f, g)]
     },
-    
+
     -- Coproduct structure
     coproduct: {
-      coprod: [(a, s_a) (b, s_b) -> 
+      coprod: [(a, s_a) (b, s_b) ->
         if s_a != s_b {
           error("Coproduct state mismatch")
         }
         ((a + b), s_a)
       ],
-      inj1: [(a, s) -> 
+      inj1: [(a, s) ->
         freyd_morphism(
           (a, s),
           ((a + b), s),
@@ -530,7 +530,7 @@
           standard_freyd
         )
       ],
-      inj2: [(b, s) -> 
+      inj2: [(b, s) ->
         freyd_morphism(
           (b, s),
           ((a + b), s),
@@ -540,19 +540,19 @@
       ],
       case: [f g -> par(f, g)]
     },
-    
+
     -- Laws
     law: {
       -- Core category laws
-      identity: [f -> 
-        compose(id(dom(f)), f) == f && 
+      identity: [f ->
+        compose(id(dom(f)), f) == f &&
         compose(f, id(cod(f))) == f
       ],
-      
-      associativity: [f g h -> 
+
+      associativity: [f g h ->
         compose(compose(f, g), h) == compose(f, compose(g, h))
       ],
-      
+
       -- Freyd laws
       strength_id: [a b ->
         let id_a = id((a, s)) in
@@ -560,7 +560,7 @@
         left_strength(id_a) == id((a, b), s) &&
         right_strength(id_b) == id((a, b), s)
       ],
-      
+
       strength_compose: [f g ->
         left_strength(compose(f, g)) == compose(left_strength(f), left_strength(g)) &&
         right_strength(compose(f, g)) == compose(right_strength(f), right_strength(g))
@@ -588,7 +588,7 @@
     pure_example: (Z -> Z) -> !FreydMorphism [f ->
       pure_to_effect(f, standard_freyd)
     ],
-    
+
     --[[
       Example 2: State manipulation with Freyd
     ]]--
@@ -600,21 +600,21 @@
         [(_, s) -> (s, s + 1)],
         standard_freyd
       ) in
-      
+
       -- Apply it multiple times
       let inc3 = compose(compose(incr, incr), incr) in
-      
+
       -- Apply to initial state
       apply(inc3, 0, 0)
     ],
-    
+
     --[[
       Example 3: Combining pure and effectful computation
     ]]--
     mixed_example: () -> (Z, S) [->
       -- Pure function to double a number
       let double = pure_to_effect([n -> n * 2], standard_freyd) in
-      
+
       -- Effectful logging
       let log = freyd_morphism(
         (Z, [S]),
@@ -622,14 +622,14 @@
         [(n, logs) -> (n, logs + ["Value: " + n])],
         standard_freyd
       ) in
-      
+
       -- Combine them
       let double_and_log = compose(double, log) in
-      
+
       -- Apply to initial values
       apply(double_and_log, 21, [])
     ],
-    
+
     --[[
       Example 4: Using split for parallel effects
     ]]--
@@ -641,19 +641,19 @@
         [(n, s) -> (n, s + n)],
         standard_freyd
       ) in
-      
+
       let times2 = freyd_morphism(
         (Z, Z),
         (Z, Z),
         [(n, s) -> (n * 2, s)],
         standard_freyd
       ) in
-      
+
       -- Run them in parallel with split
       let parallel = split(incr, times2) in
-      
+
       -- Apply to a pair of inputs
       apply(parallel, (3, 4), 0)
     ]
   }
-} 
+}

@@ -1,9 +1,17 @@
 --[[
-  Core Linear Types System
+  Resource Management System - Safe and Efficient Access to Critical Resources
 
-  This module defines the fundamental linear type abstractions in Borf,
-  implementing the core linear types without the categorical structure extensions.
-  This core module provides the essential resource usage tracking that other modules depend on.
+  This module provides a robust system for tracking and managing resources
+  that require careful handling. It helps you:
+
+  - Prevent resource leaks by ensuring proper cleanup
+  - Avoid race conditions with clear ownership rules
+  - Prevent accidental duplicate usage of one-time resources
+  - Track resource lifecycles through your application
+  - Enforce access patterns for sensitive resources
+
+  Use this system when working with files, network connections, database handles,
+  encryption keys, authentication tokens, or any resources that need controlled access.
 ]]--
 
 @Linear: {
@@ -42,136 +50,308 @@
   }
 
   --------------------------------------------------
-  -- Structure Mapping to Symmetric Monoidal Closed Category
+  -- Resource Management Guarantees Framework
   --------------------------------------------------
 
   structure: {
-    -- Map Linear to SymmetricMonoidalClosedCategory
-    objects: LinearType,
-    morphisms: [a b -> (!a -o> b)],
-    dom: [f -> f.domain],
-    cod: [f -> f.codomain],
-    id: [a -> [!x -o> x]],
-    compose: [f g -> [!x -o> x |> g |> f]],
+    -- Core resource management guarantees
+    resource_types: LinearType,
+    resource_handlers: [a b -> (!a -o> b)],
+    handler_input: [f -> f.domain],
+    handler_output: [f -> f.codomain],
+    identity_handler: [a -> [!x -o> x]],
+    chained_handlers: [f g -> [!x -o> x |> g |> f]],
 
-    -- Monoidal structure
-    tensor: [a b -> a o* b],
-    unit: T.Unit,
-    associator: [a b c -> {
-      forward: [!((a o* b) o* c) -o> (a o* (b o* c))],
-      reverse: [!(a o* (b o* c)) -o> ((a o* b) o* c)]
+    -- Resource bundling guarantees
+    resource_pairing: [a b -> a o* b],
+    empty_resource: T.Unit,
+    resource_grouping: [a b c -> {
+      group_right: [!((a o* b) o* c) -o> (a o* (b o* c))],
+      group_left: [!(a o* (b o* c)) -o> ((a o* b) o* c)]
     }],
 
-    -- Symmetric structure
-    braiding: [a b -> {
-      forward: [!(a o* b) -o> (b o* a)],
-      reverse: [!(b o* a) -o> (a o* b)]
+    -- Resource swapping guarantees
+    resource_swapping: [a b -> {
+      swap: [!(a o* b) -o> (b o* a)],
+      unswap: [!(b o* a) -o> (a o* b)]
     }],
 
-    -- Closed structure
-    linear_arrow: [a b -> a -o> b],
-    curry: [a b c -> {
-      forward: [!((a o* b) -o> c) -o> (a -o> (b -o> c))],
-      reverse: [!(a -o> (b -o> c)) -o> ((a o* b) -o> c)]
+    -- Advanced resource handling guarantees
+    handler_type: [a b -> a -o> b],
+    handler_splitting: [a b c -> {
+      split: [!((a o* b) -o> c) -o> (a -o> (b -o> c))],
+      combine: [!(a -o> (b -o> c)) -o> ((a o* b) -o> c)]
     }],
-    eval: [a b -> [!((a -o> b) o* a) -o> b]]
+    apply_handler: [a b -> [!((a -o> b) o* a) -o> b]]
   }
 
   --[[
-    LinearType represents types that can be used in linear operations.
-    These types track resource usage to ensure values are used exactly once.
+    ManagedResourceType represents resource types with usage tracking.
+
+    These types ensure that critical resources like file handles, database
+    connections, or authentication tokens are properly managed throughout
+    their lifecycle.
   ]]--
   LinearType: T.Type_1
 
   --[[
-    LinearArrow represents linear functions that consume their input exactly once.
+    ResourceHandler represents functions that safely operate on managed resources.
+
+    These handlers ensure resources are properly accessed exactly once,
+    preventing issues like double-closing, race conditions, or resource leaks.
   ]]--
   LinearArrow: {
-    domain: LinearType,
-    codomain: LinearType,
-    lambda: !domain -o> codomain
+    domain: LinearType,           -- The input resource type
+    codomain: LinearType,         -- The result type after handling
+    lambda: !domain -o> codomain  -- The handling function itself
   }
 
   --[[
-    LinearTensor represents the tensor product of linear types,
-    combining resources while preserving linearity.
+    ResourcePair represents a bundle of resources that must be managed together.
+
+    This is useful for resources that are logically related, such as:
+    - A file handle and its lock
+    - A database connection and transaction
+    - A network socket and its buffer
   ]]--
   LinearTensor: {
-    left: LinearType,
-    right: LinearType,
-    tensor: left o* right
+    left: LinearType,        -- First resource in the pair
+    right: LinearType,       -- Second resource in the pair
+    tensor: left o* right    -- The combined resource pair
   }
 
   --[[
-    Usage tracking for linear resources
+    Usage status tracking for managed resources
   ]]--
-  Usage: {:consumed, :unconsumed}
-  Consumed: {status: "consumed"}
-  Unconsumed: {status: "unconsumed"}
+  Usage: {:consumed, :unconsumed}   -- Resource states
+  Consumed: {status: "consumed"}    -- Resource has been used/closed
+  Unconsumed: {status: "unconsumed"} -- Resource is still available for use
 
   --[[
-    Resource represents a linearly tracked value
+    ManagedResource wraps a value with lifecycle tracking
+
+    This wrapper adds tracking to ensure that important resources like
+    connections, handles, or authentication tokens are properly managed
+    and not accidentally misused.
   ]]--
   Resource: {
-    value: Any,
-    usage: Usage
+    value: Any,      -- The actual resource (file handle, connection, etc.)
+    usage: Usage     -- Current status of the resource
   }
 
   --[[
-    Affine types can be used at most once (can be dropped but not duplicated)
+    DiscardableResource represents resources that can be safely abandoned
+    without explicit cleanup (but cannot be duplicated).
+
+    Examples include:
+    - Temporary buffers
+    - Read-only resources
+    - Resources with automatic cleanup
   ]]--
   Affine: LinearType & {
-    allow_drop: true,
-    allow_clone: false
+    allow_drop: true,     -- Can be discarded without explicit cleanup
+    allow_clone: false    -- Still cannot be duplicated
   }
 
   --[[
-    Linear operations
+    Resource Management Operations
+
+    These functions provide safe operations for working with managed resources
+    throughout their lifecycle, from creation to final cleanup.
   ]]--
 
-  -- Consume a resource, marking it as used
+  --[[
+    close_resource safely consumes a resource and returns its underlying value
+
+    Use this when you need to explicitly close or consume a resource after use.
+    This ensures proper cleanup of resources like file handles, connections,
+    or sensitive data, and prevents accidental reuse.
+
+    Examples:
+    - Closing a file after reading
+    - Releasing a database connection
+    - Closing a network socket
+  ]]--
   consume: [!r ->
-    r.usage := :consumed;
-    r.value
+    r.usage := :consumed;  -- Mark as consumed to prevent future access
+    r.value                -- Return the underlying value
   ]
 
-  -- Use a resource without consuming it (for read-only operations)
+  --[[
+    access_resource safely accesses a resource without consuming it
+
+    Use this for read-only operations or when you need to temporarily
+    access a resource without taking ownership. The resource remains
+    available for future operations.
+
+    Examples:
+    - Reading from a file without closing it
+    - Checking connection status
+    - Validating a resource's properties
+  ]]--
   use: [r ->
     if r.usage == :unconsumed then
-      r.value
+      r.value  -- Access the resource
     else
-      error("Attempted to use an already consumed resource")
+      error("Security error: Attempted to access a closed or consumed resource")
     end
   ]
 
-  -- Promote a regular value to a linear resource
+  --[[
+    wrap_as_managed_resource converts a regular value into a tracked resource
+
+    Use this to start tracking important resources that need lifecycle management.
+    This adds safety guarantees to help prevent misuse or resource leaks.
+
+    Examples:
+    - Wrapping newly opened files
+    - Tracking newly created database connections
+    - Managing newly acquired locks or access tokens
+  ]]--
   promote: [v -> {value: v, usage: :unconsumed}]
 
-  -- Clone a resource if allowed by its type
+  --[[
+    duplicate_resource creates a copy of a resource if allowed by policy
+
+    Use this only with resources that permit duplication. Most critical
+    resources cannot be duplicated to prevent race conditions and double-freeing.
+
+    Examples:
+    - Duplicating read-only configuration resources
+    - Copying immutable reference data
+    - Creating multiple handles to thread-safe resources
+  ]]--
   clone: [r ->
     if r.type.allow_clone then
       {value: r.value, usage: :unconsumed}
     else
-      error("Attempted to clone a non-clonable resource")
+      error("Security error: Attempted to duplicate a unique resource")
     end
   ]
 
-  -- Drop a resource if allowed by its type
+  --[[
+    discard_resource safely abandons a resource if policy allows
+
+    Use this with resources that can be safely abandoned without explicit
+    cleanup. This properly updates the tracking status to prevent reuse.
+
+    Examples:
+    - Abandoning temporary buffers
+    - Dropping read-only resources
+    - Discarding resources with automatic cleanup
+  ]]--
   drop: [!r ->
     if r.type.allow_drop then
-      r.usage := :consumed
+      r.usage := :consumed  -- Mark as consumed to prevent future access
     else
-      error("Attempted to drop a non-droppable resource")
+      error("Resource leak error: Attempted to abandon a resource requiring explicit cleanup")
     end
   ]
 
-  -- Apply a linear function to a resource
+  --[[
+    process_with_handler safely applies a handler function to a resource
+
+    This ensures the resource is properly consumed when processed by the handler,
+    preventing issues like double processing or unauthorized access after handling.
+
+    Examples:
+    - Processing a file with a parser
+    - Handling a network request
+    - Transforming data with a secure transformer
+  ]]--
   linear_apply: [!f !x ->
     if x.usage == :unconsumed then
-      let result = f(consume(x)) in
-      promote(result)
+      let result = f(consume(x)) in  -- Process the resource and consume it
+      promote(result)                -- Wrap the result as a new managed resource
     else
-      error("Attempted to apply a linear function to an already consumed resource")
+      error("Security error: Attempted to process an already consumed resource")
     end
   ]
+
+  --------------------------------------------------
+  -- Practical Examples
+  --------------------------------------------------
+
+  example: {
+    --[[
+      Example 1: Safe File Handling
+
+      This example demonstrates how to safely handle file resources
+      to prevent leaks and ensure proper closing.
+    ]]--
+    file_processing: [filepath ->
+      -- Open file and wrap as managed resource
+      let file_handle = open_file(filepath) in
+      let managed_file = promote(file_handle) in
+
+      -- Process the file safely
+      let process_and_close = [!file ->
+        let contents = read_file_contents(file) in
+        close_file(file) in  -- Resource is properly closed
+        contents
+      ] in
+
+      -- Apply the handler to the file, ensuring it gets closed
+      linear_apply(process_and_close, managed_file)
+    ],
+
+    --[[
+      Example 2: Database Connection Management
+
+      This example shows how to safely handle database connections
+      to prevent connection leaks and ensure proper cleanup.
+    ]]--
+    database_query: [db_config query ->
+      -- Open connection and wrap as managed resource
+      let conn = db_connect(db_config) in
+      let managed_conn = promote(conn) in
+
+      -- Define a handler that processes the query and closes the connection
+      let query_and_close = [!connection ->
+        let results = execute_query(connection, query) in
+        disconnect(connection) in  -- Connection properly closed
+        results
+      ] in
+
+      -- Apply the handler to the connection
+      linear_apply(query_and_close, managed_conn)
+    ],
+
+    --[[
+      Example 3: Managing Multiple Related Resources
+
+      This example demonstrates how to handle multiple related resources
+      that need to be managed together.
+    ]]--
+    transaction_processing: [db_config operations ->
+      -- Open connection and start transaction
+      let conn = db_connect(db_config) in
+      let tx = begin_transaction(conn) in
+
+      -- Create a resource bundle with both connection and transaction
+      let resource_pair = promote({connection: conn, transaction: tx}) in
+
+      -- Define handler that processes operations and cleans up properly
+      let process_transaction = [!resources ->
+        let {connection, transaction} = resources in
+
+        -- Try to execute operations
+        let result = try {
+          apply_operations(connection, transaction, operations) in
+          commit_transaction(transaction) in
+          {success: true, data: result}
+        } catch err {
+          rollback_transaction(transaction) in
+          {success: false, error: err}
+        } in
+
+        -- Always close connection
+        disconnect(connection) in
+        result
+      ] in
+
+      -- Apply handler to resource bundle
+      linear_apply(process_transaction, resource_pair)
+    ]
+  }
 }

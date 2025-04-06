@@ -24,10 +24,10 @@
   op: {
     -- Composition operators
     >>> <<< ... *** +++ &&& ||| &&^ |||^
-    
+
     -- Lifting operators
     ^>> >>^ ^<< <<^
-    
+
     -- Error handling operators
     ~> <!> <*> <+> <|>
 
@@ -38,21 +38,21 @@
   fn: {
     -- Core extractor operations
     extractor parse print biparse
-    
+
     -- Extractor combinators
     compose first second both split
     fanout fanin left right combine
     loop feedback iterate retry
-    
+
     -- Error handling operations
     error handle try_catch
-    
+
     -- Parser operations
     parser stage parallel branch fork join
-    
+
     -- Printer operations
     printer format pretty print
-    
+
     -- Laws
     law.extractor_id law.extractor_compose law.extractor_first
     law.extractor_association law.extractor_functor
@@ -247,7 +247,7 @@
   ]]--
   compose: !Extractor * !Extractor -> !Extractor [f g ->
     extractor(
-      [s -> 
+      [s ->
         match f.parse(s) with
           | !Result.Success { value } -> g.parse(f.print(value))
           | !Result.Failure { error } -> !Result.Failure { error }
@@ -261,7 +261,7 @@
   ]]--
   first: !Extractor -> !Extractor [f ->
     extractor(
-      [s -> 
+      [s ->
         match f.parse(s) with
           | !Result.Success { value } -> !Result.Success { value: (value, c) }
           | !Result.Failure { error } -> !Result.Failure { error }
@@ -275,7 +275,7 @@
   ]]--
   second: !Extractor -> !Extractor [f ->
     extractor(
-      [s -> 
+      [s ->
         match f.parse(s) with
           | !Result.Success { value } -> !Result.Success { value: (c, value) }
           | !Result.Failure { error } -> !Result.Failure { error }
@@ -289,9 +289,9 @@
   ]]--
   both: !Extractor * !Extractor -> !Extractor [f g ->
     extractor(
-      [s -> 
+      [s ->
         match (f.parse(s), g.parse(s)) with
-          | (!Result.Success { value: a }, !Result.Success { value: b }) -> 
+          | (!Result.Success { value: a }, !Result.Success { value: b }) ->
               !Result.Success { value: (a, b) }
           | (!Result.Failure { error }, _) -> !Result.Failure { error }
           | (_, !Result.Failure { error }) -> !Result.Failure { error }
@@ -312,9 +312,9 @@
   ]]--
   fanout: !Extractor * !Extractor -> !Extractor [f g ->
     extractor(
-      [s -> 
+      [s ->
         match (f.parse(s), g.parse(s)) with
-          | (!Result.Success { value: a }, !Result.Success { value: b }) -> 
+          | (!Result.Success { value: a }, !Result.Success { value: b }) ->
               !Result.Success { value: (a, b) }
           | (!Result.Failure { error }, _) -> !Result.Failure { error }
           | (_, !Result.Failure { error }) -> !Result.Failure { error }
@@ -328,15 +328,15 @@
   ]]--
   fanin: !Extractor * !Extractor -> !Extractor [f g ->
     extractor(
-      [s -> 
+      [s ->
         match f.parse(s) with
           | !Result.Success { value } -> !Result.Success { value: Left(value) }
-          | !Result.Failure { _ } -> 
+          | !Result.Failure { _ } ->
               match g.parse(s) with
                 | !Result.Success { value } -> !Result.Success { value: Right(value) }
                 | !Result.Failure { error } -> !Result.Failure { error }
       ],
-      [either -> 
+      [either ->
         match either with
           | Left(a) -> f.print(a)
           | Right(b) -> g.print(b)
@@ -349,12 +349,12 @@
   ]]--
   left: !Extractor -> !Extractor [f ->
     extractor(
-      [s -> 
+      [s ->
         match f.parse(s) with
           | !Result.Success { value } -> !Result.Success { value: Left(value) }
           | !Result.Failure { error } -> !Result.Failure { error }
       ],
-      [either -> 
+      [either ->
         match either with
           | Left(a) -> f.print(a)
           | Right(c) -> ""
@@ -367,12 +367,12 @@
   ]]--
   right: !Extractor -> !Extractor [f ->
     extractor(
-      [s -> 
+      [s ->
         match f.parse(s) with
           | !Result.Success { value } -> !Result.Success { value: Right(value) }
           | !Result.Failure { error } -> !Result.Failure { error }
       ],
-      [either -> 
+      [either ->
         match either with
           | Left(c) -> ""
           | Right(b) -> f.print(b)
@@ -385,9 +385,9 @@
   ]]--
   combine: !Extractor * !Extractor * ((b, c) -> d) -> !Extractor [f g combine_fn ->
     extractor(
-      [s -> 
+      [s ->
         match (f.parse(s), g.parse(s)) with
-          | (!Result.Success { value: b }, !Result.Success { value: c }) -> 
+          | (!Result.Success { value: b }, !Result.Success { value: c }) ->
               !Result.Success { value: combine_fn(b, c) }
           | (!Result.Failure { error }, _) -> !Result.Failure { error }
           | (_, !Result.Failure { error }) -> !Result.Failure { error }
@@ -417,7 +417,7 @@
   ]]--
   handle: !Extractor * (S -> !Error) -> !Extractor [ext error_fn ->
     extractor(
-      [s -> 
+      [s ->
         match ext.parse(s) with
           | !Result.Success { value } -> !Result.Success { value }
           | !Result.Failure { _ } -> !Result.Failure { error: error_fn(s) }
@@ -431,7 +431,7 @@
   ]]--
   try_catch: !Extractor * !Extractor -> !Extractor [try_ext catch_ext ->
     extractor(
-      [s -> 
+      [s ->
         match try_ext.parse(s) with
           | !Result.Success { value } -> !Result.Success { value }
           | !Result.Failure { _ } -> catch_ext.parse(s)
@@ -459,7 +459,7 @@
   ]]--
   stage: !Parser * !Parser -> !Parser [p1 p2 ->
     {
-      parse: [s -> 
+      parse: [s ->
         match p1.parse(s) with
           | !Result.Success { value } -> p2.parse(p1.print(value))
           | !Result.Failure { error } -> !Result.Failure { error }
@@ -473,7 +473,7 @@
   ]]--
   parallel: [!Parser] -> !Parser [parsers ->
     {
-      parse: [s -> 
+      parse: [s ->
         let results = [] in
         for p in parsers {
           match p.parse(s) with
@@ -491,9 +491,9 @@
   ]]--
   branch: (a -> Bool) * !Parser * !Parser -> !Parser [condition p1 p2 ->
     {
-      parse: [s -> 
+      parse: [s ->
         match p1.parse(s) with
-          | !Result.Success { value } -> 
+          | !Result.Success { value } ->
               if condition(value) {
                 !Result.Success { value }
               } else {
@@ -524,7 +524,7 @@
   ]]--
   format: S * [a -> S] -> !Printer [format_str formatters ->
     {
-      print: [a -> 
+      print: [a ->
         let result = format_str in
         for i in 0..(Prim.length(formatters) - 1) {
           result = Prim.replace(result, "{" + to_string(i) + "}", formatters[i](a))
@@ -540,7 +540,7 @@
   ]]--
   pretty: !Printer * Z -> !Printer [p indent ->
     {
-      print: [a -> 
+      print: [a ->
         let s = p.print(a) in
         let lines = Prim.split(s, "\n") in
         let result = "" in
@@ -570,7 +570,7 @@
   ]]--
   law.extractor_compose: !Extractor * !Extractor -> Bool [f g ->
     compose(f, g) == extractor(
-      [s -> 
+      [s ->
         match f.parse(s) with
           | !Result.Success { value } -> g.parse(f.print(value))
           | !Result.Failure { error } -> !Result.Failure { error }
@@ -584,7 +584,7 @@
   ]]--
   law.extractor_first: !Extractor -> Bool [f ->
     first(f) == extractor(
-      [s -> 
+      [s ->
         match f.parse(s) with
           | !Result.Success { value } -> !Result.Success { value: (value, c) }
           | !Result.Failure { error } -> !Result.Failure { error }
@@ -598,15 +598,15 @@
     where assoc ((a,b),c) = (a,(b,c))
   ]]--
   law.extractor_association: !Extractor -> Bool [f ->
-    let assoc = [(ab, c) -> 
+    let assoc = [(ab, c) ->
       let (a, b) = ab in
       (a, (b, c))
     ] in
-    let assoc_inv = [(a, bc) -> 
+    let assoc_inv = [(a, bc) ->
       let (b, c) = bc in
       ((a, b), c)
     ] in
-    compose(first(first(f)), extractor([s -> assoc(s)], [a -> assoc_inv(a)])) == 
+    compose(first(first(f)), extractor([s -> assoc(s)], [a -> assoc_inv(a)])) ==
     compose(extractor([s -> assoc_inv(s)], [a -> assoc(a)]), first(f))
   ]
 
@@ -615,7 +615,7 @@
   ]]--
   law.extractor_functor: !Extractor * !Extractor -> Bool [f g ->
     compose(f, g) == extractor(
-      [s -> 
+      [s ->
         match f.parse(s) with
           | !Result.Success { value } -> g.parse(f.print(value))
           | !Result.Failure { error } -> !Result.Failure { error }
@@ -655,7 +655,7 @@
   ]]--
   memoize: ((!Parser * Z) -> !Parser) [parser parser_id ->
     {
-      parse: [state -> 
+      parse: [state ->
         let key = memo_key(parser_id, state.position, {}) in
         if has_entry(state.memo, key) {
           state.memo.hits = state.memo.hits + 1
@@ -714,16 +714,16 @@
     match p {
       -- Epsilon parser (matches empty string) is annihilated by derivation
       | epsilon_parser() -> empty_parser()
-      
+
       -- Empty parser (matches nothing) stays empty
       | empty_parser() -> empty_parser()
-      
+
       -- Character parser either becomes epsilon or empty
       | char_parser(c) -> if c == token { epsilon_parser() } else { empty_parser() }
-      
+
       -- Alternation derivatives distribute
       | alt_parser(p1, p2) -> alt_parser(derive(p1, token), derive(p2, token))
-      
+
       -- Sequence derivatives use Leibniz rule
       | seq_parser(p1, p2) -> if nullable(p1) {
           alt_parser(
@@ -733,10 +733,10 @@
         } else {
           seq_parser(derive(p1, token), p2)
         }
-      
+
       -- Star derivatives handle repetition
       | star_parser(inner) -> seq_parser(derive(inner, token), star_parser(inner))
-      
+
       -- Default case for other parser types
       | _ -> make_derivative_parser(p, token)
     }
@@ -778,7 +778,7 @@
   ]]--
   make_derivative_parser: (!Parser * S -> !Parser) [p token ->
     {
-      parse: [state -> 
+      parse: [state ->
         let derived_state = {
           input: drop(1, state.input),
           position: advance_position(state.position, 1),
@@ -828,10 +828,10 @@
   prefix_parser: ({S: a} -> !Parser) [codes ->
     let table = prefix_table(codes) in
     {
-      parse: [state -> 
+      parse: [state ->
         for (code, value) in table {
           if starts_with(state.input, code) {
-            return !Result.Success { 
+            return !Result.Success {
               value: value,
               remaining: drop(length(code), state.input),
               position: advance_position(state.position, length(code))
@@ -851,4 +851,4 @@
     length(str) >= length(prefix) and
     substring(str, 0, length(prefix)) == prefix
   ]
-} 
+}

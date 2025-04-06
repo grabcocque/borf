@@ -1,6 +1,6 @@
 --[[
   Cartesian Closed Category Transformations
-  
+
   This module defines transformations between Cartesian Closed Categories
   and other categorical structures, enabling the representation of
   functional programming abstractions in different mathematical frameworks.
@@ -12,7 +12,7 @@
     CCCFunctor
     CCCNaturalTransformation
     CCCAdjunction
-    
+
     -- Special functors
     MonoidalCCCFunctor
     ClosedMonoidalCCCFunctor
@@ -22,7 +22,7 @@
   op: {
     -- Functor composition
     ∘
-    
+
     -- CCC operators
     × ⇒ ⟨,⟩
   }
@@ -32,38 +32,38 @@
     ccc_functor
     ccc_nat_transformation
     ccc_adjunction
-    
+
     -- Functor constructors
     monoidal_ccc_functor
     closed_monoidal_ccc_functor
     lambda_calculus_ccc_functor
-    
+
     -- Natural transformation constructors
     ccc_to_monoidal_nt
     monoidal_to_ccc_nt
     ccc_to_lambda_nt
     lambda_to_ccc_nt
-    
+
     -- Adjunction constructors
     ccc_monoidal_adjunction
-    
+
     -- Functor operations
     apply_functor
     compose_functors
-    
+
     -- Natural transformation operations
     apply_nat_transformation
     vertical_composition
     horizontal_composition
-    
+
     -- CCC/Monoidal transformations
     ccc_to_monoidal
     monoidal_to_ccc
-    
+
     -- CCC/Lambda calculus transformations
     ccc_to_lambda
     lambda_to_ccc
-    
+
     -- Structure-preserving transformations
     product_preserving_transform
     exponential_preserving_transform
@@ -91,7 +91,7 @@
 
   --[[
     CCCFunctor represents a functor between cartesian closed categories.
-    
+
     This structure captures transformations that preserve the CCC
     structure while changing the underlying representation.
   ]]--
@@ -138,9 +138,9 @@
   --[[
     ccc_functor creates a functor between cartesian closed categories
   ]]--
-  ccc_functor: S * @CCC.!CartesianClosedCategory * @CCC.!CartesianClosedCategory * 
-             (a -> b) * ((a -o> b) -> (c -o> d)) * 
-             ((a × b) -> c) * ((a ⇒ b) -> c) * (Any -> Any) -> 
+  ccc_functor: S * @CCC.!CartesianClosedCategory * @CCC.!CartesianClosedCategory *
+             (a -> b) * ((a -o> b) -> (c -o> d)) *
+             ((a × b) -> c) * ((a ⇒ b) -> c) * (Any -> Any) ->
              CCCFunctor [
     name source target obj_map morphism_map product_map exponential_map terminal_map ->
     {
@@ -159,8 +159,8 @@
   --[[
     ccc_nat_transformation creates a natural transformation between CCC functors
   ]]--
-  ccc_nat_transformation: S * CCCFunctor * CCCFunctor * 
-                       (a -> (b -o> c)) -> 
+  ccc_nat_transformation: S * CCCFunctor * CCCFunctor *
+                       (a -> (b -o> c)) ->
                        CCCNaturalTransformation [
     name source_functor target_functor components ->
     {
@@ -176,8 +176,8 @@
   --[[
     ccc_adjunction creates an adjunction between cartesian closed categories
   ]]--
-  ccc_adjunction: S * CCCFunctor * CCCFunctor * 
-                CCCNaturalTransformation * CCCNaturalTransformation -> 
+  ccc_adjunction: S * CCCFunctor * CCCFunctor *
+                CCCNaturalTransformation * CCCNaturalTransformation ->
                 CCCAdjunction [
     name left right unit counit ->
     {
@@ -203,11 +203,11 @@
       @CCC.standard_ccc,  -- Target is still a CCC, but we'll focus on monoidal structure
       [a -> a],  -- Object mapping
       [f -> f],  -- Morphism mapping
-      [(a × b) -> 
+      [(a × b) ->
         -- Product in CCC corresponds to tensor in monoidal
         a × b
       ],  -- Product mapping
-      [(a ⇒ b) -> 
+      [(a ⇒ b) ->
         -- Exponential mapping (not preserved in general monoidal)
         a ⇒ b
       ],
@@ -225,11 +225,11 @@
       @CCC.standard_ccc,  -- Target is still a CCC, but treated as closed monoidal
       [a -> a],  -- Object mapping
       [f -> f],  -- Morphism mapping
-      [(a × b) -> 
+      [(a × b) ->
         -- Product in CCC corresponds to tensor in closed monoidal
         a × b
       ],  -- Product mapping
-      [(a ⇒ b) -> 
+      [(a ⇒ b) ->
         -- Exponential preserved in closed monoidal
         a ⇒ b
       ],
@@ -247,11 +247,11 @@
       @CCC.standard_ccc,  -- Target is CCC, but encoded as lambda terms
       [a -> a],  -- Object mapping
       [f -> f],  -- Morphism mapping
-      [(a × b) -> 
+      [(a × b) ->
         -- Product as pair in lambda calculus
         a × b
       ],  -- Product mapping
-      [(a ⇒ b) -> 
+      [(a ⇒ b) ->
         -- Exponential as function type in lambda calculus
         a ⇒ b
       ],
@@ -361,13 +361,13 @@
   --[[
     vertical_composition composes two natural transformations vertically
   ]]--
-  vertical_composition: CCCNaturalTransformation * CCCNaturalTransformation -> 
+  vertical_composition: CCCNaturalTransformation * CCCNaturalTransformation ->
                       CCCNaturalTransformation [
     alpha beta ->
     {
       source_functor: beta.source_functor,
       target_functor: alpha.target_functor,
-      components: [a -> 
+      components: [a ->
         let beta_component = beta.components(a) in
         let alpha_component = alpha.components(
           beta.target_functor.map_obj(a)
@@ -385,13 +385,13 @@
   --[[
     horizontal_composition composes two natural transformations horizontally
   ]]--
-  horizontal_composition: CCCNaturalTransformation * CCCNaturalTransformation -> 
+  horizontal_composition: CCCNaturalTransformation * CCCNaturalTransformation ->
                         CCCNaturalTransformation [
     alpha beta ->
     {
       source_functor: compose_functors(alpha.source_functor, beta.source_functor),
       target_functor: compose_functors(alpha.target_functor, beta.target_functor),
-      components: [a -> 
+      components: [a ->
         let beta_component = beta.components(a) in
         let mapped_beta = apply_functor(alpha.source_functor, beta_component) in
         let alpha_component = alpha.components(
@@ -525,15 +525,15 @@
   --------------------------------------------------
 
   --[[
-    Structure mapping that establishes @CCCXf as a category of 
+    Structure mapping that establishes @CCCXf as a category of
     transformations between cartesian closed categories.
-    
+
     In this categorical structure:
     - Objects are CCC functors
     - Morphisms are CCC natural transformations
     - Identity is the identity CCC natural transformation
     - Composition is vertical composition of CCC natural transformations
-    
+
     This enables rigorous transformation of functional programming abstractions
     between different categorical representations.
   ]]--
@@ -541,7 +541,7 @@
     -- Map CCCXf to a category
     objects: CCCFunctor,
     morphisms: CCCNaturalTransformation,
-    
+
     -- Base category structure
     dom: [nt -> nt.source_functor],
     cod: [nt -> nt.target_functor],
@@ -552,22 +552,22 @@
       [a -> [b -o> b]]
     )],
     compose: [alpha beta -> vertical_composition(alpha, beta)],
-    
+
     -- Cartesian structure
     cartesian: {
       terminal: identity_functor(@CCC.standard_ccc),
-      product: [f g -> 
+      product: [f g ->
         {
           source_category: f.source_category,
           target_category: f.target_category,
           map_obj: [a -> f.map_obj(a) × g.map_obj(a)],
-          map_morphism: [morphism -> 
+          map_morphism: [morphism ->
             apply_functor(f, morphism) ⟨,⟩ apply_functor(g, morphism)
           ],
-          map_product: [(a_prod_b) -> 
+          map_product: [(a_prod_b) ->
             f.map_product(a_prod_b) × g.map_product(a_prod_b)
           ],
-          map_exponential: [(a_exp_b) -> 
+          map_exponential: [(a_exp_b) ->
             f.map_exponential(a_exp_b) ⇒ g.map_exponential(a_exp_b)
           ],
           map_terminal: [t -> f.map_terminal(t)],
@@ -575,14 +575,14 @@
           preserves_closed: f.preserves_closed && g.preserves_closed
         }
       ],
-      
+
       proj1: [f g -> ccc_nat_transformation(
         "Proj1",
         f × g,
         f,
         [a -> @CCC.proj1(@CCC.standard_ccc, a, a)]
       )],
-      
+
       proj2: [f g -> ccc_nat_transformation(
         "Proj2",
         f × g,
@@ -590,24 +590,24 @@
         [a -> @CCC.proj2(@CCC.standard_ccc, a, a)]
       )]
     },
-    
+
     -- Closed structure
     closed: {
-      exponential: [f g -> 
+      exponential: [f g ->
         {
           source_category: g.source_category,
           target_category: f.target_category,
           map_obj: [a -> g.map_obj(a) ⇒ f.map_obj(a)],
-          map_morphism: [morphism -> 
+          map_morphism: [morphism ->
             @CCC.curry(@CCC.standard_ccc, [pair -o>
               let (g_obj, f_obj) = pair in
               apply_functor(f, apply_functor(g, morphism))
             ]).curry_fn
           ],
-          map_product: [(a_prod_b) -> 
+          map_product: [(a_prod_b) ->
             g.map_product(a_prod_b) ⇒ f.map_product(a_prod_b)
           ],
-          map_exponential: [(a_exp_b) -> 
+          map_exponential: [(a_exp_b) ->
             (g.map_exponential(a_exp_b) ⇒ f.map_exponential(a_exp_b))
           ],
           map_terminal: [t -> f.map_terminal(t)],
@@ -615,7 +615,7 @@
           preserves_closed: f.preserves_closed && g.preserves_closed
         }
       ],
-      
+
       evaluation: [f g -> ccc_nat_transformation(
         "Evaluation",
         (f ⇒ g) × f,
@@ -623,23 +623,23 @@
         [a -> @CCC.evaluation(@CCC.standard_ccc, a, a).eval]
       )]
     },
-    
+
     -- Laws of CCC functorial transformations
     law: {
-      functor_identity: [f morphism -> 
+      functor_identity: [f morphism ->
         apply_functor(f, @CCC.id(
-          @CCC.standard_ccc, 
+          @CCC.standard_ccc,
           dom(morphism)
         )) == @CCC.id(
-          f.target_category, 
+          f.target_category,
           f.map_obj(dom(morphism))
         )
       ],
-      
+
       functor_composition: [f m1 m2 ->
         apply_functor(f, @CCC.compose(
-          @CCC.standard_ccc, 
-          m1, 
+          @CCC.standard_ccc,
+          m1,
           m2
         )) == @CCC.compose(
           f.target_category,
@@ -647,26 +647,26 @@
           apply_functor(f, m2)
         )
       ],
-      
+
       functor_product: [f a b ->
         f.map_product(a × b) == f.map_obj(a) × f.map_obj(b)
       ],
-      
+
       functor_exponential: [f a b ->
         f.map_exponential(a ⇒ b) == f.map_obj(a) ⇒ f.map_obj(b)
       ],
-      
+
       functor_terminal: [f ->
-        f.map_terminal(@CCC.terminal(@CCC.standard_ccc)) == 
+        f.map_terminal(@CCC.terminal(@CCC.standard_ccc)) ==
         @CCC.terminal(f.target_category)
       ],
-      
+
       naturality: [nt f g a ->
         let source_f = apply_functor(nt.source_functor, f) in
         let target_g = apply_functor(nt.target_functor, g) in
         let component_a = nt.components(a) in
         let component_b = nt.components(b) in
-        
+
         @CCC.compose(
           nt.target_functor.target_category,
           source_f,
@@ -677,13 +677,13 @@
           target_g
         )
       ],
-      
+
       adjunction_unit_counit: [adj a b ->
         let F = adj.left_functor in
         let G = adj.right_functor in
         let η = adj.unit in
         let ε = adj.counit in
-        
+
         @CCC.compose(
           G.target_category,
           η.components(a),
@@ -711,7 +711,7 @@
       let monoidal = ccc_to_monoidal(morphism) in
       monoidal_to_ccc(monoidal)
     ],
-    
+
     --[[
       Example 2: Transforming a CCC morphism to a lambda term and back
     ]]--
@@ -719,7 +719,7 @@
       let lambda = ccc_to_lambda(morphism) in
       lambda_to_ccc(lambda)
     ],
-    
+
     --[[
       Example 3: Applying a CCC functor to a product
     ]]--
@@ -727,7 +727,7 @@
       functor product ->
       functor.map_product(product)
     ],
-    
+
     --[[
       Example 4: Applying a CCC functor to a curried function
     ]]--
@@ -735,7 +735,7 @@
       functor exponential ->
       functor.map_exponential(exponential)
     ],
-    
+
     --[[
       Example 5: Composition of CCC functors
     ]]--
@@ -746,4 +746,4 @@
       )
     ]
   }
-} 
+}

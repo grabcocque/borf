@@ -1,11 +1,14 @@
   --[[
-  Homoiconicity Module (Linear Type Version)
+  Code as Data Tools - Manipulate and Transform Programs Safely
 
-  This module provides core abstractions for homoiconicity using linear types,
-  enabling code to be manipulated as data with resource safety guarantees.
-  It implements quoting, unquoting, quasiquoting, and code transformation primitives
-  that allow for metaprogramming and syntactic abstraction while ensuring expressions
-  are properly consumed exactly once.
+  This module provides powerful tools for treating code as data, letting you:
+
+  - Manipulate, generate, and transform Borf code programmatically
+  - Build macros that extend the language in safe, resource-tracked ways
+  - Create domain-specific languages (DSLs) within Borf
+  - Ensure generated code follows resource usage rules
+  - Process code templates with hygienic variable handling
+  - Implement metaprogramming patterns with full safety guarantees
 ]]--
 
 @Syntax: {
@@ -65,14 +68,19 @@
   }
 
   --[[
-    The core Expression type hierarchy representing code as data
-    All types are linear, meaning they must be consumed exactly once
+    Core Building Blocks for Code Manipulation
+
+    These types let you construct, analyze, and transform Borf code safely.
+    All types are resource-tracked (linear), ensuring proper usage without leaks.
   ]]--
   !Expr: !Symbol | !Literal | !Lambda | !Application | !Quote | !Unquote |
          !UnquoteSplice | !Quasiquote | !Let | !If | !Module | !Declaration
 
   --[[
-    Symbol represents an identifier in Borf code
+    Symbol - Name references in your code
+
+    Used for variable names, function references, and any other identifiers
+    in your Borf programs. Includes optional scoping for hygiene.
   ]]--
   !Symbol: {
     name: S,
@@ -80,7 +88,10 @@
   }
 
   --[[
-    Literal represents concrete values in code
+    Literal - Concrete values in your code
+
+    Represents numbers, strings, booleans and other direct values
+    that appear in Borf programs. Includes type information for safety.
   ]]--
   !Literal: {
     value: Prim.Int | Prim.Float | Prim.String | Prim.Bool | Prim.Null | Prim.Unit,
@@ -88,7 +99,10 @@
   }
 
   --[[
-    Lambda represents function expressions
+    Lambda - Function definition builder
+
+    Construct function expressions programmatically with parameters,
+    function body, and optional closure environment for captured variables.
   ]]--
   !Lambda: {
     params: [!Pattern],
@@ -97,7 +111,10 @@
   }
 
   --[[
-    Application represents function application
+    Application - Function call builder
+
+    Create code that calls functions with arguments. Use this when
+    generating code that needs to invoke other functions.
   ]]--
   !Application: {
     fn: !Expr,
@@ -105,35 +122,52 @@
   }
 
   --[[
-    Quote wraps code to prevent evaluation
+    Quote - Protect code from evaluation
+
+    Wrap expressions to treat them as data instead of executing them.
+    Essential for metaprogramming and code transformation tools.
   ]]--
   !Quote: {
     expr: !Expr
   }
 
   --[[
-    Unquote allows evaluation within quoted expressions
+    Unquote - Evaluate code inside templates
+
+    Inside a quoted expression, unquote lets you insert the result
+    of evaluating specific parts. Essential for template interpolation.
   ]]--
   !Unquote: {
     expr: !Expr
   }
 
   --[[
-    UnquoteSplice allows splicing a collection into its surrounding context
+    UnquoteSplice - Insert multiple items into templates
+
+    Inside quoted code, splice lets you insert all items from a collection
+    directly into the surrounding context. Perfect for generating code
+    with variable-length components.
   ]]--
   !UnquoteSplice: {
     expr: !Expr
   }
 
   --[[
-    Quasiquote is like quote but allows unquoting within
+    Quasiquote - Create code templates with placeholders
+
+    Build code templates that mix literal code structure with
+    dynamic parts that get evaluated and inserted. The foundation
+    of template-based code generation.
   ]]--
   !Quasiquote: {
     expr: !Expr
   }
 
   --[[
-    Let represents local bindings
+    Let - Create local variable bindings
+
+    Generate code that introduces named values in a local scope.
+    Essential for building complex expressions with intermediate results.
   ]]--
   !Let: {
     bindings: [{!Symbol: !Expr}],
@@ -141,7 +175,10 @@
   }
 
   --[[
-    If represents conditional expressions
+    If - Build conditional branching logic
+
+    Generate code with decision points that choose between
+    different paths based on runtime conditions.
   ]]--
   !If: {
     condition: !Expr,
@@ -150,7 +187,10 @@
   }
 
   --[[
-    Module represents a Borf module
+    Module - Build code organization units
+
+    Create complete modules with types, operations, functions and
+    dependencies. Useful for generating entire code libraries.
   ]]--
   !Module: {
     name: !Symbol,
@@ -161,7 +201,10 @@
   }
 
   --[[
-    Declaration represents a declaration in a module
+    Declaration - Define module components
+
+    Create type, function, and operation declarations for modules.
+    The building blocks for generating reusable code components.
   ]]--
   !Declaration: {
     name: !Symbol,
@@ -170,7 +213,10 @@
   }
 
   --[[
-    Pattern represents a pattern for matching
+    Pattern - Define template matching rules
+
+    Create patterns for matching expressions in macros and transformations.
+    Essential for building tools that recognize and transform code patterns.
   ]]--
   !Pattern: {
     kind: S, -- could be "variable", "literal", "constructor", etc.
@@ -178,7 +224,10 @@
   }
 
   --[[
-    MacroRule defines a pattern-based macro transformation
+    MacroRule - Build pattern-based code transformations
+
+    Define rules that match code patterns and transform them into
+    new expressions. The foundation for creating language extensions.
   ]]--
   !MacroRule: {
     pattern: !Pattern,
@@ -187,12 +236,19 @@
   }
 
   --[[
-    Transformer is a function that transforms expressions linearly
+    Transformer - Build code transformation functions
+
+    Create functions that safely transform code expressions while
+    respecting resource usage rules. The basic building block for
+    all code manipulation tools.
   ]]--
   !Transformer: !Expr -o> !Expr
 
   --[[
-    Environment for syntax transformations
+    SyntaxEnv - Track variables during transformations
+
+    Maintain bindings and scoping information during code transformations.
+    Essential for ensuring correct variable resolution in generated code.
   ]]--
   !SyntaxEnv: {
     bindings: {S: !Expr},
@@ -200,7 +256,11 @@
   }
 
   --[[
-    Environment for hygienic macro expansion
+    HygienicEnv - Prevent variable capture in macros
+
+    Track variable names and generate unique identifiers during macro expansion.
+    Critical for creating macros that work correctly in all contexts without
+    unintended variable name collisions.
   ]]--
   !HygienicEnv: {
     gensyms: {S: S},  -- Maps original names to generated names
@@ -208,40 +268,61 @@
   }
 
   --[[
-    !` is the linear quasiquote operator
-    Usage: !`(expr) quasiquotes expr, allowing for unquoting with !~
+    !` - Template creation operator
+
+    Creates code templates that can contain dynamic parts.
+    Usage: !`(expr) builds a template from expr, allowing parts to be
+    filled in with !~ for single values or !~@ for collections.
+
+    Example: !`([x y -> x y +]) creates a template for addition functions
   ]]--
   !`: !Expr -o> !Expr [expr ->
     {expr: expr} : !Quasiquote
   ]
 
   --[[
-    !! is the linear quote operator
-    Usage: !!(expr) prevents expr from being evaluated
+    !! - Code protection operator
+
+    Prevents expression evaluation, treating code as data.
+    Usage: !!(expr) creates a quoted version of expr that won't be executed.
+
+    Example: !!(x y +) creates data representing the addition expression
   ]]--
   !!: !Expr -o> !Expr [expr ->
     {expr: expr} : !Quote
   ]
 
   --[[
-    !~ is the linear unquote operator
-    Usage: Inside a quasiquote, !~expr evaluates expr
+    !~ - Dynamic value insertion operator
+
+    Evaluates and inserts values into code templates.
+    Usage: Inside a !` template, !~expr evaluates expr and inserts the result.
+
+    Example: !`([x -> x !~value +]) with value = 5 creates [x -> x 5 +]
   ]]--
   !~: !Expr -o> !Expr [expr ->
     {expr: expr} : !Unquote
   ]
 
   --[[
-    !~@ is the linear unquote-splice operator
-    Usage: Inside a quasiquote, !~@collection splices the collection's elements
+    !~@ - Collection splicing operator
+
+    Inserts all items from a collection into code templates.
+    Usage: Inside a !` template, !~@items inserts each element of items.
+
+    Example: !`([!~@params -> body]) with params = [x, y, z] creates [x y z -> body]
   ]]--
   !~@: !Expr -o> !Expr [expr ->
     {expr: expr} : !UnquoteSplice
   ]
 
   --[[
-    Parse converts a string to a syntax representation
-    String is consumed, syntax expression is produced
+    parse - Convert text to code structures
+
+    Transforms Borf code as text into a manipulable syntax tree.
+    Use this when you need to analyze or transform code from strings.
+
+    Example: "x y +" |> parse creates a syntax representation of addition
   ]]--
   parse: S -o> !Expr [code ->
     -- Implementation would convert the string to a syntax tree
@@ -249,14 +330,24 @@
   ]
 
   --[[
-    to_string converts syntax to a string, consuming the expression
+    to_string - Convert code structures to text
+
+    Transforms syntax trees back into Borf code as text.
+    Use this when you need to display, save, or evaluate generated code.
+
+    Example: application_expr |> to_string might produce "(f x y)"
   ]]--
   to_string: !Expr -o> S [expr ->
     expr |> format_expr
   ]
 
   --[[
-    Clone creates a deep copy of an expression, allowing it to be used multiple times
+    clone - Safely duplicate code structures
+
+    Creates a deep copy of syntax trees to allow multiple uses.
+    Essential when you need to use the same expression in multiple places.
+
+    Example: template |> clone produces two copies for different transformations
   ]]--
   clone: !Expr -o> (!Expr * !Expr) [expr ->
     -- Deep copy implementation
@@ -265,21 +356,36 @@
   ]
 
   --[[
-    eval evaluates syntax to produce a value, consuming the syntax
+    eval - Execute code structures
+
+    Runs the code represented by a syntax tree and produces its result.
+    Use when you need to execute generated or transformed code.
+
+    Example: calculation_expr |> eval might produce the numeric result 42
   ]]--
   eval: !Expr -o> Any [expr ->
     expr |> internal_eval
   ]
 
   --[[
-    transform applies a syntax transformation, consuming both inputs
+    transform - Apply code transformations
+
+    Transforms code using a custom transformer function.
+    Essential for applying code manipulations like optimizations or syntax upgrades.
+
+    Example: expr |> transform(optimizer) produces optimized version of expr
   ]]--
   transform: !Expr * !Transformer -o> !Expr [expr transformer ->
     transformer expr
   ]
 
   --[[
-    substitute replaces variables in an expression, consuming all inputs
+    substitute - Fill in template variables
+
+    Replaces variables in code templates with their values.
+    Perfect for building code with customized parts or implementing templates.
+
+    Example: template |> substitute({x: 5_expr, y: 10_expr}) replaces x and y
   ]]--
   substitute: !Expr * {!Symbol: !Expr} -o> !Expr [expr subs ->
     expr |> traverse [e subs ->
@@ -394,7 +500,12 @@
   ]
 
   --[[
-    expand processes a macro expansion with proper resource tracking
+    expand - Apply macro rules
+
+    Transforms code by applying a macro rule if it matches.
+    The foundation for implementing language extensions and custom syntax.
+
+    Example: code |> expand(custom_operator_rule) expands custom operators
   ]]--
   expand: !MacroRule * !Expr -o> !Expr [rule expr ->
     let {matched, bindings} = match_pattern rule.pattern expr;
@@ -416,7 +527,12 @@
   ]
 
   --[[
-    hygienic_expand expands macros with hygiene (preventing variable capture)
+    hygienic_expand - Apply macros safely
+
+    Expands macros while preventing variable name collisions.
+    Essential for writing robust macros that work in any context.
+
+    Example: code |> hygienic_expand(let_macro, env) safely expands a let binding
   ]]--
   hygienic_expand: !MacroRule * !Expr * !HygienicEnv -o> (!Expr * !HygienicEnv) [rule expr env ->
     -- Create unique names for all bound variables in the template
@@ -693,4 +809,66 @@
   add_key: {k: v} * k * v -o> {k: v}
   has_key: {k: v} * k -o> !Bool
   remove_key: {k: v} * k -o> {k: v}
+
+  --[[
+    EXAMPLES - Code as Data in Practice
+
+    Here are practical examples of using the Code as Data tools:
+
+    1. Building a Custom Control Structure
+
+    -- Create a "repeat" macro that executes code n times
+    let repeat_template = !`([n body ->
+      0 n [i acc ->
+        body
+        i 1 + acc
+      ] times drop
+    ]);
+
+    -- Create a pattern to match `n repeat [ body ]` syntax
+    let repeat_pattern = pattern("application",
+      apply(symbol("repeat"), [symbol("n"), lambda([], symbol("body"))]));
+
+    -- Create the transformation rule
+    let repeat_rule = macro_rule(repeat_pattern, repeat_template, null);
+
+    -- Usage: Expand a repeat expression
+    let example = parse("5 repeat [\"Hello\" print]");
+    let expanded = example |> expand(repeat_rule);
+
+    2. Code Generation with Templates
+
+    -- Generate getter and setter functions for a record type
+    let generate_accessors = [record_name fields ->
+      fields |> map [field ->
+        let getter_name = field |> append_string("_of");
+        let setter_name = field |> append_string("_set");
+
+        -- Create template for getter
+        let getter = !`([rec -> rec !~(symbol(field)) fetch]);
+
+        -- Create template for setter
+        let setter = !`([rec val -> rec val !~(symbol(field)) update]);
+
+        -- Create declarations
+        let getter_decl = decl(symbol(getter_name), T.a_to_b, getter);
+        let setter_decl = decl(symbol(setter_name), T.a_b_to_a, setter);
+
+        [getter_decl, setter_decl]
+      ] |> flatten
+    ];
+
+    -- Usage: Generate accessors for a Person record
+    let person_accessors = generate_accessors("Person", ["name", "age", "email"]);
+
+    3. Runtime Code Evaluation
+
+    -- Parse and evaluate a math expression at runtime
+    let calculate = [expr_string ->
+      expr_string |> parse |> eval
+    ];
+
+    -- Usage
+    let result = calculate("5 10 * 3 +"); -- Evaluates 5 * 10 + 3 = 53
+  ]]--
 }

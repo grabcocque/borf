@@ -1,11 +1,18 @@
 --[[
-  Optics
+  Data Access Tools - Easily Work with Nested Data Structures
 
-  This module defines various optical structures (lenses, prisms, etc.)
-  for accessing and manipulating nested data structures in a composable way.
+  This module provides a set of tools to access and update deeply nested data
+  in a safe, predictable way. These tools help you:
 
-  Optics are a practical application of category theory that provide
-  bidirectional access to data, allowing both getting and setting of values.
+  - Access nested fields without writing repetitive boilerplate
+  - Update deeply nested values without accidentally mutating other parts
+  - Safely work with optional data that might be missing
+  - Handle different data variations with consistent patterns
+  - Chain operations together for complex transformations
+  - Reuse field access patterns throughout your codebase
+
+  Perfect for working with complex configurations, database results, API responses,
+  state management, and other nested data structures.
 ]]--
 
 @Optics: {
@@ -86,12 +93,20 @@
   }
 
   --------------------------------------------------
-  -- Core Optic Types
+  -- Core Data Access Tools
   --------------------------------------------------
 
   --[[
-    Lens focuses on a single element within a larger structure.
-    It provides bidirectional access for getting and setting.
+    Lens - Access and Update Fields in Objects
+
+    A lens helps you work with a specific field in a larger data structure.
+    It's like a focused "view" that lets you both read and write to that field.
+
+    Common uses:
+    - Access a specific property in a nested object
+    - Update a field deep within a configuration
+    - Change a value while preserving the rest of the data structure
+    - Chain field access to reach deeply nested properties
   ]]--
   Lens: {
     _type: "Lens",
@@ -100,8 +115,17 @@
   }
 
   --[[
-    Prism focuses on a case within a sum type.
-    It provides bidirectional access when the case matches.
+    Prism - Safely Handle Optional or Variant Data
+
+    A prism helps you work with data that might have different shapes or might not exist.
+    It's like a safe way to access and change data that might not be there.
+
+    Common uses:
+    - Safely access optional values without null reference errors
+    - Handle different types of messages in a messaging system
+    - Work with different variants in a data type (like handling different user types)
+    - Extract data from one format and convert it back
+    - Create safe error handling patterns
   ]]--
   Prism: {
     _type: "Prism",
@@ -110,8 +134,17 @@
   }
 
   --[[
-    Traversal focuses on multiple elements within a structure.
-    It allows accessing and modifying multiple values at once.
+    Traversal - Process Multiple Items in Collections
+
+    A traversal helps you work with collections of data, letting you access
+    and update many values at once in a consistent way.
+
+    Common uses:
+    - Update all items in a list or collection that match certain criteria
+    - Apply the same transformation to multiple elements
+    - Collect specific fields from all objects in a collection
+    - Filter and transform elements in nested collections
+    - Process batches of data with reusable patterns
   ]]--
   Traversal: {
     _type: "Traversal",
@@ -120,8 +153,17 @@
   }
 
   --[[
-    Iso represents an isomorphism between two types.
-    It allows converting in both directions without loss of information.
+    Iso - Convert Between Different Formats Safely
+
+    An iso helps you convert data between two different but equivalent formats.
+    It ensures you can convert back and forth without losing information.
+
+    Common uses:
+    - Convert between different data formats (like celsius/fahrenheit)
+    - Transform data for storage and retrieve it later
+    - Switch between different representations of the same information
+    - Create serialization/deserialization pairs
+    - Build data migration tools
   ]]--
   Iso: {
     _type: "Iso",
@@ -130,7 +172,16 @@
   }
 
   --[[
-    Getter is a read-only optic that extracts values.
+    Getter - Extract Data Simply and Safely
+
+    A getter is a simple tool that just extracts data from a structure.
+    It's perfect when you only need to read values, not modify them.
+
+    Common uses:
+    - Create reusable data extraction functions
+    - Safely access nested properties for display purposes
+    - Build consistent data access patterns across your application
+    - Extract computed or derived values from complex structures
   ]]--
   Getter: {
     _type: "Getter",
@@ -138,7 +189,17 @@
   }
 
   --[[
-    Setter is a write-only optic that updates values.
+    Setter - Update Data Without Side Effects
+
+    A setter is a tool specifically designed for updating values in a structure.
+    It helps you make changes without unexpected side effects.
+
+    Common uses:
+    - Update configuration values safely
+    - Create consistent state update functions
+    - Modify deep properties without verbose code
+    - Build state transition functions
+    - Apply validation during updates
   ]]--
   Setter: {
     _type: "Setter",
@@ -146,8 +207,17 @@
   }
 
   --[[
-    Optional focuses on a value that might not exist.
-    It combines aspects of Lens and Prism.
+    Optional - Handle Data That Might Be Missing
+
+    An optional helps you work with values that might not exist, like a nullable
+    field or an item that might not be in a collection.
+
+    Common uses:
+    - Safely access and update fields that might be null/undefined
+    - Handle array items at positions that might be out of bounds
+    - Process record fields that might not be present
+    - Build null-safe transformation chains
+    - Access data in sparse collections
   ]]--
   Optional: {
     _type: "Optional",
@@ -156,7 +226,17 @@
   }
 
   --[[
-    Optic is a general type that can represent any kind of optic.
+    Optic - A Generic Data Access Tool
+
+    This is a general-purpose type that can represent any of the specific tools
+    (Lens, Prism, etc.). It's useful when you want to work with different types
+    of data access consistently.
+
+    Common uses:
+    - Build libraries that work with various data access patterns
+    - Create collections of different access tools
+    - Build adapters between different data access strategies
+    - Compose complex data transformation pipelines
   ]]--
   Optic: {
     _type: S,                   -- Type of optic
@@ -511,214 +591,144 @@
   --[[
     view extracts the value focused by an optic.
   ]]--
-  view: Any * s -> a | Null [optic s ->
-    match optic._type {
-      "Lens" => optic.get(s),
-      "Getter" => optic.get(s),
-      "Iso" => optic.from(s),
-      "Prism" => optic.preview(s),
-      "Optional" => optic.preview(s),
-      "AffineTraversal" => optic.preview(s),
-      "Traversal" => {
-        let values = optic.collect(s) in
-        if Prim.length(values) > 0 {
-          values[0]
-        } else {
-          null
-        }
-      },
-      "Optic" => view(optic.impl, s),
-      _ => null
-    }
+  view: Any * s -> a | Null [optic, s ->
+    optic _type {
+      | "Lens" -> optic get s
+      | "Getter" -> optic get s
+      | "Iso" -> optic from s
+      | "Prism" -> optic preview s
+      | "Optional" -> optic preview s
+      | "AffineTraversal" -> optic preview s
+      | "Traversal" ->
+          optic s collect -> values
+          values 0 get iff values Prim.length 0 > or_else null
+      | "Optic" -> optic impl s view
+      | _ -> null
+    } match
   ]
 
   --[[
     set updates the value focused by an optic.
   ]]--
-  set: Any * s * a -> s [optic s a ->
-    match optic._type {
-      "Lens" => optic.set(s, a),
-      "Setter" => optic.set(s, a),
-      "Iso" => optic.to(a),
-      "Prism" => {
-        let existing = optic.preview(s) in
-        if existing != null {
-          optic.review(a)
-        } else {
-          s
-        }
-      },
-      "Optional" => optic.set(s, a),
-      "AffineTraversal" => optic.set(s, a),
-      "Traversal" => {
-        let values = optic.collect(s) in
-        let new_values = [] in
+  set: Any * s * a -> s [optic, s, a ->
+    optic _type {
+      | "Lens" -> optic set s a
+      | "Setter" -> optic set s a
+      | "Iso" -> optic to a
+      | "Prism" ->
+          optic s preview -> existing
+          a optic review iff existing null != or_else s
+      | "Optional" -> optic set s a
+      | "AffineTraversal" -> optic set s a
+      | "Traversal" ->
+          optic s collect -> values
+          [] -> new_values
 
-        for _ in values {
-          new_values = new_values + [a]
-        }
+          values [_ ->
+            new_values [a] + -> new_values
+          ] foreach
 
-        optic.update(s, new_values)
-      },
-      "Optic" => set(optic.impl, s, a),
-      _ => s
-    }
+          s new_values optic update
+      | "Optic" -> optic impl s a set
+      | _ -> s
+    } match
   ]
 
   --[[
     over applies a function to the value focused by an optic.
   ]]--
-  over: Any * s * (a -> a) -> s [optic s f ->
-    match optic._type {
-      "Lens" => optic.set(s, f(optic.get(s))),
-      "Setter" => optic.set(s, f(view(optic, s))),
-      "Iso" => optic.to(f(optic.from(s))),
-      "Prism" => {
-        let existing = optic.preview(s) in
-        if existing != null {
-          optic.review(f(existing))
-        } else {
-          s
-        }
-      },
-      "Optional" => {
-        let existing = optic.preview(s) in
-        if existing != null {
-          optic.set(s, f(existing))
-        } else {
-          s
-        }
-      },
-      "AffineTraversal" => {
-        let existing = optic.preview(s) in
-        if existing != null {
-          optic.set(s, f(existing))
-        } else {
-          s
-        }
-      },
-      "Traversal" => {
-        let values = optic.collect(s) in
-        let new_values = [] in
-
-        for value in values {
-          new_values = new_values + [f(value)]
-        }
-
-        optic.update(s, new_values)
-      },
-      "Optic" => over(optic.impl, s, f),
-      _ => s
-    }
+  over: Any * s * (a -> a) -> s [optic, s, f ->
+    optic s f modify
   ]
 
   --[[
     preview tries to extract the value focused by an optic.
   ]]--
-  preview: Any * s -> a | Null [optic s ->
-    match optic._type {
-      "Prism" => optic.preview(s),
-      "Optional" => optic.preview(s),
-      "AffineTraversal" => optic.preview(s),
-      "Traversal" => {
-        let values = optic.collect(s) in
-        if Prim.length(values) > 0 {
-          values[0]
-        } else {
-          null
-        }
-      },
-      "Lens" => optic.get(s),
-      "Getter" => optic.get(s),
-      "Iso" => optic.from(s),
-      "Optic" => preview(optic.impl, s),
-      _ => null
-    }
+  preview: Any * s -> a | Null [optic, s ->
+    optic _type {
+      | "Prism" -> optic preview s
+      | "Optional" -> optic preview s
+      | "AffineTraversal" -> optic preview s
+      | "Traversal" ->
+          optic s collect -> values
+          values 0 get iff values Prim.length 0 > or_else null
+      | "Lens" -> optic get s
+      | "Getter" -> optic get s
+      | "Iso" -> optic from s
+      | "Optic" -> optic impl s preview
+      | _ -> null
+    } match
   ]
 
   --[[
     review creates a structure from a value using an optic.
   ]]--
-  review: Any * a -> s [optic a ->
-    match optic._type {
-      "Prism" => optic.review(a),
-      "Iso" => optic.to(a),
-      "Optic" => review(optic.impl, a),
-      _ => null
-    }
+  review: Any * a -> s [optic, a ->
+    optic _type {
+      | "Prism" -> optic review a
+      | "Iso" -> optic to a
+      | "Optic" -> optic impl a review
+      | _ -> null
+    } match
   ]
 
   --[[
     collect gathers all values focused by an optic.
   ]]--
-  collect: Any * s -> [a] [optic s ->
-    match optic._type {
-      "Traversal" => optic.collect(s),
-      "Lens" => [optic.get(s)],
-      "Getter" => [optic.get(s)],
-      "Prism" => {
-        let value = optic.preview(s) in
-        value != null ? [value] : []
-      },
-      "Optional" => {
-        let value = optic.preview(s) in
-        value != null ? [value] : []
-      },
-      "AffineTraversal" => {
-        let value = optic.preview(s) in
-        value != null ? [value] : []
-      },
-      "Iso" => [optic.from(s)],
-      "Optic" => collect(optic.impl, s),
-      _ => []
-    }
+  collect: Any * s -> [a] [optic, s ->
+    optic _type {
+      | "Traversal" -> optic collect s
+      | "Lens" -> optic get s [_]
+      | "Getter" -> optic get s [_]
+      | "Prism" ->
+          optic s preview -> value
+          [value] iff value null != or_else []
+      | "Optional" ->
+          optic s preview -> value
+          [value] iff value null != or_else []
+      | "AffineTraversal" ->
+          optic s preview -> value
+          [value] iff value null != or_else []
+      | "Iso" -> optic from s [_]
+      | "Optic" -> optic impl s collect
+      | _ -> []
+    } match
   ]
 
   --[[
     modify updates multiple values focused by an optic using a function.
   ]]--
-  modify: Any * s * (a -> a) -> s [optic s f ->
-    match optic._type {
-      "Traversal" => {
-        let values = optic.collect(s) in
-        let new_values = [] in
+  modify: Any * s * (a -> a) -> s [optic, s, f ->
+    optic _type {
+      | "Traversal" ->
+          optic s collect -> values
+          [] -> new_values
 
-        for value in values {
-          new_values = new_values + [f(value)]
-        }
+          values [value ->
+            value f [_] new_values + -> new_values
+          ] foreach
 
-        optic.update(s, new_values)
-      },
-      "Lens" => optic.set(s, f(optic.get(s))),
-      "Prism" => {
-        let value = optic.preview(s) in
-        if value != null {
-          optic.review(f(value))
-        } else {
-          s
-        }
-      },
-      "Optional" => {
-        let value = optic.preview(s) in
-        if value != null {
-          optic.set(s, f(value))
-        } else {
-          s
-        }
-      },
-      "AffineTraversal" => {
-        let value = optic.preview(s) in
-        if value != null {
-          optic.set(s, f(value))
-        } else {
-          s
-        }
-      },
-      "Iso" => optic.to(f(optic.from(s))),
-      "Setter" => optic.set(s, f(view(optic, s))),
-      "Optic" => modify(optic.impl, s, f),
-      _ => s
-    }
+          s new_values optic update
+      | "Lens" ->
+          optic s get f -> a
+          s a optic set
+      | "Prism" ->
+          optic s preview -> value
+          value f optic review iff value null != or_else s
+      | "Optional" ->
+          optic s preview -> value
+          value f s swap optic set iff value null != or_else s
+      | "AffineTraversal" ->
+          optic s preview -> value
+          value f s swap optic set iff value null != or_else s
+      | "Iso" ->
+          optic s from f optic to
+      | "Setter" ->
+          optic view s f s swap optic set
+      | "Optic" ->
+          optic impl s f modify
+      | _ -> s
+    } match
   ]
 
   --------------------------------------------------
@@ -853,14 +863,12 @@
     to_path converts a dot-separated string path to an array of keys.
   ]]--
   to_path: S -> [S] [path_str ->
-    let parts = Prim.split(path_str, ".") in
+    path_str "." Prim.split -> parts
 
-    let result = [] in
-    for part in parts {
-      if part != "" {
-        result = result + [part]
-      }
-    }
+    [] -> result
+    parts [part ->
+      result [part] + -> result iff part "" != or_else result
+    ] foreach
 
     result
   ]
@@ -869,7 +877,7 @@
     from_path converts an array of keys to a dot-separated string path.
   ]]--
   from_path: [S] -> S [path ->
-    Prim.join(path, ".")
+    path "." Prim.join
   ]
 
   --------------------------------------------------
@@ -877,90 +885,145 @@
   --------------------------------------------------
 
   --[[
-    Structure mapping that establishes the categorical structure
-    of optics.
+    Data Access Design Patterns and Best Practices
 
-    Optics form a category with:
-    - Objects: Types
-    - Morphisms: Various optics between types
-    - Identity: Identity optic (lens that gets and sets the same value)
-    - Composition: Optic composition
+    This section showcases common patterns for working with complex data structures.
+    These patterns will help you build more maintainable, robust data handling code.
+
+    Key benefits:
+    - Create reusable data access components
+    - Maintain consistency across your codebase
+    - Handle complex data transformations safely
+    - Build composable data handling pipelines
+    - Test data access logic independently
   ]]--
   structure: {
-    -- Categorical structure
-    objects: a,
-    morphisms: Optic,
-
-    id: [a ->
-      lens(
-        [x -> x],
-        [_ x -> x]
-      )
-    ],
-    compose: [o1 o2 -> compose(o1, o2)],
-
-    -- Lens structure
-    lens: lens,
-    field: field,
-
-    -- Prism structure
-    prism: prism,
-    prism_for_type: prism_for_type,
-
-    -- Traversal structure
-    traversal: traversal,
-    each: each,
-    filtered: filtered,
-
-    -- Iso structure
-    iso: iso,
-
-    -- Optional structure
-    optional: optional,
-    at_index: at_index,
-
-    -- Operations
-    view: view,
-    set: set,
-    over: over,
-
-    -- Laws
-    law: {
-      -- Lens laws
-      get_set: [l s a ->
-        view(l, set(l, s, a)) == a
+    -- Common access patterns
+    patterns: {
+      -- Field access pattern - for nested object properties
+      field_access: [data, field_name ->
+        field(field_name) -> field_lens
+        data field_lens view
       ],
 
-      set_get: [l s ->
-        set(l, s, view(l, s)) == s
+      -- Safely get a possibly missing value
+      safe_get: [data, path ->
+        path optional -> opt
+        data opt preview
       ],
 
-      set_set: [l s a b ->
-        set(l, set(l, s, a), b) == set(l, s, b)
+      -- Update nested field pattern
+      update_field: [data, field_path, update_fn ->
+        field_path lens_from_path -> field_lens
+        data field_lens [value -> value update_fn] over
       ],
 
-      -- Prism laws
-      preview_review: [p a ->
-        preview(p, review(p, a)) == a
+      -- Transform collection items
+      transform_items: [data, item_predicate, transform_fn ->
+        filtered(item_predicate) each -> item_traversal
+        data item_traversal transform_fn over
+      ]
+    },
+
+    -- Composability patterns
+    composition: {
+      -- Chain multiple field accesses
+      path_access: [fields ->
+        fields [lens1, lens2 -> lens1 lens2 compose] reduce
       ],
 
-      review_preview: [p s ->
-        let v = preview(p, s) in
-        v != null ? review(p, v) == s : true
+      -- Branch based on data type
+      branch_by_type: [type_handlers ->
+        type_handlers [type, handler -> type prism_for_type handler compose] map
       ],
 
-      -- Iso laws
-      from_to: [i a ->
-        view(i, review(i, a)) == a
-      ],
+      -- Handle both optional cases
+      handle_optional: [normal_case, missing_case ->
+        [data, opt ->
+          data opt preview -> value
+          {normal_case value} iff value null != or_else {missing_case}
+        ]
+      ]
+    },
 
-      to_from: [i s ->
-        review(i, view(i, s)) == s
-      ],
+    -- Common tools
+    tools: {
+      -- Field access builders
+      field: field,
+      path: lens_from_path,
+      at_index: at_index,
 
-      -- Composition law
-      compose_law: [o1 o2 o3 ->
-        compose(compose(o1, o2), o3) == compose(o1, compose(o2, o3))
+      -- Data variant handling
+      match_type: prism_for_type,
+      optional_value: optional,
+
+      -- Collection tools
+      each_item: each,
+      matching_items: filtered,
+
+      -- Format conversion
+      convert: iso,
+
+      -- Basic operations
+      get: view,
+      set: set,
+      modify: over
+    },
+
+    -- Guarantees and Laws
+    guarantees: {
+      -- These laws ensure these tools work consistently and predictably
+
+      -- Lens laws (for reliable field access)
+      lens_laws: {
+        -- What you set is what you get
+        get_set: [lens, data, value ->
+          data lens value set lens view value ==
+        ],
+
+        -- Getting and then setting back doesn't change anything
+        get_put: [lens, data ->
+          data lens view -> val
+          data lens val set data ==
+        ],
+
+        -- Setting twice is the same as setting once
+        put_put: [lens, data, value ->
+          data lens value set lens value set data lens value set ==
+        ]
+      },
+
+      -- Prism laws (for consistent variant handling)
+      prism_laws: {
+        -- Data reconstruction is accurate
+        preview_review: [prism, value ->
+          value prism review prism preview value ==
+        ],
+
+        -- Only matching cases are changed
+        review_preview: [prism, data ->
+          data prism preview -> val
+          val null == not data prism preview prism review data == and
+        ]
+      },
+
+      -- Iso laws (for reliable data conversion)
+      iso_laws: {
+        -- Converting there and back gets the original
+        round_trip_from: [iso, value ->
+          value iso from iso to value ==
+        ],
+
+        -- Converting back and forth gets the original
+        round_trip_to: [iso, value ->
+          value iso to iso from value ==
+        ]
+      },
+
+      -- Composition guarantee
+      compose_consistency: [o1, o2, o3 ->
+        -- Order of composition doesn't matter
+        o1 o2 compose o3 compose o1 o2 o3 compose compose ==
       ]
     }
   }
@@ -971,109 +1034,208 @@
 
   example: {
     --[[
-      Example 1: Using lenses to access and update nested fields
+      Example 1: Working with Configuration Data
+
+      This example shows how to safely access and update
+      configuration data, which is typically deeply nested.
     ]]--
-    lens_example: () -> {} [->
-      -- Create a nested data structure
-      let data = {
-        user: {
-          name: "Alice",
-          contact: {
-            email: "alice@example.com",
-            phone: "555-1234"
+    config_example: () -> {} [->
+      -- App configuration data
+      let config = {
+        app: {
+          name: "My Cool App",
+          version: "1.0.0",
+          options: {
+            theme: "light",
+            notifications: {
+              email: true,
+              push: false,
+              sound: "chime.mp3"
+            }
           }
         },
-        settings: {
-          theme: "dark",
-          notifications: true
+        user: {
+          id: 12345,
+          preferences: {
+            language: "en",
+            timezone: "UTC-5"
+          }
         }
       } in
 
-      -- Create lenses for accessing fields
-      let user_lens = field("user") in
-      let name_lens = field("name") in
-      let user_name_lens = compose(user_lens, name_lens) in
+      -- Create lenses for common configuration paths
+      let theme_lens = lens_from_path(["app", "options", "theme"]) in
+      let notifications_sound_lens = lens_from_path(["app", "options", "notifications", "sound"]) in
+      let language_lens = lens_from_path(["user", "preferences", "language"]) in
 
-      let email_lens = lens_from_path(["user", "contact", "email"]) in
+      -- Read configuration values
+      let current_theme = view(theme_lens, config) in  -- "light"
+      let sound_file = view(notifications_sound_lens, config) in  -- "chime.mp3"
 
-      -- Use lenses to view and update fields
-      let name = view(user_name_lens, data) in
-      let updated = set(email_lens, data, "alice.new@example.com") in
+      -- Update configuration
+      let dark_mode_config = set(theme_lens, config, "dark") in
+      let localized_config = set(language_lens, dark_mode_config, "fr") in
+      let silent_config = set(notifications_sound_lens, localized_config, "silent.mp3") in
 
-      updated
+      -- Log the changes
+      log("Changed theme to dark mode")
+      log("Set language to French")
+      log("Updated notification sound")
+
+      silent_config
     ],
 
     --[[
-      Example 2: Using prisms to handle variant types
+      Example 2: Processing Different Message Types
+
+      This example shows how to handle different types of messages
+      in a messaging system, using prisms to safely extract and
+      process type-specific data.
     ]]--
-    prism_example: () -> {} [->
-      -- Define a simple variant type
-      let shape = {
-        _type: "circle",
-        radius: 5
+    message_processor: () -> {} [->
+      -- Define different message types
+      let text_message = {
+        _type: "text",
+        sender: "user123",
+        content: "Hello there!",
+        timestamp: 1622547858
       } in
 
-      -- Create prisms for each shape type
-      let circle_prism = prism_for_type("circle") in
-      let rectangle_prism = prism_for_type("rectangle") in
+      let image_message = {
+        _type: "image",
+        sender: "user456",
+        url: "https://example.com/image.jpg",
+        width: 800,
+        height: 600,
+        timestamp: 1622548001
+      } in
 
-      -- Create lenses for shape properties
-      let radius_lens = field("radius") in
-      let width_lens = field("width") in
+      let system_message = {
+        _type: "system",
+        action: "user_joined",
+        user: "user789",
+        timestamp: 1622548120
+      } in
 
-      -- Combine prism and lens
-      let circle_radius = compose(circle_prism, radius_lens) in
-      let rectangle_width = compose(rectangle_prism, width_lens) in
+      -- Create prisms for each message type
+      let text_prism = prism_for_type("text") in
+      let image_prism = prism_for_type("image") in
+      let system_prism = prism_for_type("system") in
 
-      -- Use the optics
-      let radius = view(circle_radius, shape) in
-      let with_bigger_radius = over(circle_radius, shape, [r -> r * 2]) in
+      -- Create lenses for specific fields
+      let content_lens = field("content") in
+      let url_lens = field("url") in
+      let action_lens = field("action") in
 
-      -- This does nothing since the shape is not a rectangle
-      let with_bigger_width = over(rectangle_width, shape, [w -> w * 2]) in
+      -- Combine prisms and lenses for type-safe access
+      let text_content = compose(text_prism, content_lens) in
+      let image_url = compose(image_prism, url_lens) in
+      let system_action = compose(system_prism, action_lens) in
 
-      with_bigger_radius
+      -- Process messages based on type
+      let process_message = [message ->
+        -- Try to get text content
+        let text = preview(text_content, message) in
+        -- Try to get image URL
+        let img_url = preview(image_url, message) in
+        -- Try to get system action
+        let action = preview(system_action, message) in
+
+        -- Handle each type appropriately
+        {
+          response: text ? `Received: ${text}` :
+                    img_url ? `Received image: ${img_url}` :
+                    action ? `System: ${action}` :
+                    "Unknown message type"
+        }
+      ] in
+
+      -- Process different message types
+      let text_response = process_message(text_message) in
+      let image_response = process_message(image_message) in
+      let system_response = process_message(system_message) in
+
+      {
+        text: text_response,
+        image: image_response,
+        system: system_response
+      }
     ],
 
     --[[
-      Example 3: Using traversals for collections
+      Example 3: Bulk Data Processing
+
+      This example shows how to process multiple records in a collection,
+      applying transformations to specific fields based on conditions.
     ]]--
-    traversal_example: () -> [{}] [->
-      -- Define an array of users
-      let users = [
-        { name: "Alice", age: 30, active: true },
-        { name: "Bob", age: 25, active: false },
-        { name: "Charlie", age: 35, active: true }
+    bulk_data_processor: () -> [{}] [->
+      -- Product data that needs updating
+      let products = [
+        { id: 1, name: "Basic Widget", price: 19.99, stock: 42, category: "widgets" },
+        { id: 2, name: "Premium Widget", price: 39.99, stock: 20, category: "widgets" },
+        { id: 3, name: "Basic Gadget", price: 29.99, stock: 0, category: "gadgets" },
+        { id: 4, name: "Premium Gadget", price: 59.99, stock: 10, category: "gadgets" },
+        { id: 5, name: "Super Gadget", price: 99.99, stock: 5, category: "gadgets" }
       ] in
 
-      -- Create traversal for all elements
-      let users_traversal = each() in
+      -- Create traversal for all products
+      let all_products = each() in
 
-      -- Create lens for the age field
-      let age_lens = field("age") in
+      -- Create lens for price field
+      let price_lens = field("price") in
 
-      -- Create traversal for all users' ages
-      let ages_traversal = compose(users_traversal, age_lens) in
+      -- Create lens for stock field
+      let stock_lens = field("stock") in
 
-      -- Create traversal only for active users
-      let active_traversal = compose(
-        users_traversal,
+      -- Combine traversals and filters for specific updates
+
+      -- Traversal for widget prices
+      let widget_prices = compose(
+        all_products,
         compose(
-          filtered([user -> user.active]),
-          age_lens
+          filtered([p -> p.category == "widgets"]),
+          price_lens
         )
       ) in
 
-      -- Get all ages
-      let all_ages = collect(ages_traversal, users) in
+      -- Traversal for out-of-stock items
+      let out_of_stock = compose(
+        all_products,
+        filtered([p -> p.stock == 0])
+      ) in
 
-      -- Increase all ages by 1
-      let older_users = over(ages_traversal, users, [age -> age + 1]) in
+      -- Traversal for premium product prices
+      let premium_prices = compose(
+        all_products,
+        compose(
+          filtered([p -> p.name.startsWith("Premium")]),
+          price_lens
+        )
+      ) in
 
-      -- Increase only active users' ages by 5
-      let older_active_users = over(active_traversal, users, [age -> age + 5]) in
+      -- Apply bulk updates
 
-      older_active_users
+      -- Apply 10% discount to all widgets
+      let discounted_widgets = over(widget_prices, products, [price -> price * 0.9]) in
+
+      -- Mark out-of-stock items
+      let marked_products = over(out_of_stock, discounted_widgets, [p ->
+        set(field("name"), p, p.name + " (OUT OF STOCK)")
+      ]) in
+
+      -- Apply premium price increase
+      let final_products = over(premium_prices, marked_products, [price -> price * 1.05]) in
+
+      -- Generate report of changes
+      let widget_count = collect(widget_prices, products).length in
+      let out_of_stock_count = collect(out_of_stock, products).length in
+      let premium_count = collect(premium_prices, products).length in
+
+      log(`Applied discount to ${widget_count} widgets`)
+      log(`Marked ${out_of_stock_count} out-of-stock items`)
+      log(`Applied premium price increase to ${premium_count} products`)
+
+      final_products
     ]
   }
 }

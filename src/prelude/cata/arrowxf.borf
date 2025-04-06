@@ -13,13 +13,13 @@
     ArrowFunctor
     ArrowNaturalTransformation
     ArrowAdjunction
-    
+
     -- Special arrow transformations
     KleisliArrow
     FreydArrow
     MonadArrow
     CategoryArrow
-    
+
     -- Arrow fibrations
     ArrowFibration
     DomainFibration
@@ -28,14 +28,14 @@
 
   op: {
     -- Functor composition
-    ∘ ◦ 
-    
+    ∘ ◦
+
     -- Natural transformations
     ⇒ ⇔ ⇐
 
     -- Adjunction
     ⊣ ⊢
-    
+
     -- Fibration
     ↓ ↑
   }
@@ -45,26 +45,26 @@
     arrow_functor
     arrow_nat_transformation
     arrow_adjunction
-    
+
     -- Arrow transformations
     to_kleisli from_kleisli
     to_freyd from_freyd
     to_monad from_monad
     to_category from_category
-    
+
     -- Fibration operations
     total_space fiber domain_of
     cartesian_lift reindex
-    
+
     -- Structural transformations
     curry uncurry
     strength costrength
-    
+
     -- Optimization transformations
     arrow_fusion arrow_composition
     parallel_reduction effect_isolation
     constant_folding dead_code_elimination
-    
+
     -- Semantic mappings
     to_pipeline from_pipeline
     to_task from_task
@@ -92,7 +92,7 @@
 
   --[[
     ArrowFunctor represents a functor between arrow categories.
-    
+
     This structure captures transformations that preserve the arrow
     structure while changing the underlying representation.
   ]]--
@@ -108,7 +108,7 @@
   --[[
     arrow_functor creates a functor between arrow categories
   ]]--
-  arrow_functor: (@Cat.Category * @Cat.Category * (a -> b) * 
+  arrow_functor: (@Cat.Category * @Cat.Category * (a -> b) *
                 (@Arrow.!Arrow -> @Arrow.!Arrow)) -> ArrowFunctor [
     source target obj_map arr_map ->
     {
@@ -140,8 +140,8 @@
     arrow_nat_transformation creates a natural transformation
     between arrow functors
   ]]--
-  arrow_nat_transformation: (ArrowFunctor * ArrowFunctor * 
-                           (a -> (@Arrow.!Arrow -> @Arrow.!Arrow))) -> 
+  arrow_nat_transformation: (ArrowFunctor * ArrowFunctor *
+                           (a -> (@Arrow.!Arrow -> @Arrow.!Arrow))) ->
                            ArrowNaturalTransformation [
     source target components ->
     {
@@ -171,8 +171,8 @@
   --[[
     arrow_adjunction creates an adjunction between arrow functors
   ]]--
-  arrow_adjunction: (ArrowFunctor * ArrowFunctor * 
-                   ArrowNaturalTransformation * 
+  arrow_adjunction: (ArrowFunctor * ArrowFunctor *
+                   ArrowNaturalTransformation *
                    ArrowNaturalTransformation) -> ArrowAdjunction [
     left right unit counit ->
     {
@@ -199,8 +199,8 @@
     {
       command: @Arrow.!Command.Compose {
         first: arrow.command,
-        second: @Arrow.!Command.Pure { 
-          fn: [b -> m.return(b)] 
+        second: @Arrow.!Command.Pure {
+          fn: [b -> m.return(b)]
         }
       },
       _a: arrow._a,
@@ -245,8 +245,8 @@
   from_category: (@Cat.Morphism) -> @Arrow.!Arrow [morphism ->
     -- Transforms a category morphism into an arrow
     {
-      command: @Arrow.!Command.Pure { 
-        fn: [a -> morphism.apply(a)] 
+      command: @Arrow.!Command.Pure {
+        fn: [a -> morphism.apply(a)]
       },
       _a: morphism.dom,
       _b: morphism.cod
@@ -288,7 +288,7 @@
   fiber: (ArrowFibration * a) -> @Cat.Category [fib a ->
     -- Implementation would construct the fiber category
     -- consisting of all arrows over a
-    @Cat.create_subcategory(fib.total_category, [obj -> 
+    @Cat.create_subcategory(fib.total_category, [obj ->
       fib.projection.map_obj(obj) == a
     ])
   ]
@@ -327,10 +327,10 @@
   curry: @Arrow.!Arrow -> @Arrow.!Arrow [arrow ->
     -- Implementation would curry the arrow
     {
-      command: @Arrow.!Command.Pure { 
-        fn: [a -> [b -> 
+      command: @Arrow.!Command.Pure {
+        fn: [a -> [b ->
           @Arrow.run(arrow, (a, b))
-        ]] 
+        ]]
       },
       _a: first_type(arrow._a),
       _b: (second_type(arrow._a) -> arrow._b)
@@ -343,11 +343,11 @@
   uncurry: @Arrow.!Arrow -> @Arrow.!Arrow [arrow ->
     -- Implementation would uncurry the arrow
     {
-      command: @Arrow.!Command.Pure { 
-        fn: [(a, b) -> 
+      command: @Arrow.!Command.Pure {
+        fn: [(a, b) ->
           let f = @Arrow.run(arrow, a) in
           f(b)
-        ] 
+        ]
       },
       _a: (arrow._a, param_type(arrow._b)),
       _b: return_type(arrow._b)
@@ -365,9 +365,9 @@
     -- Implementation would apply arrow fusion optimizations
     -- For example, fusing sequential pure arrows
     match arrow.command with
-      | @Arrow.!Command.Compose { 
-          first: @Arrow.!Command.Pure { fn: f }, 
-          second: @Arrow.!Command.Pure { fn: g } 
+      | @Arrow.!Command.Compose {
+          first: @Arrow.!Command.Pure { fn: f },
+          second: @Arrow.!Command.Pure { fn: g }
         } -> {
           command: @Arrow.!Command.Pure { fn: [x -> g(f(x))] },
           _a: arrow._a,
@@ -415,10 +415,10 @@
   ]]--
   from_pipeline: @Pipeline.Pipeline -> @Arrow.!Arrow [pipeline ->
     -- Transform a pipeline into an arrow
-    let arrows = pipeline.stages |> map [stage -> 
+    let arrows = pipeline.stages |> map [stage ->
       @Pipeline.stage_to_function(stage)
     ] in
-    
+
     @Arrow.sequence_steps(arrows)
   ]
 
@@ -427,7 +427,7 @@
   ]]--
   to_task: @Arrow.!Arrow -> @Task.Task [arrow ->
     -- Transform an arrow into a task
-    @Task.create_task([-> 
+    @Task.create_task([->
       -- This would execute the arrow with appropriate inputs
       -- Simplified implementation
       null
@@ -498,13 +498,13 @@
     -- Arrow laws (preserved by functors)
     laws: {
       -- Functors preserve arrow identities
-      preserve_id: forall [F -> 
+      preserve_id: forall [F ->
         F.map_arr(@Arrow.id()) == @Arrow.id()
       ],
 
       -- Functors preserve arrow composition
-      preserve_compose: forall [F arr1 arr2 -> 
-        F.map_arr(@Arrow.compose(arr1, arr2)) == 
+      preserve_compose: forall [F arr1 arr2 ->
+        F.map_arr(@Arrow.compose(arr1, arr2)) ==
         @Arrow.compose(F.map_arr(arr1), F.map_arr(arr2))
       ]
     }
@@ -596,10 +596,10 @@
       dom: [f -> param_type(typeof(f))],
       cod: [f -> unwrap_type(return_type(typeof(f)))],
       id: [a -> m.return],
-      compose: [f g -> [a -> 
+      compose: [f g -> [a ->
         let mb = f(a) in
         m.bind(mb, g)
       ]]
     }
   ]
-} 
+}

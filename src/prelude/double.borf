@@ -294,4 +294,4 @@
     -- Squares: Commutative squares v ∘ f = g ∘ u in C
     SquareCat: (@Cat.!Category) -> ?(!DoubleCategory) [ cat -> ?None ]
   }
-} 
+}

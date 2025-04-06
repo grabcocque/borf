@@ -1,15 +1,15 @@
 --[[
   Applicative Categories
-  
+
   This module defines applicative categories, which are categories equipped with
   a limited form of computational context that is weaker than monads but stronger
   than plain functors.
-  
+
   Applicative categories provide a foundation for:
   - Sequential computation with context
   - Independent/parallel effects
   - Function lifting and application
-  
+
   This implementation uses linear types instead of monadic patterns to
   ensure proper resource tracking and direct composition.
 ]]--
@@ -21,7 +21,7 @@
     !Pure
     !Apply
     !Lift
-    
+
     -- Specific instances
     !OptionApplicative
     !ResultApplicative
@@ -47,17 +47,17 @@
     lift
     lift2
     lift3
-    
+
     -- Derived operations
     sequence
     traverse
-    
+
     -- Instance constructors
     option_applicative
     result_applicative
     list_applicative
     io_applicative
-    
+
     -- Standard instances
     standard_applicative
   }
@@ -78,7 +78,7 @@
 
   --[[
     !ApplicativeCategory represents an applicative category.
-    
+
     An applicative category is a category equipped with a pure operation
     that lifts values into a computational context, and an apply operation
     that applies a function in a context to a value in the same context.
@@ -88,7 +88,7 @@
     base_category: @Cat.Category,   -- The underlying category
     pure_op: (a -> F a),            -- Pure operation: lifts values
     apply_op: (F (a -o> b) * F a -> F b),  -- Apply operation: applies lifted functions
-    
+
     -- Laws that should hold for a valid applicative
     identity_law: Bool,             -- pure id <*> v = v
     composition_law: Bool,          -- pure (.) <*> u <*> v <*> w = u <*> (v <*> w)
@@ -170,9 +170,9 @@
   --[[
     applicative_category creates an applicative category.
   ]]--
-  applicative_category: S * @Cat.Category * 
-                      (a -> F a) * 
-                      (F (a -o> b) * F a -> F b) -> 
+  applicative_category: S * @Cat.Category *
+                      (a -> F a) *
+                      (F (a -o> b) * F a -> F b) ->
                       !ApplicativeCategory [
     name base pure_op apply_op ->
     {
@@ -180,7 +180,7 @@
       base_category: base,
       pure_op: pure_op,
       apply_op: apply_op,
-      
+
       -- Laws are assumed to hold, should be verified
       identity_law: true,
       composition_law: true,
@@ -260,7 +260,7 @@
     } else {
       let cons = [x xs -o> [x] + xs] in
       let pure_cons = pure(category, cons).result in
-      
+
       xs.foldl(
         pure(category, []).result,
         [acc x ->
@@ -290,7 +290,7 @@
   option_applicative: S -> !OptionApplicative [
     name ->
     let pure_op = [a -> Some(a)] in
-    
+
     let apply_op = [(mf, ma) ->
       match mf {
         None -> None,
@@ -300,7 +300,7 @@
         }
       }
     ] in
-    
+
     {
       _type: "OptionApplicative",
       base: applicative_category(name, @Cat.structure, pure_op, apply_op)
@@ -313,7 +313,7 @@
   result_applicative: S * e -> !ResultApplicative [
     name error_type ->
     let pure_op = [a -> Ok(a)] in
-    
+
     let apply_op = [(mf, ma) ->
       match mf {
         Err(e) -> Err(e),
@@ -323,7 +323,7 @@
         }
       }
     ] in
-    
+
     {
       _type: "ResultApplicative",
       base: applicative_category(name, @Cat.structure, pure_op, apply_op),
@@ -337,12 +337,12 @@
   list_applicative: S -> !ListApplicative [
     name ->
     let pure_op = [a -> [a]] in
-    
+
     let apply_op = [(fs, xs) ->
       -- Apply each function in fs to each element in xs, concatenating the results
       fs.flatMap([f -> xs.map(f)])
     ] in
-    
+
     {
       _type: "ListApplicative",
       base: applicative_category(name, @Cat.structure, pure_op, apply_op)
@@ -354,11 +354,11 @@
   ]]--
   io_applicative: S -> !IOApplicative [
     name ->
-    let pure_op = [a -> 
+    let pure_op = [a ->
       -- Create an IO computation that just returns the value
       [() -o> a]
     ] in
-    
+
     let apply_op = [(io_f, io_x) ->
       -- Sequence the two IO computations and apply the function
       [() -o>
@@ -367,7 +367,7 @@
         f(x)
       ]
     ] in
-    
+
     {
       _type: "IOApplicative",
       base: applicative_category(name, @Cat.structure, pure_op, apply_op)
@@ -444,13 +444,13 @@
 
   --[[
     Structure mapping that establishes @Applicative as a categorical structure.
-    
+
     In this categorical structure:
     - Objects are types
     - Morphisms are functions with applicative context
     - Identity is the pure function lifted into the context
     - Composition is sequential application in the context
-    
+
     This forms an applicative category, which enhances a regular category
     with the ability to lift values and functions into a computational context
     and sequence computations within that context.
@@ -459,84 +459,84 @@
     -- Map Applicative to a category
     objects: a,
     morphisms: (a -o> F b),
-    
+
     -- Core category operations
     dom: [f -> typeof(a) given f: (a -o> F b)],
     cod: [f -> typeof(F b) given f: (a -o> F b)],
     id: [a -> [x -o> pure(standard_applicative, x).result]],
     compose: [f g -> [a -o>
       let fb = f(a) in
-      
+
       -- Extract the function from the result of f
       -- This requires transforming from F b to F (b -o> c), which depends
       -- on the specific applicative instance
       -- For a general case, we'll use flatMap/bind if available
       let fc = fb.flatMap(g)
-      
+
       -- Alternatively, for a general solution:
       -- let lifted_g = lift(standard_applicative, g, fb)
-      
+
       fc
     ]],
-    
+
     -- Applicative structure
     applicative: {
       pure: [a -> pure(standard_applicative, a).result],
-      
+
       apply: [f x -> apply(standard_applicative, f, x).result],
-      
+
       lift: [f x -> lift(standard_applicative, f, x)],
-      
+
       lift2: [f x y -> lift2(standard_applicative, f, x, y)],
-      
+
       sequence: [xs -> sequence(standard_applicative, xs)],
-      
+
       traverse: [f xs -> traverse(standard_applicative, f, xs)]
     },
-    
+
     -- Laws
     law: {
       -- Category laws
-      identity: [f -> 
-        compose(id(dom(f)), f) == f && 
+      identity: [f ->
+        compose(id(dom(f)), f) == f &&
         compose(f, id(cod(f))) == f
       ],
-      
-      associativity: [f g h -> 
+
+      associativity: [f g h ->
         compose(compose(f, g), h) == compose(f, compose(g, h))
       ],
-      
+
       -- Applicative laws
-      identity_law: [v -> 
+      identity_law: [v ->
         -- pure id <*> v = v
         let id_fn = [x -o> x] in
         let pure_id = pure(standard_applicative, id_fn).result in
         apply(standard_applicative, pure_id, v).result == v
       ],
-      
-      homomorphism_law: [f x -> 
+
+      homomorphism_law: [f x ->
         -- pure f <*> pure x = pure (f x)
         let pure_f = pure(standard_applicative, f).result in
         let pure_x = pure(standard_applicative, x).result in
-        apply(standard_applicative, pure_f, pure_x).result == 
+        apply(standard_applicative, pure_f, pure_x).result ==
         pure(standard_applicative, f(x)).result
       ],
-      
-      interchange_law: [u y -> 
+
+      interchange_law: [u y ->
         -- u <*> pure y = pure ($ y) <*> u
         let pure_y = pure(standard_applicative, y).result in
         let apply_to_y = [f -o> f(y)] in
         let pure_apply_to_y = pure(standard_applicative, apply_to_y).result in
-        
+
         apply(standard_applicative, u, pure_y).result ==
         apply(standard_applicative, pure_apply_to_y, u).result
       ],
-      
-      composition_law: [u v w -> 
+
+      composition_law: [u v w ->
         -- pure (.) <*> u <*> v <*> w = u <*> (v <*> w)
         let compose_fn = [f g x -o> f(g(x))] in
         let pure_compose = pure(standard_applicative, compose_fn).result in
-        
+
         apply(
           standard_applicative,
           apply(
@@ -552,16 +552,16 @@
           apply(standard_applicative, v, w).result
         ).result
       ],
-      
+
       -- Additional laws for derived operations
-      lift_law: [f x -> 
-        lift(standard_applicative, f, x) == 
+      lift_law: [f x ->
+        lift(standard_applicative, f, x) ==
         apply(standard_applicative, pure(standard_applicative, f).result, x).result
       ],
-      
-      sequence_law: [xs -> 
+
+      sequence_law: [xs ->
         -- sequence is equivalent to traversing with identity
-        sequence(standard_applicative, xs) == 
+        sequence(standard_applicative, xs) ==
         traverse(standard_applicative, [x -o> x], xs)
       ]
     }
@@ -578,23 +578,23 @@
     option_example: Z * Z -> Option Z [
       (x, y) ->
       let app = option_applicative("OptionExample").base in
-      
+
       let add = [a b -o> a + b] in
-      
+
       -- Apply the function to two optional values
       let opt_x = Some(x) in
       let opt_y = Some(y) in
-      
+
       lift2(app, add, opt_x, opt_y)
     ],
-    
+
     --[[
       Example 2: Using the Result applicative for validation
     ]]--
     validation_example: S * Z -> Result Z S [
       (name, age) ->
       let app = result_applicative("ValidationExample", S).base in
-      
+
       -- Validate inputs independently
       let validate_name = [name -o>
         if name.length > 0 {
@@ -603,7 +603,7 @@
           Err("Name cannot be empty")
         }
       ] in
-      
+
       let validate_age = [age -o>
         if age >= 0 && age <= 120 {
           Ok(age)
@@ -611,40 +611,40 @@
           Err("Age must be between 0 and 120")
         }
       ] in
-      
+
       let make_person = [name age -o> {
         name: name,
         age: age
       }] in
-      
+
       -- Apply validations applicatively
       let name_result = validate_name(name) in
       let age_result = validate_age(age) in
-      
+
       // In real validation, we'd collect all errors, but for simplicity:
       lift2(app, make_person, name_result, age_result)
     ],
-    
+
     --[[
       Example 3: Using the List applicative for combinations
     ]]--
     list_combination_example: [Z] * [Z] -> [Z] [
       (xs, ys) ->
       let app = list_applicative("ListExample").base in
-      
+
       let add = [a b -o> a + b] in
-      
+
       -- Generate all combinations of elements from xs and ys
       lift2(app, add, xs, ys)
     ],
-    
+
     --[[
       Example 4: Using traverse to transform a list
     ]]--
     traverse_example: [Z] -> Option [Z] [
       xs ->
       let app = option_applicative("TraverseExample").base in
-      
+
       let safe_sqrt = [x -o>
         if x >= 0 {
           Some(sqrt(x))
@@ -652,31 +652,31 @@
           None
         }
       ] in
-      
+
       -- Apply safe_sqrt to each element, collecting the results
       traverse(app, safe_sqrt, xs)
     ],
-    
+
     --[[
       Example 5: Using the IO applicative for sequencing operations
     ]]--
     io_example: S * S -> (() -o> (S, S)) [
       (file1, file2) ->
       let app = io_applicative("IOExample").base in
-      
+
       -- Create IO operations to read files
       let read_file = [filename -o> [() -o>
         -- Simulate reading a file
         "Contents of " + filename
       ]] in
-      
+
       let read1 = read_file(file1) in
       let read2 = read_file(file2) in
-      
+
       -- Combine the results
       let combine = [content1 content2 -o> (content1, content2)] in
-      
+
       lift2(app, combine, read1, read2)
     ]
   }
-} 
+}

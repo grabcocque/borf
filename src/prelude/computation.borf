@@ -75,7 +75,7 @@
 
   E: typ cup op cup fn
 
-  vis: E |> [e -> true]
+  vis: E |> [e -> e true]
 
   deps: {
     (@Computation, @Linear, true),   -- Add dependency on Linear types
@@ -174,7 +174,7 @@
   --[[
     computation creates a basic computation with linear behavior.
   ]]--
-  computation: S * (a -o> b) -> !Computation [effect_type run ->
+  computation: S * (a -o> b) -> !Computation [effect_type, run ->
     {
       _type: "Computation",
       run: run,
@@ -186,36 +186,36 @@
     identity creates an identity computation that just passes through its input.
   ]]--
   identity: S -> !Computation [effect_type ->
-    computation(effect_type, [a -> a])
+    effect_type [a -> a] computation
   ]
 
   --[[
     sequence linearly composes two computations.
     The first computation is run, then its result is passed to the second.
   ]]--
-  sequence: !Computation * !Computation -> !Computation [first second ->
+  sequence: !Computation * !Computation -> !Computation [first, second ->
     {
       _type: "Computation",
       run: [a ->
-        let b = first.run(a) in
-        second.run(b)
+        a first run |> b
+        b second run
       ],
-      effect_type: second.effect_type
+      effect_type: second effect_type
     }
   ]
 
   --[[
     apply applies a computation that returns a function to an argument computation.
   ]]--
-  apply: !Computation * !Computation -> !Computation [func_comp arg_comp ->
+  apply: !Computation * !Computation -> !Computation [func_comp, arg_comp ->
     {
       _type: "Computation",
       run: [env ->
-        let f = func_comp.run(env) in
-        let arg = arg_comp.run(env) in
-        f(arg)
+        env func_comp run |> f
+        env arg_comp run |> arg
+        arg f
       ],
-      effect_type: func_comp.effect_type
+      effect_type: func_comp effect_type
     }
   ]
 
@@ -227,7 +227,7 @@
     optional creates an optional computation.
   ]]--
   optional: (a -o> !Optional) -> !Computation [f ->
-    computation("Optional", f)
+    "Optional" f computation
   ]
 
   --[[
@@ -240,17 +240,18 @@
   --[[
     none creates a None variant of Optional.
   ]]--
-  none: () -o> !Optional [->
+  none: T.U -o> !Optional [_ ->
     !Optional.None {}
   ]
 
   --[[
     match_optional pattern matches on an Optional value.
   ]]--
-  match_optional: !Optional * (a -o> b) * (() -o> b) -o> b [opt some_case none_case ->
-    match opt with
-      | !Optional.Some { value } -> some_case(value)
-      | !Optional.None {} -> none_case()
+  match_optional: !Optional * (a -o> b) * (() -o> b) -o> b [opt, some_case, none_case ->
+    opt {
+      | !Optional.Some { value } -> value some_case
+      | !Optional.None {} -> T.U none_case
+    } match
   ]
 
   --------------------------------------------------
@@ -261,7 +262,7 @@
     result creates a result computation.
   ]]--
   result: (a -o> !Result) -> !Computation [f ->
-    computation("Result", f)
+    "Result" f computation
   ]
 
   --[[
@@ -281,10 +282,11 @@
   --[[
     match_result pattern matches on a Result value.
   ]]--
-  match_result: !Result * (a -o> c) * (e -o> c) -o> c [res success_case failure_case ->
-    match res with
-      | !Result.Success { value } -> success_case(value)
-      | !Result.Failure { error } -> failure_case(error)
+  match_result: !Result * (a -o> c) * (e -o> c) -o> c [res, success_case, failure_case ->
+    res {
+      | !Result.Success { value } -> value success_case
+      | !Result.Failure { error } -> error failure_case
+    } match
   ]
 
   --------------------------------------------------
@@ -295,43 +297,42 @@
     state creates a stateful computation.
   ]]--
   state: (s -o> (a * s)) -> !Computation [f ->
-    computation("State", [s ->
-      let (value, new_state) = f(s) in
-      !State {
-        _type: "State",
-        run: [_ -> (value, new_state)]
-      }
-    ])
+    "State" [s ->
+      s f |> [value, new_state ->]
+      "State" [_ -> value new_state]
+      |> [_type, run ->]
+    ] computation
   ]
 
   --[[
     get retrieves the current state.
   ]]--
-  get: () -> !Computation [->
-    state([s -> (s, s)])
+  get: T.U -> !Computation [_ ->
+    [s -> s s |> [state, state ->]] state
   ]
 
   --[[
     put updates the state.
   ]]--
   put: s -> !Computation [new_state ->
-    state([_ -> ({}, new_state)])
+    [_ -> T.U new_state |> [_, new_s ->]] state
   ]
 
   --[[
     modify applies a function to update the state.
   ]]--
   modify: (s -o> s) -> !Computation [f ->
-    state([s -> ({}, f(s))])
+    [s -> T.U s f |> [_, new_s ->]] state
   ]
 
   --[[
     run_state executes a stateful computation with an initial state.
   ]]--
-  run_state: !Computation * s -o> (a * s) [comp initial_state ->
-    let state_result = comp.run(initial_state) in
-    match state_result with
-      | !State { run } -> run(initial_state)
+  run_state: !Computation * s -o> (a * s) [comp, initial_state ->
+    initial_state comp run |> state_result
+    state_result [
+      [run -> initial_state run]
+    ] !State match
   ]
 
   --------------------------------------------------
@@ -342,42 +343,42 @@
     reader creates a computation that reads from an environment.
   ]]--
   reader: (e -o> a) -> !Computation [f ->
-    computation("Reader", [env ->
-      !Reader {
-        _type: "Reader",
-        run: [_ -> f(env)]
-      }
-    ])
+    "Reader" [env ->
+      env f |> value
+      "Reader" [_ -> value]
+      |> [_type, run ->]
+    ] computation
   ]
 
   --[[
     ask retrieves the current environment.
   ]]--
-  ask: () -> !Computation [->
-    reader([env -> env])
+  ask: T.U -> !Computation [_ ->
+    [env -> env] reader
   ]
 
   --[[
     local runs a computation with a modified environment.
   ]]--
-  local: (e -o> e) * !Computation -> !Computation [f comp ->
+  local: (e -o> e) * !Computation -> !Computation [f, comp ->
     {
       _type: "Computation",
       run: [env ->
-        let modified_env = f(env) in
-        comp.run(modified_env)
+        env f |> modified_env
+        modified_env comp run
       ],
-      effect_type: comp.effect_type
+      effect_type: comp effect_type
     }
   ]
 
   --[[
     run_reader executes a reader computation with an environment.
   ]]--
-  run_reader: !Computation * e -o> a [comp env ->
-    let reader_result = comp.run(env) in
-    match reader_result with
-      | !Reader { run } -> run(env)
+  run_reader: !Computation * e -o> a [comp, env ->
+    env comp run |> reader_result
+    reader_result [
+      [run -> env run]
+    ] !Reader match
   ]
 
   --------------------------------------------------
@@ -387,11 +388,11 @@
   --[[
     transform applies a function to the result of a computation.
   ]]--
-  transform: !Computation * (a -o> b) -> !Computation [comp f ->
+  transform: !Computation * (a -o> b) -> !Computation [comp, f ->
     {
       _type: "Computation",
-      run: [env -> f(comp.run(env))],
-      effect_type: comp.effect_type
+      run: [env -> env comp run f],
+      effect_type: comp effect_type
     }
   ]
 
@@ -399,30 +400,31 @@
     pipe sequentially composes multiple computations.
   ]]--
   pipe: [!Computation] -> !Computation [comps ->
-    match comps with
-      | [] -> identity("Identity")
+    comps {
+      | [] -> "Identity" identity
       | [comp] -> comp
       | [first, second @ rest] ->
-          pipe(rest |> cons(sequence(first, second)))
+          first second sequence rest cons |> pipe
+    } match
   ]
 
   --[[
     traverse applies a computation to each element of a list and collects the results.
   ]]--
-  traverse: (a -o> !Computation) * [a] -> !Computation [[b]] [f list ->
-    let map_comp = [a acc ->
-      let comp_b = f(a) in
+  traverse: (a -o> !Computation) * [a] -> !Computation [[b]] [f, list ->
+    [a, acc ->
+      a f |> comp_b
       {
         _type: "Computation",
         run: [env ->
-          let b = comp_b.run(env) in
-          [b] + acc
+          env comp_b run |> b
+          [b] acc +
         ],
-        effect_type: comp_b.effect_type
+        effect_type: comp_b effect_type
       }
-    ] in
+    ] |> map_comp
 
-    list |> fold(map_comp, identity("Identity"))
+    list map_comp "Identity" identity fold
   ]
 
   --------------------------------------------------
@@ -432,15 +434,15 @@
   --[[
     >> is sequential composition
   ]]--
-  >>: !Computation * !Computation -> !Computation [first second ->
-    sequence(first, second)
+  >>: !Computation * !Computation -> !Computation [first, second ->
+    first second sequence
   ]
 
   --[[
     -o> is linear function application
   ]]--
-  -o>: a * (a -o> b) -> b [x f ->
-    f(x)
+  -o>: a * (a -o> b) -> b [x, f ->
+    x f
   ]
 
   --------------------------------------------------
@@ -465,20 +467,21 @@
     morphisms: !Computation,     -- Morphisms are computations
 
     -- Core category structure
-    dom: [f -> typeof(dom(f.run))],     -- Domain of computation
-    cod: [f -> typeof(cod(f.run))],     -- Codomain of computation
-    id: [a -> identity("Identity")],    -- Identity morphism
-    compose: [f g -> sequence(f, g)],   -- Sequential composition
+    dom: [f -> f run dom typeof],     -- Domain of computation
+    cod: [f -> f run cod typeof],     -- Codomain of computation
+    id: [a -> "Identity" identity],    -- Identity morphism
+    compose: [f, g -> f g sequence],   -- Sequential composition
 
     -- Laws
     law: {
       identity: [f ->
-        sequence(identity("Identity"), f) == f &&
-        sequence(f, identity("Identity")) == f
+        "Identity" identity f sequence f veq
+        f "Identity" identity sequence f veq and
       ],
 
-      associativity: [f g h ->
-        sequence(f, sequence(g, h)) == sequence(sequence(f, g), h)
+      associativity: [f, g, h ->
+        f g h sequence sequence
+        f g sequence h sequence veq
       ]
     }
   }
@@ -492,46 +495,47 @@
       Example 1: Optional computation
     ]]--
     optional_example: Z -> !Optional [n ->
-      if n > 0 {
-        some(n)
-      } else {
-        none()
-      }
+      n some iff n 0 > or_else T.U none
     ],
 
     --[[
       Example 2: Sequencing computations
     ]]--
-    sequence_example: () -> !Computation [->
-      let comp1 = optional([_ -> some(42)]) in
-      let comp2 = optional([n -> if n % 2 == 0 { some(n / 2) } else { none() }]) in
-      sequence(comp1, comp2)
+    sequence_example: T.U -> !Computation [_ ->
+      [_ -> 42 some] optional |> comp1
+      [n ->
+        n 2 / some iff n 2 % 0 veq or_else T.U none
+      ] optional |> comp2
+      comp1 comp2 sequence
     ],
 
     --[[
       Example 3: Stateful computation
     ]]--
-    state_example: () -> (!Computation, Z) [->
-      let counter = state([n -> (n, n + 1)]) in
-      let increment = state([n -> ({}, n + 1)]) in
-      let comp = sequence(counter, sequence(increment, counter)) in
-      (comp, run_state(comp, 0))
+    state_example: () -> (!Computation, Z) [_ ->
+      [n -> n n 1 + |> [val, next_val ->]] state |> counter
+      [n -> T.U n 1 + |> [_, next_val ->]] state |> increment
+      counter increment counter |> sequence |> sequence |> comp
+      comp 0 run_state |> comp_and_state
+      comp comp_and_state
     ],
 
     --[[
       Example 4: Reader computation
     ]]--
-    reader_example: () -> (!Computation, S) [->
-      let get_config = reader([env -> env.config]) in
-      let get_user = reader([env -> env.user]) in
-      let comp = sequence(
-        get_config,
-        [cfg -> sequence(
-          get_user,
-          [user -> reader([_ -> cfg + ":" + user])]
-        )]
-      ) in
-      (comp, run_reader(comp, { config: "debug", user: "admin" }))
+    reader_example: () -> (!Computation, S) [_ ->
+      [env -> env config] reader |> get_config
+      [env -> env user] reader |> get_user
+      get_config
+      [cfg ->
+        get_user
+        [user -> [_ -> cfg ":" user +] reader]
+        sequence
+      ]
+      sequence |> comp
+
+      comp { config: "debug", user: "admin" } run_reader |> result
+      comp result
     ]
   }
 }

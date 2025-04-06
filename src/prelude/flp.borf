@@ -1,15 +1,17 @@
 --[[
-  Functional Logic Programming / Fallible Computation / Linear Result Types
+  Error Handling Tools - Safely Manage Operations That Can Fail
 
-  This module defines the foundation for handling computations that may fail using
-  linear types. It implements types like !Result for handling fallible computations
-  providing several combinators that consume their inputs exactly once and guarantee
-  correct error handling. The linear typing ensures resources are properly managed and
-  errors cannot be ignored, providing compile-time guarantees for robustness.
+  This module provides powerful tools for handling operations that might fail, letting you:
 
-  Narrowing is a technique for reducing the type of a value to a more specific type
-  under logical containts and is used in functional logic programming to ensure that
-  the type of a value always resolves to the most specific type that satisfies the constraints.
+  - Express success and failure paths clearly and explicitly
+  - Chain operations together safely, even when they might fail
+  - Transform success values and error information as needed
+  - Ensure errors are properly handled instead of being ignored
+  - Combine multiple fallible operations with clean error handling
+  - Apply constraints and validations to results
+
+  The tools help you write more robust code by making error handling explicit
+  and preventing common bugs like forgetting to check for errors.
 ]]--
 
 
@@ -35,143 +37,248 @@
   vis: E |> [e -> true]
 
   --------------------------------------------------
-  -- Structure Mapping to Linear Category
+  -- GUARANTEES: Error Handling Principles
   --------------------------------------------------
 
   --[[
-    Structure mapping that explicitly connects the Flp module to the
-    categorical framework as a Linear Category. This mapping establishes
-    @Flp.Result as a linear type constructor with resource tracking guarantees.
+    Error Handling Guarantees
 
-    Instead of using monadic structure, we use linear morphisms where inputs
-    are consumed exactly once and cannot be duplicated or discarded.
+    This module provides strong safety guarantees that protect you from
+    common error handling mistakes:
+
+    1. No Forgotten Errors: Every error MUST be explicitly handled
+
+    2. No Double Handling: You cannot accidentally handle the same error twice
+
+    3. No Double Success: You cannot accidentally process a success value twice
+
+    4. Clean Error Flow: Errors propagate naturally through your code
+
+    5. Safe Composition: You can safely chain operations while preserving errors
   ]]--
   structure: {
-    -- Map Flp to LinearCategory
+    -- How Error Safety Works Behind the Scenes
+    -- (You don't need to understand this to use the error handling safely)
+
+    -- Type system foundation
     objects: T.Type_0,
     morphisms: [a b -> (!a -o> b)],
 
-    -- Base category structure
+    -- Core operation rules
     dom: [f -> f.domain],
     cod: [f -> f.codomain],
     id: [a -> [!x -o> x]],
     compose: [f g -> [!x -o> x |> f |> g]],
 
-    -- Symmetric monoidal structure (for pairing values linearly)
+    -- How values are combined
     tensor: [a b -> (!a * !b)],
     unit: T.Unit,
 
-    -- Result as a functor in linear category
+    -- How Result transforms values
     result_obj: [a -> !Result(a)],
     result_map: [f -> [!r -o> r |> map(f)]],
 
-    -- Linear operations on Result
+    -- Success/failure creation
     ok_linear: [a -> (!a -o> !Result(a))],
     err_linear: [a -> (!Error -o> !Result(a))],
 
-    -- Linear combinators that consume their inputs
+    -- Safe operation combining tools
     and_then_linear: [a b -> (!Result(a) * (!a -o> !Result(b)) -o> !Result(b))],
     or_else_linear: [a -> (!Result(a) * (!Error -o> !Result(a)) -o> !Result(a))],
     map_linear: [a b -> (!Result(a) * (!a -o> b) -o> !Result(b))],
 
-    -- Linear pattern matching that consumes the result
+    -- Pattern matching implementation
     match_linear: [a b -> (!Result(a) * (!a -o> b) * (!Error -o> b) -o> b)],
 
-    -- Linear resource consumption laws
-    laws: {
-      -- Each result is consumed exactly once
-      linear_consumption: forall [r f -> let !x = r in f(!x) |> resource_consumed_exactly_once],
+    -- How the Safety Guarantees Are Enforced
+    validation: {
+      -- Guarantee 1: No Forgotten Errors
+      linear_consumption: forall [r f ->
+        let !x = r in f(!x) |> every_error_handled
+      ],
 
-      -- Results can't be duplicated
-      no_copy: forall [r -> let !x = r in {!x, !x} |> type_error],
+      -- Guarantee 2 & 3: No Double Handling
+      no_copy: forall [r ->
+        let !x = r in {!x, !x} |> compiler_prevents_this
+      ],
 
-      -- Results can't be discarded
-      no_discard: forall [r -> let !x = r in unit |> type_error]
+      -- Guarantee 5: Safe Composition
+      no_discard: forall [r ->
+        let !x = r in unit |> compiler_prevents_this
+      ]
     }
   }
 
   --[[
-    !Error represents a structured error with a code and a message.
-    The code can be any type, allowing for flexibility (e.g., integer, symbol, string).
+    !Error - Structured failure information
+
+    Contains detailed information about what went wrong in an operation.
+    Includes both a machine-readable code and a human-readable message,
+    giving you flexibility in how errors are categorized and described.
+
+    Example: {code: "not_found", message: "User profile does not exist"}
   ]]--
   !Error: { code: Any, message: S }
 
   --[[
-    !Result is a linear type that represents either a successful computation
-    with a value of type 'a' or a failure with an error.
-    Once a !Result is pattern matched or unwrapped, it is consumed.
+    !Result - Safe operation result container
+
+    Represents an operation that either succeeded with a value or failed with an error.
+    Forces you to explicitly handle both success and failure cases, making
+    your code more robust by preventing unchecked errors from propagating.
+
+    Example: parse_config_file() -> !Result(Config) returns either the parsed config or an error
   ]]--
   !Result: Type -> Type
 
   --[[
-    !Ok represents the success case of a !Result
+    !Ok - Success result constructor
+
+    Wraps a value in a successful result.
+    Used when an operation completes normally and produces the expected value.
+
+    Example: user_data |> ok
   ]]--
   !Ok: a -o> !Result(a)
 
   --[[
-    !Err represents the failure case of a !Result
+    !Err - Failure result constructor
+
+    Creates a result that indicates failure with an error.
+    Used when an operation cannot complete successfully and needs to
+    provide information about what went wrong.
+
+    Example: {code: "invalid_input", message: "Name cannot be empty"} |> err
   ]]--
   !Err: !Error -o> !Result(a)
 
   --[[
-    Creates a success result
+    ok - Signal successful operation
+
+    Wraps a value to indicate an operation succeeded.
+    Use this when your function completes successfully and
+    needs to return a value as part of a !Result.
+
+    Example: validate_input("John") returns user_record |> ok
   ]]--
   ok: a -o> !Result(a)
 
   --[[
-    Creates a failure result with a structured error
+    err - Signal operation failure
+
+    Creates a failure result with error details.
+    Use this when an operation cannot complete successfully and
+    you need to explain what went wrong.
+
+    Example: validate_input("") returns "Name cannot be empty" |> err
   ]]--
   err: !Error -o> !Result(a)
   err: S -o> !Result(a) [msg -> {code: "error", message: msg} |> err]
 
   --[[
-    Pattern matches on a result, consuming it and executing exactly one function
+    match - Handle both success and failure paths
+
+    Processes a result with different handlers for success and failure.
+    This is the primary way to safely extract values from results.
+    Ensures you handle both possible outcomes explicitly.
+
+    Example: user_result |> match([user -> welcome(user)], [err -> show_error(err)])
   ]]--
   match: !Result(a) * (a -o> b) * (!Error -o> b) -o> b
 
   --[[
-    Unwraps a result, returning the value or panicking with the error
+    unwrap - Extract value or crash on error
+
+    Gets the success value or crashes if it's an error.
+    Use this only when you're absolutely certain an operation cannot fail,
+    or when a failure should terminate the program.
+
+    Example: known_good_result |> unwrap
   ]]--
   unwrap: !Result(a) -o> a
 
   --[[
-    Unwraps a result, returning the value or a provided default
+    unwrap_or - Extract value with fallback
+
+    Gets the success value or returns a default value on failure.
+    Perfect for providing a safe alternative when an operation fails.
+
+    Example: read_config() |> unwrap_or(default_config)
   ]]--
   unwrap_or: !Result(a) * a -o> a
 
   --[[
-    Unwraps a result, returning the value or computing a default from the error
+    unwrap_or_else - Extract value with computed fallback
+
+    Gets the success value or computes a fallback from the error.
+    Useful when you need to generate a recovery value based on
+    the specific error that occurred.
+
+    Example: fetch_user(id) |> unwrap_or_else([err -> create_guest_user(err)])
   ]]--
   unwrap_or_else: !Result(a) * (!Error -o> a) -o> a
 
   --[[
-    Unwraps a result, returning the value or throwing the error
+    unwrap_or_throw - Extract value or throw exception
+
+    Gets the success value or throws the error as an exception.
+    Use this when you want errors to propagate up the call stack
+    for handling at a higher level.
+
+    Example: parse_config_file() |> unwrap_or_throw
   ]]--
   unwrap_or_throw: !Result(a) -o> a
 
   --[[
-    Linear composition - applies a function to the value if successful,
-    preserving the error otherwise
+    and_then - Chain operations that might fail
+
+    Processes a successful result or passes along the error.
+    Perfect for building chains of operations where each step
+    depends on the previous one succeeding.
+
+    Example: parse_input(data) |> and_then(validate) |> and_then(save_to_db)
   ]]--
   and_then: !Result(a) * (a -o> !Result(b)) -o> !Result(b)
 
   --[[
-    Applies a function to transform the error, leaving success values unchanged
+    or_else - Recover from specific errors
+
+    Attempts to recover from errors or passes along success values.
+    Useful for handling specific error conditions while letting
+    other operations continue normally.
+
+    Example: fetch_from_cache() |> or_else([err -> fetch_from_database()])
   ]]--
   or_else: !Result(a) * (!Error -o> !Result(a)) -o> !Result(a)
 
   --[[
-    Maps a function over the success value
+    map - Transform success values
+
+    Applies a function to transform successful results.
+    Perfect for converting values without changing the error handling flow.
+
+    Example: parse_json(data) |> map([json -> extract_user_data(json)])
   ]]--
   map: !Result(a) * (a -o> b) -o> !Result(b)
 
   --[[
-    Maps a function over the error value
+    map_err - Transform error information
+
+    Applies a function to transform error details.
+    Useful for adding context to errors or standardizing error formats.
+
+    Example: db_query() |> map_err([err -> add_query_context(err)])
   ]]--
   map_err: !Result(a) * (!Error -o> !Error) -o> !Result(a)
 
   --[[
-    Combines two results into one, succeeding only if both succeed
+    combine - Merge two results together
+
+    Pairs the values from two successful results or returns the first error.
+    Perfect for situations where you need multiple operations to succeed
+    before proceeding.
+
+    Example: fetch_user(id) |> combine(fetch_permissions(id))
   ]]--
   combine: !Result(a) * !Result(b) -o> !Result(a * b)
 
@@ -221,13 +328,143 @@
   ]]--
   try: {!Result(a)} * ((a, ...) -o> b) * (!Error -o> b) -o> b
 
-  --[[
-    Example helper function (not exposed)
-  ]]--
-  is_valid_int_format: S -o> !Bool
+  --------------------------------------------------
+  -- PRACTICAL EXAMPLES
+  --------------------------------------------------
 
   --[[
-    Example helper function (not exposed)
+    Example 1: Form Validation Pipeline
+
+    This example shows how to validate user input using a chain
+    of operations that might fail at various points.
   ]]--
+
+  validate_registration_form: {S: S} -o> !Result(User) [form ->
+    -- Validate email format
+    let validate_email = [form ->
+      form["email"] |> is_valid_email_format
+        ? (form |> ok)
+        : ("Invalid email format" |> err)
+    ];
+
+    -- Validate password strength
+    let validate_password = [form ->
+      form["password"] |> is_strong_password
+        ? (form |> ok)
+        : ("Password must contain at least 8 characters, including numbers and symbols" |> err)
+    ];
+
+    -- Validate password confirmation
+    let validate_password_match = [form ->
+      form["password"] =:= form["confirm_password"]
+        ? (form |> ok)
+        : ("Passwords do not match" |> err)
+    ];
+
+    -- Check if user already exists
+    let check_user_exists = [form ->
+      form["email"] |> user_exists_in_database
+        ? ("User with this email already exists" |> err)
+        : (form |> ok)
+    ];
+
+    -- Create user if all validations pass
+    let create_user = [form ->
+      {
+        email: form["email"],
+        name: form["name"],
+        created_at: current_timestamp()
+      } |> ok
+    ];
+
+    -- Chain all validations together
+    form |> ok
+      |> and_then(validate_email)
+      |> and_then(validate_password)
+      |> and_then(validate_password_match)
+      |> and_then(check_user_exists)
+      |> and_then(create_user)
+  ]
+
+  --[[
+    Example 2: Error Recovery with Fallbacks
+
+    This example demonstrates recovering from errors with fallbacks,
+    useful for implementing resilient systems.
+  ]]--
+
+  fetch_user_profile: UserId -o> !Result(UserProfile) [user_id ->
+    -- Try to fetch from cache first
+    let from_cache = [id ->
+      cache_get("user:" + id.to_string())
+        |> from_opt({code: "not_in_cache", message: "User not in cache"})
+    ];
+
+    -- If cache fails, try the database
+    let from_database = [_ ->
+      db_query("SELECT * FROM users WHERE id = ?", [user_id])
+        |> and_then([rows ->
+          rows.length > 0
+            ? (rows[0] |> parse_user_profile)
+            : ("User not found in database" |> err)
+        ])
+    ];
+
+    -- If database fails, try the backup API
+    let from_api = [_ ->
+      api_request("/users/" + user_id.to_string())
+        |> and_then([response ->
+          response.status === 200
+            ? (response.body |> parse_api_user)
+            : ({code: "api_error", message: "API returned: " + response.status} |> err)
+        ])
+    ];
+
+    -- Chain fallbacks together
+    user_id |> from_cache
+      |> or_else(from_database)
+      |> or_else(from_api)
+      |> map_err([err -> {
+          code: "user_unavailable",
+          message: "Could not retrieve user: " + err.message
+        }]
+      )
+  ]
+
+  --[[
+    Example 3: Combining Multiple Results
+
+    This example shows how to safely combine multiple operations
+    that might fail, ensuring all succeed before proceeding.
+  ]]--
+
+  prepare_report: ReportId -o> !Result(Report) [report_id ->
+    -- Get the report template
+    let template_result = fetch_template(report_id);
+
+    -- Get the user data
+    let user_data_result = fetch_user_data(report_id);
+
+    -- Get the statistics
+    let stats_result = calculate_statistics(report_id);
+
+    -- Combine all results - fails if any one fails
+    template_result
+      |> combine(user_data_result)
+      |> combine(stats_result)
+      |> map([results ->
+        let {template, {user_data, stats}} = results;
+
+        -- Generate the final report
+        generate_report(template, user_data, stats)
+      ])
+  ]
+
+  -- Helper functions (not exposed)
+  is_valid_int_format: S -o> !Bool
   string_to_int: S -o> Z
+  is_valid_email_format: S -o> !Bool
+  is_strong_password: S -o> !Bool
+  user_exists_in_database: S -o> !Bool
+  current_timestamp: () -o> Z
 }

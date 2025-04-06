@@ -1,0 +1,141 @@
+--[[
+  Parser Types - Core Building Blocks for Parser Construction
+  
+  This module defines the fundamental types used throughout the parser system.
+  These types form the backbone of all parsing functionality.
+]]--
+
+@Parser.Types: {
+  typ: {
+    -- Core types
+    Parser ParserResult ParserError ParserState Position
+    
+    -- Advanced types
+    Thunk LazyParser
+  }
+  
+  op: {}
+  
+  fn: {}
+  
+  E: typ cup op cup fn
+  
+  deps: {
+    (@Parser.Types, @T, true)
+  }
+  
+  --[[
+    The Key Types You'll Use When Building Parsers
+    
+    These types form the backbone of the parsing system, providing:
+    
+    1. Results that capture both success and failure information
+    2. Detailed error tracking for clear problem diagnosis
+    3. Position information to pinpoint exactly where errors occur
+    4. Memoization statistics to help optimize your parsers
+  ]]--
+
+  --[[
+    Parser - The core parser type
+    
+    Represents anything that can parse text input and produce a typed result.
+    All parsers share the same interface, regardless of what they parse.
+  ]]--
+  Parser: {
+    parse: ParserState -> ParserResult,
+    print: a -> String
+  }
+
+  --[[
+    ParserResult - Parsing outcome container
+    
+    Holds the complete result of a parsing operation, including:
+    - Whether parsing succeeded
+    - The parsed value (if successful)
+    - Any remaining unparsed input
+    - Error information (if parsing failed)
+    - Performance statistics
+  ]]--
+  ParserResult: {
+    success: Bool,
+    value: a,
+    remaining: String,
+    position: Position,
+    memo_stats: {
+      hits: Z,
+      misses: Z
+    }
+  }
+
+  --[[
+    ParserError - Detailed error information
+    
+    Contains rich information about what went wrong during parsing, including:
+    - A human-readable error message
+    - The exact position where the error occurred
+    - What the parser expected to find
+    - What it actually found
+    - A stack of contextual information to help diagnose the problem
+  ]]--
+  ParserError: {
+    message: String,
+    position: Position,
+    expected: String,
+    found: String,
+    context: [String]  -- Stack of context information for better error messages
+  }
+
+  --[[
+    ParserState - Parser progress tracker
+    
+    Tracks everything about the current state of parsing, including:
+    - The remaining input text to be parsed
+    - The current position in the input
+    - The cache of previously parsed results
+    - A stack of errors encountered
+    - The furthest error seen (for better error messages)
+  ]]--
+  ParserState: {
+    input: String,
+    position: Position,
+    memo: MemoTable,
+    error_stack: [ParserError],
+    furthest_error: ParserError
+  }
+
+  --[[
+    Position - Input location tracker
+    
+    Pinpoints a specific location in the input text, tracking:
+    - Line number (for human-readable error messages)
+    - Column number (for highlighting the exact error position)
+    - Byte offset (for efficient parser operations)
+  ]]--
+  Position: {
+    line: Z,
+    column: Z,
+    offset: Z
+  }
+  
+  --[[
+    Thunk - Delayed computation container
+    
+    Represents a computation that will produce a result when needed.
+    Essential for implementing recursive grammars and lazy evaluation.
+  ]]--
+  Thunk: {
+    force: () -> a
+  }
+  
+  --[[
+    LazyParser - Parser with delayed initialization
+    
+    A parser whose implementation is determined later, allowing for
+    recursive definitions in grammars. Essential for parsing expressions
+    and other recursive structures.
+  ]]--
+  LazyParser: {
+    set_impl: Parser -> (),
+    get_impl: () -> Parser
+  }
+}

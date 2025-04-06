@@ -1,0 +1,300 @@
+--[[
+  Parser Examples - Practical Parsing Demonstrations
+  
+  This module provides complete, practical examples of parsers built with
+  the parsing library. Use these as templates for your own parsers.
+]]--
+
+@Parser.Examples: {
+  typ: {}
+  
+  op: {}
+  
+  fn: {
+    calculator_example
+    json_example
+    csv_example
+  }
+  
+  E: typ cup op cup fn
+  
+  deps: {
+    (@Parser.Examples, @Parser.Types, true),
+    (@Parser.Examples, @Parser.Primitives, true),
+    (@Parser.Examples, @Parser.Combinators, true),
+    (@Parser.Examples, @T, true)
+  }
+  
+  --[[
+    PRACTICAL EXAMPLES
+    
+    These examples demonstrate building real-world parsers for common formats:
+    
+    1. Calculator: Parse and evaluate mathematical expressions with precedence
+    2. JSON: Parse the complete JSON format with all data types
+    3. CSV: Parse comma-separated values with proper handling of quoted fields
+    
+    Study these examples to learn how to build your own parsers for various formats.
+  ]]--
+
+  --[[
+    Example 1: Building a Simple Calculator Parser
+    
+    This example shows how to create a parser for basic arithmetic expressions.
+    It demonstrates parser composition, operator precedence, and value conversion.
+  ]]--
+  calculator_example: () -> Parser [ ->
+    -- Define basic parsers for numbers and operators
+    let number_parser = number() in
+    let plus = string("+") in
+    let minus = string("-") in
+    let mult = string("*") in
+    let div = string("/") in
+    let lparen = string("(") in
+    let rparen = string(")") in
+    let ws = whitespace() |> optional() in
+    
+    -- Forward declaration for recursive references
+    let expr = lazy_parser() in
+    
+    -- Define factor parser (numbers and parenthesized expressions)
+    let factor = 
+      lparen |> then(ws) |> then(expr) |> then(ws) |> then(rparen) |> map([_, _, e, _, _ -> e])
+      |> or(number_parser) in
+    
+    -- Define term parser with multiplication and division
+    let term = 
+      factor |> then(
+        mult |> then(ws) |> then(factor) |> map([op, _, v -> {op: "*", value: v}])
+        |> or(div |> then(ws) |> then(factor) |> map([op, _, v -> {op: "/", value: v}]))
+        |> many()
+      ) |> map([first, rest ->
+        -- Calculate the result of multiplication and division
+        rest |> fold([result, op_value ->
+          if op_value.op == "*" {
+            result * op_value.value
+          } else {
+            result / op_value.value
+          }
+        ], first)
+      ]) in
+    
+    -- Define expression parser with addition and subtraction
+    let expr_impl = 
+      term |> then(
+        plus |> then(ws) |> then(term) |> map([op, _, v -> {op: "+", value: v}])
+        |> or(minus |> then(ws) |> then(term) |> map([op, _, v -> {op: "-", value: v}]))
+        |> many()
+      ) |> map([first, rest ->
+        -- Calculate the result of addition and subtraction
+        rest |> fold([result, op_value ->
+          if op_value.op == "+" {
+            result + op_value.value
+          } else {
+            result - op_value.value
+          }
+        ], first)
+      ]) in
+    
+    -- Connect the recursive reference
+    set_parser(expr, expr_impl) in
+    
+    -- Return the complete expression parser with surrounding whitespace
+    ws |> then(expr) |> then(ws) |> map([_, e, _ -> e])
+  ]
+
+  --[[
+    Example 2: JSON Parser
+    
+    This example demonstrates building a parser for the JSON format,
+    showing how to handle nested structures, different data types,
+    and recursive definitions.
+  ]]--
+  json_example: () -> Parser [ ->
+    -- Forward declarations for recursive structures
+    let json_value = lazy_parser() in
+    
+    -- Whitespace parser
+    let ws = many(char_class(" \t\n\r")) in
+    
+    -- String parser
+    let string_literal = 
+      char('"') |> 
+      then(many(
+        char('\\') |> then(any_char()) |> map([_, c -> c]) |>
+        or(char_not('"'))
+      )) |>
+      then(char('"')) |>
+      map([_, chars, _ -> chars |> join("")]) in
+    
+    -- Number parser
+    let json_number = number() in
+    
+    -- Boolean parsers
+    let true_parser = string("true") |> map([_ -> true]) in
+    let false_parser = string("false") |> map([_ -> false]) in
+    
+    -- Null parser
+    let null_parser = string("null") |> map([_ -> null]) in
+    
+    -- Array parser (recursive)
+    let array_parser = 
+      char('[') |>
+      then(ws) |>
+      then(
+        json_value |> 
+        then(many(
+          ws |> then(char(',')) |> then(ws) |> then(json_value) |>
+          map([_, _, _, val -> val])
+        )) |>
+        map([first, rest -> [first] |> concat(rest)]) |>
+        optional([])
+      ) |>
+      then(ws) |>
+      then(char(']')) |>
+      map([_, _, values, _, _ -> values]) in
+      
+    -- Object parser (recursive)
+    let object_parser =
+      char('{') |>
+      then(ws) |>
+      then(
+        -- Key-value pair
+        string_literal |>
+        then(ws) |>
+        then(char(':')) |>
+        then(ws) |>
+        then(json_value) |>
+        map([key, _, _, _, value -> {key: key, value: value}]) |>
+        
+        -- Additional key-value pairs
+        then(many(
+          ws |> 
+          then(char(',')) |>
+          then(ws) |>
+          then(string_literal) |>
+          then(ws) |>
+          then(char(':')) |>
+          then(ws) |>
+          then(json_value) |>
+          map([_, _, _, key, _, _, _, value -> {key: key, value: value}])
+        )) |>
+        
+        map([first, rest -> 
+          -- Convert to object
+          [first] |> concat(rest) |> fold([obj, kv ->
+            obj |> set(kv.key, kv.value)
+          ], {})
+        ]) |>
+        
+        optional({})
+      ) |>
+      then(ws) |>
+      then(char('}')) |>
+      map([_, _, obj, _, _ -> obj]) in
+    
+    -- Connect json_value to its implementations
+    let json_value_impl = choice([
+      string_literal,
+      json_number,
+      true_parser,
+      false_parser,
+      null_parser,
+      array_parser,
+      object_parser
+    ]) in
+    
+    set_parser(json_value, json_value_impl) in
+    
+    -- Complete JSON parser - a value with optional whitespace
+    ws |> then(json_value) |> then(ws) |> map([_, val, _ -> val])
+  ]
+
+  --[[
+    Example 3: Simple CSV Parser
+    
+    This example shows how to parse a common data format with 
+    clear, maintainable code, even handling edge cases.
+  ]]--
+  csv_example: () -> Parser [ ->
+    -- Define basic parsers
+    let comma = char(',') in
+    let quote = char('"') in
+    let newline = string("\n") |> or(string("\r\n")) in
+    let cell_content = many(char_not_in(",\"\n\r")) |> map([chars -> chars |> join("")]) in
+    
+    -- Parse a quoted cell (handles escaped quotes as "")
+    let quoted_cell =
+      quote |>
+      then(many(
+        quote |> then(quote) |> map([_, _ -> '"']) |>
+        or(char_not('"'))
+      )) |>
+      then(quote) |>
+      map([_, content, _ -> content |> join("")]) in
+    
+    -- Parse any cell (quoted or unquoted)
+    let cell = quoted_cell |> or(cell_content) in
+    
+    -- Parse a row of cells
+    let row =
+      cell |>
+      then(many(
+        comma |> then(cell) |> map([_, c -> c])
+      )) |>
+      map([first, rest -> [first] |> concat(rest)]) in
+    
+    -- Parse multiple rows
+    let csv =
+      row |>
+      then(many(
+        newline |> then(row) |> map([_, r -> r])
+      )) |>
+      map([first, rest -> [first] |> concat(rest)]) in
+    
+    -- Return the complete parser
+    csv
+  ]
+  
+  -- Helper functions (not yet implemented in example skeleton)
+  
+  char_class: String -> Parser [chars ->
+    -- Creates a parser that matches any character in the given string
+    null  -- Placeholder
+  ]
+  
+  any_char: () -> Parser [ ->
+    -- Creates a parser that matches any character
+    null  -- Placeholder
+  ]
+  
+  char_not: Char -> Parser [c ->
+    -- Creates a parser that matches any character except the given one
+    null  -- Placeholder
+  ]
+  
+  char_not_in: String -> Parser [chars ->
+    -- Creates a parser that matches any character not in the given string
+    null  -- Placeholder
+  ]
+  
+  choice: [Parser] -> Parser [parsers ->
+    -- Creates a parser that tries each parser in the list until one succeeds
+    null  -- Placeholder
+  ]
+  
+  set: {a} * String * b -> {a} [obj, key, value ->
+    -- Sets a key-value pair in an object
+    null  -- Placeholder
+  ]
+  
+  concat: [a] * [a] -> [a] [arr1, arr2 ->
+    -- Concatenates two arrays
+    null  -- Placeholder
+  ]
+  
+  join: String * [String] -> String [separator, strings ->
+    -- Joins an array of strings with a separator
+    null  -- Placeholder
+  ]
+}

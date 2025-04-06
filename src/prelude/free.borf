@@ -1,15 +1,15 @@
 --[[
   Free Categories
-  
+
   This module defines free categories, which are categories generated freely
   from directed graphs. A free category contains all the morphisms that can be
   constructed by composing the "fundamental morphisms" from the original graph.
-  
+
   Free categories are important for:
   - Categorical semantics of computation
   - Path algebras and graph algorithms
   - Universal constructions
-  
+
   This implementation uses linear types for precise resource tracking and
   avoids monadic patterns.
 ]]--
@@ -22,12 +22,12 @@
     !Path
     !NodeSet
     !EdgeSet
-    
+
     -- Morphism types
     !FreeMorphism
     !FreeFunctor
     !FreeNaturalTransformation
-    
+
     -- Construction types
     !CategoryPresentation
     !GraphHomomorphism
@@ -48,7 +48,7 @@
     path
     node_set
     edge_set
-    
+
     -- Graph operations
     source
     target
@@ -57,26 +57,26 @@
     nodes
     edges
     neighbors
-    
+
     -- Path operations
     empty_path
     singleton_path
     compose_paths
     path_length
     is_empty_path
-    
+
     -- Category operations
     morphism
     identity
     compose
-    
+
     -- Universal property
     functor_from_graph
-    
+
     -- Graph homomorphism
     graph_homomorphism
     apply_homomorphism
-    
+
     -- Standard instances
     standard_free
     path_category
@@ -98,7 +98,7 @@
 
   --[[
     !FreeCategory represents a free category generated from a graph.
-    
+
     A free category includes all possible paths in the graph as morphisms,
     with composition being path concatenation.
   ]]--
@@ -129,7 +129,7 @@
       _type: "EmptyPath",
       node: a                    -- The node where this empty path sits
     },
-    
+
     -- Non-empty path consisting of an edge and a continuation
     Cons: {
       _type: "ConsPath",
@@ -158,7 +158,7 @@
 
   --[[
     !FreeMorphism represents a morphism in a free category.
-    
+
     Each morphism corresponds to a path in the underlying graph.
   ]]--
   !FreeMorphism: {
@@ -171,7 +171,7 @@
 
   --[[
     !FreeFunctor represents a functor from a free category to another category.
-    
+
     It is determined by a graph homomorphism from the base graph to the object
     part of the target category.
   ]]--
@@ -232,12 +232,12 @@
     {
       _type: "FreeCategory",
       base_graph: graph,
-      
+
       -- Initialize paths (initially just identity paths)
       paths: {
         a: [empty_path(n) for n in graph.nodes.elements]
       },
-      
+
       -- Create identity paths for each node
       identity_paths: {
         a: empty_path(n) for n in graph.nodes.elements
@@ -269,7 +269,7 @@
     } else {
       -- Create a path by folding the edge list from right to left
       let initial = empty_path(graph.target_map(edge_list[edge_list.length - 1])) in
-      
+
       edge_list.foldr(initial, [edge acc ->
         !Path.Cons{
           _type: "ConsPath",
@@ -420,7 +420,7 @@
     p1 p2 ->
     match p1 {
       !Path.Empty{node} -> p2,
-      !Path.Cons{edge, continuation} -> 
+      !Path.Cons{edge, continuation} ->
         !Path.Cons{
           _type: "ConsPath",
           edge: edge,
@@ -490,7 +490,7 @@
     if f.target_node != g.source_node {
       error("Cannot compose morphisms with incompatible endpoints")
     }
-    
+
     morphism(
       f.category,
       f.source_node,
@@ -507,7 +507,7 @@
     functor_from_graph creates a functor from a free category to another category
     based on a mapping of the underlying graph.
   ]]--
-  functor_from_graph: !FreeCategory * @Cat.Category * 
+  functor_from_graph: !FreeCategory * @Cat.Category *
                     (a -> c) * (e -> (c -o> d)) -> !FreeFunctor [
     free_cat target_cat node_map edge_map ->
     {
@@ -546,9 +546,9 @@
   apply_homomorphism: !GraphHomomorphism * !Path -> !Path [
     homo path ->
     match path {
-      !Path.Empty{node} -> 
+      !Path.Empty{node} ->
         empty_path(homo.node_map(node)),
-      !Path.Cons{edge, continuation} -> 
+      !Path.Cons{edge, continuation} ->
         !Path.Cons{
           _type: "ConsPath",
           edge: homo.edge_map(edge),
@@ -623,39 +623,39 @@
 
   --[[
     Structure mapping that establishes @Free as a categorical structure.
-    
+
     In this categorical structure:
     - Objects are nodes in the graph
     - Morphisms are paths between nodes
     - Identity is the empty path
     - Composition is path concatenation
-    
+
     This forms a category known as the free category on the graph.
   ]]--
   structure: {
     -- Map Free to a category
     objects: a,                     -- Objects are nodes
     morphisms: !FreeMorphism,       -- Morphisms are paths
-    
+
     -- Core category structure
     dom: [m -> m.source_node],
     cod: [m -> m.target_node],
     id: [a -> identity(standard_free, a)],
     compose: [f g -> compose(f, g)],
-    
+
     -- Laws
     law: {
-      identity: [f -> 
-        compose(identity(standard_free, dom(f)), f) == f && 
+      identity: [f ->
+        compose(identity(standard_free, dom(f)), f) == f &&
         compose(f, identity(standard_free, cod(f))) == f
       ],
-      
-      associativity: [f g h -> 
+
+      associativity: [f g h ->
         compose(compose(f, g), h) == compose(f, compose(g, h))
       ],
-      
+
       -- Laws specific to free categories
-      universality: [G F -> 
+      universality: [G F ->
         -- For any graph homomorphism G from the base graph to a category C,
         -- there exists a unique functor F from the free category to C
         -- such that F applied to the generators equals G
@@ -665,28 +665,28 @@
           ])
         ])
       ],
-      
+
       -- Path laws
-      path_composition: [p1 p2 p3 -> 
-        compose_paths(compose_paths(p1, p2), p3) == 
+      path_composition: [p1 p2 p3 ->
+        compose_paths(compose_paths(p1, p2), p3) ==
         compose_paths(p1, compose_paths(p2, p3))
       ],
-      
-      empty_path_identity: [p -> 
+
+      empty_path_identity: [p ->
         let src = match p {
           !Path.Empty{node} -> node,
           !Path.Cons{edge, continuation} -> standard_free.base_graph.source_map(edge)
         } in
         let tgt = match p {
           !Path.Empty{node} -> node,
-          !Path.Cons{edge, continuation} -> 
+          !Path.Cons{edge, continuation} ->
             let last = p in
             while(!is_empty_path(last.continuation)) {
               last = last.continuation
             }
             standard_free.base_graph.target_map(last.edge)
         } in
-        
+
         compose_paths(empty_path(src), p) == p &&
         compose_paths(p, empty_path(tgt)) == p
       ]
@@ -708,10 +708,10 @@
         [e -> if e == "e1" { "a" } else { "b" }],  -- Source map
         [e -> if e == "e1" { "b" } else { "c" }]   -- Target map
       ) in
-      
+
       free_category(g)
     ],
-    
+
     --[[
       Example 2: Creating and composing paths
     ]]--
@@ -722,13 +722,13 @@
         [e -> if e == "e1" { "a" } else { "b" }],  -- Source map
         [e -> if e == "e1" { "b" } else { "c" }]   -- Target map
       ) in
-      
+
       let path1 = singleton_path(g, "e1") in
       let path2 = singleton_path(g, "e2") in
-      
+
       compose_paths(path1, path2)  -- A path from a to c through b
     ],
-    
+
     --[[
       Example 3: Creating a functor from a free category
     ]]--
@@ -739,9 +739,9 @@
         [_ -> "a"],          -- Source map
         [_ -> "b"]           -- Target map
       ) in
-      
+
       let free = free_category(g) in
-      
+
       -- Create a functor to the standard category of types and functions
       functor_from_graph(
         free,
@@ -750,7 +750,7 @@
         [edge -> [n -o> string(n)]]                 -- Edge map
       )
     ],
-    
+
     --[[
       Example 4: Applying a graph homomorphism
     ]]--
@@ -762,30 +762,30 @@
         [e -> if e == "e1" { "a" } else { "b" }],  -- Source map
         [e -> if e == "e1" { "b" } else { "c" }]   -- Target map
       ) in
-      
+
       let g2 = graph(
         ["x", "y"],          -- Nodes
         ["f"],               -- Edges
         [_ -> "x"],          -- Source map
         [_ -> "y"]           -- Target map
       ) in
-      
+
       -- Create a homomorphism from g1 to g2
       let homo = graph_homomorphism(
         g1, g2,
         [node -> if node == "c" { "y" } else { "x" }],  -- Node map
         [_ -> "f"]                                       -- Edge map
       ) in
-      
+
       -- Create a path in g1 and apply the homomorphism
       let path = compose_paths(
         singleton_path(g1, "e1"),
         singleton_path(g1, "e2")
       ) in
-      
+
       apply_homomorphism(homo, path)
     ],
-    
+
     --[[
       Example 5: Creating morphisms in a free category
     ]]--
@@ -796,24 +796,24 @@
         [e -> if e == "e1" { "a" } else { "b" }],  -- Source map
         [e -> if e == "e1" { "b" } else { "c" }]   -- Target map
       ) in
-      
+
       let free = free_category(g) in
-      
+
       -- Create two morphisms
       let m1 = morphism(
         free,
         "a", "b",
         singleton_path(g, "e1")
       ) in
-      
+
       let m2 = morphism(
         free,
         "b", "c",
         singleton_path(g, "e2")
       ) in
-      
+
       -- Compose them
       compose(m1, m2)
     ]
   }
-} 
+}

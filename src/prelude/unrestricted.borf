@@ -50,7 +50,7 @@
 
   tau: T.tau
 
-  vis: E |> [e -> true]
+  vis: E |> [e -> e true]
 
   deps: {
     (@Unrestricted, @T, true),         -- Add dependency on Type system
@@ -97,31 +97,31 @@
   --[[
     Product forms the product type A * B
   ]]--
-  Product: UnrestrictedType * UnrestrictedType -> UnrestrictedType [a b ->
+  Product: UnrestrictedType * UnrestrictedType -> UnrestrictedType [a, b ->
     {
-      base: a.base * b.base,
-      weakening: a.weakening && b.weakening,
-      contraction: a.contraction && b.contraction
+      base: a base b base *,
+      weakening: a weakening b weakening and,
+      contraction: a contraction b contraction and
     }
   ]
 
   --[[
     Sum forms the sum type A + B
   ]]--
-  Sum: UnrestrictedType * UnrestrictedType -> UnrestrictedType [a b ->
+  Sum: UnrestrictedType * UnrestrictedType -> UnrestrictedType [a, b ->
     {
-      base: a.base + b.base,
-      weakening: a.weakening && b.weakening,
-      contraction: a.contraction && b.contraction
+      base: a base b base +,
+      weakening: a weakening b weakening and,
+      contraction: a contraction b contraction and
     }
   ]
 
   --[[
     Function forms the function type A -> B
   ]]--
-  Function: UnrestrictedType * UnrestrictedType -> UnrestrictedType [a b ->
+  Function: UnrestrictedType * UnrestrictedType -> UnrestrictedType [a, b ->
     {
-      base: a.base -> b.base,
+      base: a base b base ->,
       weakening: true,  -- Functions can be dropped
       contraction: true  -- Functions can be copied
     }
@@ -132,9 +132,9 @@
   ]]--
   Option: UnrestrictedType -> UnrestrictedType [a ->
     {
-      base: ?a.base,
+      base: a base ?,
       weakening: true,  -- Optional types can always be dropped
-      contraction: a.contraction  -- Can be copied if inner type can be copied
+      contraction: a contraction  -- Can be copied if inner type can be copied
     }
   ]
 
@@ -143,9 +143,9 @@
   ]]--
   List: UnrestrictedType -> UnrestrictedType [a ->
     {
-      base: [a.base],
+      base: a base [],
       weakening: true,  -- Lists can always be dropped
-      contraction: a.contraction  -- Can be copied if elements can be copied
+      contraction: a contraction  -- Can be copied if elements can be copied
     }
   ]
 
@@ -156,51 +156,47 @@
   --[[
     unrestricted_fn creates an unrestricted function
   ]]--
-  unrestricted_fn: S * UnrestrictedType * (UnrestrictedCtx -> a) -> UnrestrictedFn [param typ body ->
+  unrestricted_fn: S * UnrestrictedType * (UnrestrictedCtx -> a) -> UnrestrictedFn [param, typ, body ->
     {
       domain: typ,
-      codomain: infer_type(body)
+      codomain: body infer_type
     }
   ]
 
   --[[
     unrestricted_app applies an unrestricted function to an argument
   ]]--
-  unrestricted_app: UnrestrictedFn * a -> b [fn arg ->
+  unrestricted_app: UnrestrictedFn * a -> b [fn, arg ->
     -- Apply the function (no restrictions on usage)
-    fn.body(arg)
+    arg fn body
   ]
 
   --[[
-    copy explicitly duplicates an unrestricted resource
+    copy makes a duplicate of an unrestricted resource
   ]]--
   copy: UnrestrictedType -> (UnrestrictedType * UnrestrictedType) [resource ->
-    -- Verify that the type supports copying
-    if not resource.contraction {
-      error("Cannot copy a resource that does not support contraction")
-    }
+    resource [res ->
+      "Cannot copy a resource that does not support contraction" error iff res contraction not or_else T.U
 
-    -- Return two copies of the resource
-    (resource, resource)
+      res res
+    ]
   ]
 
   --[[
     drop explicitly discards an unrestricted resource
   ]]--
-  drop: UnrestrictedType -> () [resource ->
+  drop: UnrestrictedType -> T.U [resource ->
     -- Verify that the type supports dropping
-    if not resource.weakening {
-      error("Cannot drop a resource that does not support weakening")
-    }
+    "Cannot drop a resource that does not support weakening" error iff resource weakening not or_else T.U
 
     -- Return unit to indicate resource was discarded
-    ()
+    T.U
   ]
 
   --[[
     product_intro creates a product of two unrestricted values
   ]]--
-  product_intro: a * b -> (a * b) [a b ->
+  product_intro: a * b -> (a * b) [a, b ->
     -- Create product
     (a, b)
   ]
@@ -208,9 +204,9 @@
   --[[
     product_elim eliminates a product by pattern matching
   ]]--
-  product_elim: (a * b) * ((a * b) -> c) -> c [product f ->
-    let (a, b) = product in
-    f(a, b)
+  product_elim: (a * b) * ((a * b) -> c) -> c [product, f ->
+    product [a, b ->]
+    a b product_intro f
   ]
 
   --------------------------------------------------
@@ -220,59 +216,56 @@
   --[[
     ctx_empty creates an empty unrestricted typing context
   ]]--
-  ctx_empty: () -> UnrestrictedCtx [->
-    {
-      bindings: {},
-      used: {}
-    }
+  ctx_empty: T.U -> UnrestrictedCtx [_ ->
+    {} {} [bindings, used ->]
   ]
 
   --[[
     ctx_extend extends a context with a new variable binding
   ]]--
-  ctx_extend: UnrestrictedCtx * S * UnrestrictedType -> UnrestrictedCtx [ctx var typ ->
+  ctx_extend: UnrestrictedCtx * S * UnrestrictedType -> UnrestrictedCtx [ctx, var, typ ->
     {
-      bindings: ctx.bindings cup { var: typ },
-      used: ctx.used cup { var: 0 }
+      bindings: ctx bindings { var: typ } cup,
+      used: ctx used { var: 0 } cup
     }
   ]
 
   --[[
     ctx_merge merges two contexts
   ]]--
-  ctx_merge: UnrestrictedCtx * UnrestrictedCtx -> UnrestrictedCtx [ctx1 ctx2 ->
+  ctx_merge: UnrestrictedCtx * UnrestrictedCtx -> UnrestrictedCtx [ctx1, ctx2 ->
     {
-      bindings: ctx1.bindings cup ctx2.bindings,
-      used: merge_usage_counts(ctx1.used, ctx2.used)
+      bindings: ctx1 bindings ctx2 bindings cup,
+      used: ctx1 used ctx2 used merge_usage_counts
     }
   ]
 
   --[[
     ctx_weaken removes a variable from context without using it
   ]]--
-  ctx_weaken: UnrestrictedCtx * S -> UnrestrictedCtx [ctx var ->
+  ctx_weaken: UnrestrictedCtx * S -> UnrestrictedCtx [ctx, var ->
     -- Check that the variable supports weakening
-    let typ = ctx.bindings[var] in
-    if not typ.weakening {
-      error("Cannot weaken variable of type that does not support weakening")
-    }
+    ctx bindings var get |> typ
+    typ weakening not [
+      "Cannot weaken variable of type that does not support weakening" error
+    ] [
+      T.U
+    ] if
 
     -- Remove variable from context
     {
-      bindings: ctx.bindings - var,
-      used: ctx.used - var
+      bindings: ctx bindings var -,
+      used: ctx used var -
     }
   ]
 
   --[[
     ctx_contract adds contraction to the context, allowing variables to be used multiple times
   ]]--
-  ctx_contract: UnrestrictedCtx * S -> UnrestrictedCtx [ctx var ->
+  ctx_contract: UnrestrictedCtx * S -> UnrestrictedCtx [ctx, var ->
     -- Check that the variable supports contraction
-    let typ = ctx.bindings[var] in
-    if not typ.contraction {
-      error("Cannot contract variable of type that does not support contraction")
-    }
+    ctx bindings var get |> typ
+    "Cannot contract variable of type that does not support contraction" error iff typ contraction not or_else T.U
 
     -- Mark the variable as supporting multiple uses
     ctx
@@ -281,22 +274,19 @@
   --[[
     merge_usage_counts merges usage counts from two contexts
   ]]--
-  merge_usage_counts: (S:-> Z) * (S:-> Z) -> (S:-> Z) [counts1 counts2 ->
-    let result = {} in
+  merge_usage_counts: (S:-> Z) * (S:-> Z) -> (S:-> Z) [counts1, counts2 ->
+    {} |> result
 
     -- Add all keys from counts1
-    keys(counts1) |> foreach [key ->
-      result = result cup { key: counts1[key] }
-    ] in
+    counts1 keys [key ->
+      result { key: counts1 key get } cup |> result
+    ] foreach
 
     -- Add all keys from counts2, summing if already present
-    keys(counts2) |> foreach [key ->
-      if key in result {
-        result = result cup { key: result[key] + counts2[key] }
-      } else {
-        result = result cup { key: counts2[key] }
-      }
-    ] in
+    counts2 keys [key ->
+      result { key: result key get counts2 key get + } cup |> result iff key result in or_else
+        result { key: counts2 key get } cup |> result
+    ] foreach
 
     result
   ]
@@ -332,73 +322,86 @@
   structure: {
     -- Map Unrestricted to a cartesian closed category
     objects: UnrestrictedType,
-    morphisms: [a b -> UnrestrictedFn],
+    morphisms: [a, b -> UnrestrictedFn],
 
     -- Base category structure
-    dom: [f -> f.domain],
-    cod: [f -> f.codomain],
-    id: [a -> unrestricted_fn("x", a, [x -> x])],
-    compose: [f g -> unrestricted_fn("x", f.domain, [x -> g(f(x))])],
+    dom: [f -> f domain],
+    cod: [f -> f codomain],
+    id: [a -> "x" a [x -> x] unrestricted_fn],
+    compose: [f, g -> "x" f domain [x -> x f g] unrestricted_fn],
 
     -- Cartesian structure
-    product: [a b -> Product(a, b)],
-    proj1: [a b -> unrestricted_fn("p", Product(a, b), [p -> let (x, _) = p in x])],
-    proj2: [a b -> unrestricted_fn("p", Product(a, b), [p -> let (_, y) = p in y])],
-    pair: [f g -> unrestricted_fn("x", f.domain, [x -> (f(x), g(x))])],
+    product: [a, b -> a b Product],
+    proj1: [a, b -> "p" a b Product [p -> p [x, _ ->]] unrestricted_fn],
+    proj2: [a, b -> "p" a b Product [p -> p [_, y ->]] unrestricted_fn],
+    pair: [f, g -> "x" f domain [x -> x f x g product_intro] unrestricted_fn],
 
     -- Terminal object
-    terminal: { base: (), weakening: true, contraction: true },
-    terminal_map: [a -> unrestricted_fn("x", a, [_ -> ()])],
+    terminal: { base: T.U, weakening: true, contraction: true },
+    terminal_map: [a -> "x" a [_ -> T.U] unrestricted_fn],
 
     -- Closed structure
-    internal_hom: [a b -> Function(a, b)],
-    eval: [a b -> unrestricted_fn("p", Product(Function(a, b), a), [p ->
-      let (f, x) = p in
-      f(x)
-    ])],
-    curry: [a b c f -> unrestricted_fn("x", a, [x ->
-      unrestricted_fn("y", b, [y -> f((x, y))])
-    ])],
+    internal_hom: [a, b -> a b Function],
+    eval: [a, b -> "p" a b Function a Product [p ->
+      p [f, x ->]
+      x f
+    ] unrestricted_fn],
+    curry: [a, b, c, f -> "x" a [x ->
+      "y" b [y -> (x, y) f] unrestricted_fn
+    ] unrestricted_fn],
 
     -- Unrestricted structure (allows both weakening and contraction)
-    discard: [a -> unrestricted_fn("x", a, [x -> drop(x)])],
-    duplicate: [a -> unrestricted_fn("x", a, [x ->
-      let (x1, x2) = copy(x) in
+    discard: [a -> "x" a [x -> x drop] unrestricted_fn],
+    duplicate: [a -> "x" a [x ->
+      x copy [x1, x2 ->]
       (x1, x2)
-    ])],
+    ] unrestricted_fn],
 
     -- Laws for unrestricted category
     laws: {
       -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
-      associativity: forall [f g h ->
-        compose(compose(f, g), h) == compose(f, compose(g, h))
+      associativity: forall [f, g, h ->
+        f g compose h compose
+        f g h compose compose
+        veq
       ],
 
       -- Identity: id ∘ f = f = f ∘ id
       identity: forall [f ->
-        compose(id(dom(f)), f) == f && compose(f, id(cod(f))) == f
+        f dom id f compose
+        f veq
+        f f cod id compose
+        veq and
       ],
 
       -- Cartesian laws
-      cartesian: forall [a b c f g ->
-        compose(pair(f, g), proj1(b, c)) == f &&
-        compose(pair(f, g), proj2(b, c)) == g
+      cartesian: forall [a, b, c, f, g ->
+        f g pair b c proj1 compose
+        f veq
+        f g pair b c proj2 compose
+        g veq and
       ],
 
       -- Closed category laws
-      closed: forall [a b c f ->
-        eval(b, c)(curry(a, b, c, f)(x), y) == f((x, y))
+      closed: forall [a, b, c, f ->
+        a b c f curry -> x
+        (x, y)
+        b c eval
+        (x, y) f veq
       ],
 
       -- Unrestricted laws (weakening and contraction)
-      weakening: forall [a f ->
-        compose(f, discard(cod(f))) == discard(dom(f))
+      weakening: forall [a, f ->
+        f cod discard
+        f compose
+        f dom discard veq
       ],
 
-      contraction: forall [a f ->
-        let diag = duplicate(a) in
-        let f_pair = pair(f, f) in
-        compose(diag, f_pair) == compose(f, diag)
+      contraction: forall [a, f ->
+        a duplicate -> diag
+        f f pair -> f_pair
+        diag f_pair compose
+        f diag compose veq
       ]
     }
   }
@@ -410,16 +413,16 @@
   --[[
     Example: Standard function that uses arguments freely
   ]]--
-  example.standard_function: () -> (Z -> Z) [->
+  example.standard_function: T.U -> (Z -> Z) [_ ->
     -- Create a standard unrestricted function
-    let int_type = { base: Z, weakening: true, contraction: true } in
+    Z true true [base, weakening, contraction ->] |> int_type
 
     -- Define a function that uses its argument multiple times
-    let square = unrestricted_fn("x", int_type, [x ->
+    "x" int_type [x ->
       -- Use x twice (copying)
-      let (x1, x2) = copy(x) in
-      x1 * x2
-    ]) in
+      x copy [x1, x2 ->]
+      x1 x2 *
+    ] unrestricted_fn |> square
 
     -- Return the function
     square
@@ -430,35 +433,49 @@
   ]]--
   example.process_data: [Z] -> Z [data ->
     -- Define types
-    let int_type = { base: Z, weakening: true, contraction: true } in
-    let list_type = { base: [Z], weakening: true, contraction: true } in
+    { base: Z, weakening: true, contraction: true } |> int_type
+    { base: [Z], weakening: true, contraction: true } |> list_type
 
     -- Define processing functions
-    let sum = unrestricted_fn("list", list_type, [list ->
+    "list" list_type [list ->
       -- Implement sum using fold
-      fold([acc x -> acc + x], 0, list)
-    ]) in
+      0 [acc, x -> acc x +] list fold
+    ] unrestricted_fn |> sum
 
-    let avg = unrestricted_fn("list", list_type, [list ->
+    "list" list_type [list ->
       -- Make multiple uses of the list (contraction)
-      let (list1, list2) = copy(list) in
+      list copy [list1, list2 ->]
 
       -- Calculate sum and length
-      let s = sum(list1) in
-      let len = length(list2) in
+      list1 sum |> s
+      list2 length |> len
 
       -- Calculate average
-      if len == 0 then 0 else s / len
-    ]) in
+      len 0 veq [0] [s len /] if
+    ] unrestricted_fn |> avg
 
     -- Process the data (using it in multiple ways)
-    let (data1, data2) = copy(data) in
-    let result = avg(data1) in
+    data copy [data1, data2 ->]
+    data1 avg |> result
 
     -- Optionally use data2 or discard it (weakening)
-    drop(data2)
+    data2 drop
 
     -- Return result
+    result
+  ]
+
+  --[[
+    to_path converts a dot-separated string path to an array of keys.
+  ]]--
+  to_path: S -> [S] [path_str ->
+    path_str "." Prim split |> parts
+
+    [] |> result
+    parts [part ->
+      result [part] + iff part "" != or_else result |> result
+    ] foreach
+
     result
   ]
 }

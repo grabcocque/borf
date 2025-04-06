@@ -1,16 +1,16 @@
 --[[
-  Dagger Categories
+  Reversible Operations - Tools for Invertible Transformations
 
-  This module defines dagger categories, which are categories equipped with
-  an identity-on-objects, contravariant, involutive functor called the dagger (†).
+  This module provides tools for creating operations that can be undone or
+  reversed in a predictable way.
 
-  For a morphism f: A -> B, its dagger is f†: B -> A.
-  Laws:
-  - (f†)† = f
-  - (g ∘ f)† = f† ∘ g†
-  - id† = id
-
-  Crucial in areas like quantum computing (category C*-algebras, Hilb).
+  Practical applications:
+  - Data compression/decompression pairs
+  - Encryption/decryption operations
+  - Format conversion with round-trip guarantees
+  - Undo/redo functionality in applications
+  - Reversible state transformations in simulations
+  - Image processing with invertible filters
 ]]--
 
 @Dagger: {
@@ -36,7 +36,7 @@
 
   E: typ cup op cup fn
 
-  vis: E |> [e -> true]
+  vis: E |> [e -> e true]
 
   deps: {
     (@Dagger, @Cat, true),     -- Depends on Category definition
@@ -82,8 +82,8 @@
     Requires the base category and the dagger operation on morphisms.
   ]]--
   dagger_category: @Cat.!Category * (@Cat.!Morphism -> @Cat.!Morphism) -> !DaggerCategory [
-    cat dagger_fn ->
-    let laws_ok = check_dagger_laws(cat, dagger_fn) in
+    cat, dagger_fn ->
+    cat dagger_fn check_dagger_laws -> laws_ok
     {
       _type: "DaggerCategory",
       base_category: cat,
@@ -97,9 +97,9 @@
     of its dagger category.
   ]]--
   dagger_op: !DaggerCategory * @Cat.!Morphism -> @Cat.!Morphism [
-    dagger_cat f ->
+    dagger_cat, f ->
     -- Check if f is actually a morphism in dagger_cat.base_category
-    dagger_cat.dagger_morphism_fn(f)
+    f dagger_cat dagger_morphism_fn
   ]
 
   -- Define the operator alias
@@ -109,8 +109,8 @@
     is_self_adjoint checks if a morphism f is equal to its dagger (f† = f).
   ]]--
   is_self_adjoint: !DaggerCategory * @Cat.!Morphism -> Bool [
-    dagger_cat f ->
-    f == dagger_op(dagger_cat, f) -- Requires morphism equality check
+    dagger_cat, f ->
+    f dagger_cat dagger_op f ceq
   ]
 
   --[[
@@ -118,28 +118,28 @@
     Requires f to be an endomorphism (A -> A) or defined appropriately.
   ]]--
   is_unitary: !DaggerCategory * @Cat.!Morphism -> Bool [
-    dagger_cat f ->
-    let cat = dagger_cat.base_category in
-    let f_dagger = dagger_op(dagger_cat, f) in
+    dagger_cat, f ->
+    dagger_cat base_category -> cat
+    f dagger_cat dagger_op -> f_dagger
 
     -- Check domain/codomain compatibility for composition
-    let dom_f = @Cat.dom(cat, f) in
-    let cod_f = @Cat.cod(cat, f) in
-    let dom_f_dagger = @Cat.dom(cat, f_dagger) in
-    let cod_f_dagger = @Cat.cod(cat, f_dagger) in
+    f cat dom -> dom_f
+    f cat cod -> cod_f
+    f_dagger cat dom -> dom_f_dagger
+    f_dagger cat cod -> cod_f_dagger
 
-    if not (cod_f == dom_f_dagger && cod_f_dagger == dom_f) {
-      error("Morphism and its dagger domain/codomain mismatch for unitarity check.")
+    {
+      "Morphism and its dagger domain/codomain mismatch for unitarity check." error
       false
+    } iff cod_f dom_f_dagger ceq cod_f_dagger dom_f ceq and not or_else {
+      f_dagger f cat compose -> comp1
+      dom_f cat id -> id_dom_f
+
+      f f_dagger cat compose -> comp2
+      cod_f cat id -> id_cod_f
+
+      comp1 id_dom_f ceq comp2 id_cod_f ceq and
     }
-
-    let comp1 = @Cat.compose(cat, f_dagger, f) in
-    let id_dom_f = @Cat.id(cat, dom_f) in
-
-    let comp2 = @Cat.compose(cat, f, f_dagger) in
-    let id_cod_f = @Cat.id(cat, cod_f) in
-
-    (comp1 == id_dom_f) && (comp2 == id_cod_f)
   ]
 
   --[[
@@ -149,7 +149,7 @@
     3. Identity preservation: id† = id
   ]]--
   check_dagger_laws: @Cat.!Category * (@Cat.!Morphism -> @Cat.!Morphism) -> Bool [
-    cat dagger_fn ->
+    cat, dagger_fn ->
     -- Requires iterating over morphisms and composable pairs.
     -- Placeholder implementation: Assume true for now.
     true
@@ -160,45 +160,75 @@
   --------------------------------------------------
 
   --[[
-    Structure mapping for Dagger Categories.
-    A dagger category *is* a category with additional structure (the dagger functor).
-    The laws define the properties this structure must satisfy.
+    Reliable Patterns for Reversible Operations
+
+    These patterns help you build operations that can be safely undone or reversed,
+    with guarantees that data won't be lost or corrupted in the process.
   ]]--
   structure: {
-    -- A Dagger Category is based on an underlying Category
-    base: @Cat.structure, -- Inherits basic category laws
+    -- Core patterns for reversible operations
+    patterns: {
+      -- Basic reversible operation pair
+      reversible_pair: [forward, backward -> {
+        apply: forward,
+        reverse: backward,
 
-    -- Additional structure: Dagger
-    dagger: (@Cat.!Morphism -> @Cat.!Morphism), -- The dagger operation
+        -- Verify the round-trip works correctly
+        verify: [data -> data forward backward data ==]
+      }],
 
-    law: {
-      involutivity: [dagger_cat f ->
-        -- (f†)† = f
-        let f_dagger = dagger_op(dagger_cat, f) in
-        let f_dagger_dagger = dagger_op(dagger_cat, f_dagger) in
-        f_dagger_dagger == f
+      -- Self-reversing toggle operation
+      toggle_operation: [operation -> {
+        toggle: operation,
+
+        -- Apply twice to get back to start
+        verify: [data -> data operation operation data ==]
+      }],
+
+      -- Composition of reversible operations
+      compose_reversible: [op1, op2 -> {
+        -- Forward composition
+        forward: [data -> data op1 forward op2 forward],
+
+        -- Backward composition (in reverse order!)
+        backward: [data -> data op2 backward op1 backward],
+
+        -- Verify composition works
+        verify: [data -> data forward backward data ==]
+      }]
+    },
+
+    -- Guarantees that reversible operations provide
+    guarantees: {
+      -- Applying an operation and then its reverse gets back the original
+      round_trip: [forward, backward, data ->
+        -- What this guarantees: Doing and undoing gives the original
+        data forward backward data ==
       ],
 
-      contravariance: [dagger_cat f g -> -- where g, f are composable
-        -- (g ∘ f)† = f† ∘ g†
-        let cat = dagger_cat.base_category in
-        let g_comp_f = @Cat.compose(cat, g, f) in
-        let lhs = dagger_op(dagger_cat, g_comp_f) in
-
-        let f_dagger = dagger_op(dagger_cat, f) in
-        let g_dagger = dagger_op(dagger_cat, g) in
-        -- Need to ensure f† and g† are composable in this order
-        let rhs = @Cat.compose(cat, f_dagger, g_dagger) in
-        lhs == rhs
+      -- Applying a self-reversing operation twice gets back the original
+      involution: [operation, data ->
+        -- What this guarantees: Operation cancels itself out when applied twice
+        data operation operation data ==
       ],
 
-      identity: [dagger_cat obj ->
-        -- id_A† = id_A
-        let cat = dagger_cat.base_category in
-        let id_obj = @Cat.id(cat, obj) in
-        let id_obj_dagger = dagger_op(dagger_cat, id_obj) in
-        id_obj_dagger == id_obj
+      -- Order matters when reversing a composite operation
+      reverse_composition: [op1, op2, data ->
+        -- What this guarantees: Reversing combined operations works correctly
+        -- when done in the correct order (reverse of the original order)
+        data op1 op2 -> transformed
+        transformed op2 reverse op1 reverse -> restored
+        data restored ==
       ]
+    },
+
+    -- Best practices for working with reversible operations
+    best_practices: {
+      -- 1. Always test round-trip with representative test data
+      -- 2. Don't discard information that would be needed for reversal
+      -- 3. Handle all edge cases in both directions
+      -- 4. Design the forward and reverse operations together
+      -- 5. Document the constraints that make operations reversible
     }
   }
 
@@ -208,31 +238,67 @@
 
   example: {
     --[[
-      Example: Category of Relations (Rel)
-      Objects are sets, morphisms R: A -> B are relations (subsets of A x B).
-      Composition is relational composition.
-      Dagger R†: B -> A is the converse relation {(b, a) | (a, b) ∈ R}.
+      Example: Compression and Decompression Pair
+
+      Create paired functions that compress and decompress data, ensuring
+      that running both operations in sequence recovers the original data.
     ]]--
-    rel_dagger_example: () -> ?(!DaggerCategory) [ ->
-      -- Requires a definition of the category Rel
-      -- let RelCat = @Rel.category in
-      -- let dagger_fn = [R -> @Rel.converse(R)] in
-      -- dagger_category(RelCat, dagger_fn)
-      ?None -- Placeholder
+    compression_example: T.U -> !DaggerCategory [_ ->
+      -- Example of a reversible data transformation
+      [data ->
+        -- Simple compression (just an example)
+        data string_to_bytes run_length_encode -> compressed
+        compressed
+      ] -> compress_fn
+
+      [compressed ->
+        -- Matching decompression function
+        compressed run_length_decode bytes_to_string -> original
+        original
+      ] -> decompress_fn
+
+      -- Create the paired operations
+      {
+        compress: compress_fn,
+        decompress: decompress_fn,
+
+        -- Can verify: decompress(compress(x)) = x
+        round_trip: [data -> data compress_fn decompress_fn]
+      }
     ],
 
     --[[
-      Example: Category of Hilbert Spaces (Hilb)
-      Objects are Hilbert spaces, morphisms f: H1 -> H2 are bounded linear maps.
-      Composition is function composition.
-      Dagger f†: H2 -> H1 is the adjoint operator.
+      Example: Encryption System
+
+      An encryption system with matching encryption and decryption operations
+      that ensure data can be securely transformed and restored.
     ]]--
-    hilb_dagger_example: () -> ?(!DaggerCategory) [ ->
-      -- Requires a definition of the category Hilb
-      -- let HilbCat = @Hilb.category in
-      -- let dagger_fn = [f -> @Hilb.adjoint(f)] in
-      -- dagger_category(HilbCat, dagger_fn)
-      ?None -- Placeholder
+    encryption_example: T.U -> !DaggerCategory [_ ->
+      -- Example encryption system
+      [data, key ->
+        -- Encrypt data using key
+        data key apply_cipher -> encrypted
+        encrypted
+      ] -> encrypt_fn
+
+      [encrypted, key ->
+        -- Decrypt using the same key
+        encrypted key reverse_cipher -> original
+        original
+      ] -> decrypt_fn
+
+      -- Create the paired operations
+      {
+        encrypt: encrypt_fn,
+        decrypt: decrypt_fn,
+
+        -- Ensures: decrypt(encrypt(data, key), key) = data
+        is_secure: [data, key ->
+          data key encrypt_fn -> encrypted
+          encrypted key decrypt_fn -> decrypted
+          data decrypted same_content verify
+        ]
+      }
     ]
   }
-} 
+}

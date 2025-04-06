@@ -1,9 +1,14 @@
 --[[
-  Streams
+  Data Stream Tools - Process Data Efficiently and Elegantly
 
-  A friendly, fluent interface for working with generators.
-  This module provides a simpler way to create and manipulate data streams
-  without having to understand the underlying implementation details.
+  This module provides powerful tools for working with sequences of data, letting you:
+
+  - Process collections with minimal memory usage
+  - Work with potentially infinite data sources
+  - Transform data through clean, chainable operations
+  - Express complex data pipelines in readable code
+  - Process large datasets without loading everything at once
+  - Perform lazy evaluation for better performance
 ]]--
 
 @Stream: {
@@ -60,7 +65,11 @@
   --------------------------------------------------
 
   --[[
-    Stream represents a fluent wrapper around a Generator.
+    Stream - Fluent data processing pipeline
+
+    A chainable sequence of operations that process data one element at a time.
+    Streams let you transform, filter, and analyze data efficiently through
+    a series of steps that only process elements when needed.
   ]]--
   Stream: {
     generator: @Generator.Generator.a
@@ -71,7 +80,13 @@
   --------------------------------------------------
 
   --[[
-    stream creates a new Stream from a Generator.
+    stream - Create from a generator
+
+    Wraps a low-level generator in a Stream for easier manipulation.
+    Use this when you already have a generator and want to use the
+    Stream interface for cleaner data processing.
+
+    Example: my_generator |> stream |> map([x -> x * 2]) |> collect
   ]]--
   stream: @Generator.Generator.a -> Stream.a [generator ->
     {
@@ -80,38 +95,66 @@
   ]
 
   --[[
-    from_array creates a Stream from an array.
+    from_array - Create from a collection
+
+    Converts an array or other collection into a Stream.
+    Perfect for when you want to process existing collections
+    with Stream's powerful operations.
+
+    Example: [1, 2, 3, 4, 5] |> from_array |> filter([x -> x % 2 == 0]) |> collect
   ]]--
   from_array: [a] -> Stream.a [arr ->
-    stream(@Generator.from_array(arr))
+    arr @Generator.from_array stream
   ]
 
   --[[
-    from_range creates a Stream from a range of numbers.
+    from_range - Create from a numeric sequence
+
+    Generates a Stream of numbers in a specified range and increment.
+    Great for when you need a sequence of numbers without creating the
+    entire array in memory first.
+
+    Example: from_range(1, 100, 2) creates odd numbers from 1 to 99
   ]]--
-  from_range: Z * (Z | Null) * Z -> Stream.Z [start end step ->
-    stream(@Generator.range(start, end, step))
+  from_range: Z * (Z | Null) * Z -> Stream.Z [start, end, step ->
+    start end step @Generator.range stream
   ]
 
   --[[
-    from_function creates a Stream from a function.
+    from_function - Create from a state function
+
+    Builds a Stream using a function that generates each value.
+    Perfect for complex sequences, infinite series, or when values
+    depend on previous calculations.
+
+    Example: from_function([n -> n * 2], 1) creates stream of powers of 2
   ]]--
-  from_function: (Any -> a | Null) * Any -> Stream.a [fn initial_state ->
-    stream(@Generator.from_function(fn, initial_state))
+  from_function: (Any -> a | Null) * Any -> Stream.a [fn, initial_state ->
+    fn initial_state @Generator.from_function stream
   ]
 
   --[[
-    repeat creates a Stream that repeats a value.
+    repeat - Create a sequence of identical values
+
+    Generates a Stream that outputs the same value multiple times.
+    Useful for padding, testing, or generating fixed sequences.
+
+    Example: repeat("Hello", 3) creates stream of "Hello" 3 times
   ]]--
-  repeat: a * (Z | Null) -> Stream.a [value count ->
-    stream(@Generator.repeat(value, count))
+  repeat: a * (Z | Null) -> Stream.a [value, count ->
+    value count @Generator.repeat stream
   ]
 
   --[[
-    cycle creates a Stream that cycles through an array.
+    cycle - Create an endlessly repeating sequence
+
+    Generates a Stream that loops through a collection infinitely.
+    Perfect for round-robin processing, rotation patterns, or cyclic data.
+
+    Example: cycle(["red", "green", "blue"]) creates repeating color pattern
   ]]--
   cycle: [a] -> Stream.a [values ->
-    stream(@Generator.cycle(values))
+    values @Generator.cycle stream
   ]
 
   --------------------------------------------------
@@ -119,63 +162,100 @@
   --------------------------------------------------
 
   --[[
-    map applies a function to each value in the Stream.
+    map - Transform each element
+
+    Applies a function to transform each element into something new.
+    The workhorse of data processing - use it whenever you need to
+    convert, extract, or calculate new values from stream elements.
+
+    Example: numbers |> map([n -> n * n]) transforms to squares
   ]]--
-  map: Stream.a * (a -> b) -> Stream.b [strm transform ->
-    stream(@Generator.map(strm.generator, transform))
+  map: Stream.a * (a -> b) -> Stream.b [strm, transform ->
+    strm generator transform @Generator.map stream
   ]
 
   --[[
-    filter keeps only values that satisfy a predicate.
+    filter - Select matching elements
+
+    Keeps only elements that match a condition and discards the rest.
+    Use it to remove unwanted data or focus on specific items.
+
+    Example: users |> filter([u -> u.age >= 18]) keeps only adults
   ]]--
-  filter: Stream.a * (a -> Bool) -> Stream.a [strm predicate ->
-    stream(@Generator.filter(strm.generator, predicate))
+  filter: Stream.a * (a -> Bool) -> Stream.a [strm, predicate ->
+    strm generator predicate @Generator.filter stream
   ]
 
   --[[
-    take limits the Stream to a certain number of values.
+    take - Limit to a specific number of elements
+
+    Keeps only the first N elements and discards the rest.
+    Perfect for pagination, previews, or limiting result size.
+
+    Example: infinite_numbers |> take(10) limits to first 10 elements
   ]]--
-  take: Stream.a * Z -> Stream.a [strm count ->
-    stream(@Generator.take(strm.generator, count))
+  take: Stream.a * Z -> Stream.a [strm, count ->
+    strm generator count @Generator.take stream
   ]
 
   --[[
-    drop skips a certain number of values in the Stream.
+    drop - Skip a specific number of elements
+
+    Skips the first N elements and keeps the rest.
+    Useful for pagination, skipping headers, or offsetting results.
+
+    Example: log_lines |> drop(5) skips the first 5 header lines
   ]]--
-  drop: Stream.a * Z -> Stream.a [strm count ->
-    stream(@Generator.drop(strm.generator, count))
+  drop: Stream.a * Z -> Stream.a [strm, count ->
+    strm generator count @Generator.drop stream
   ]
 
   --[[
     skip is an alias for drop.
   ]]--
-  skip: Stream.a * Z -> Stream.a [strm count ->
-    drop(strm, count)
+  skip: Stream.a * Z -> Stream.a [strm, count ->
+    strm count drop
   ]
 
   --[[
     limit is an alias for take.
   ]]--
-  limit: Stream.a * Z -> Stream.a [strm count ->
-    take(strm, count)
+  limit: Stream.a * Z -> Stream.a [strm, count ->
+    strm count take
   ]
 
   --[[
-    zip combines two Streams into one that produces pairs of values.
+    zip - Combine two streams into pairs
+
+    Merges two streams by pairing corresponding elements together.
+    Perfect for joining related data, coordinates, or creating mappings.
+
+    Example: names |> zip(ages) creates pairs of (name, age)
   ]]--
   zip: Stream.a * Stream.b -> Stream.(a * b) [strm1 strm2 ->
     stream(@Generator.zip(strm1.generator, strm2.generator))
   ]
 
   --[[
-    concat appends one Stream to another.
+    concat - Join streams sequentially
+
+    Combines two streams by putting one after the other.
+    Useful for merging datasets, appending new data, or sequential processing.
+
+    Example: header_rows |> concat(data_rows) joins header with data
   ]]--
   concat: Stream.a * Stream.a -> Stream.a [strm1 strm2 ->
     stream(strm1.generator ++ strm2.generator)
   ]
 
   --[[
-    flatten turns a Stream of Streams into a single Stream.
+    flatten - Merge nested streams
+
+    Converts a stream of streams into a single flat stream.
+    Essential for handling nested data structures, hierarchical results,
+    or flattening grouped data.
+
+    Example: user_groups |> map([g -> g.members]) |> flatten gets all members
   ]]--
   flatten: Stream.(Stream.a) -> Stream.a [strm ->
     stream(
@@ -191,7 +271,12 @@
   --------------------------------------------------
 
   --[[
-    collect gathers all values from a Stream into an array.
+    collect - Gather all elements into an array
+
+    Processes the entire stream and returns all results as an array.
+    Use this as the final step when you need all processed results at once.
+
+    Example: numbers |> filter([n -> n > 0]) |> map([n -> n * 2]) |> collect
   ]]--
   collect: Stream.a -> [a] [strm ->
     @Generator.collect(strm.generator)
@@ -205,100 +290,217 @@
   ]
 
   --[[
-    reduce folds the Stream values into a single result.
+    reduce - Combine all elements into one result
+
+    Processes all elements to produce a single combined result.
+    Perfect for sums, averages, concatenation, or any cumulative operation.
+
+    Example: numbers |> reduce([sum n -> sum + n], 0) calculates the total
   ]]--
   reduce: Stream.a * (b * a -> b) * b -> b [strm reducer initial ->
     @Generator.reduce(strm.generator, reducer, initial)
   ]
 
   --[[
-    for_each executes a function for each value in the Stream.
+    for_each - Process each element for side effects
+
+    Runs a function on each element without changing the result.
+    Use this when you need to perform actions like logging, sending,
+    or displaying each processed element.
+
+    Example: user_data |> for_each([user -> log(user.activity)]) logs activities
   ]]--
   for_each: Stream.a * (a -> ()) -> () [strm fn ->
     @Generator.for_each(strm.generator, fn)
   ]
 
   --[[
-    find searches for a value in the Stream that matches a predicate.
+    find - Locate the first matching element
+
+    Returns the first element that satisfies a condition.
+    Stops processing as soon as a match is found, making it efficient
+    for large or infinite streams.
+
+    Example: users |> find([u -> u.id == target_id]) finds a user by ID
   ]]--
   find: Stream.a * (a -> Bool) -> a | Null [strm predicate ->
     @Generator.find(strm.generator, predicate)
   ]
 
   --[[
-    any checks if any value in the Stream satisfies a predicate.
+    any - Check if at least one element matches
+
+    Tests if any element in the stream satisfies a condition.
+    Stops processing as soon as a match is found, making it efficient
+    even for large datasets.
+
+    Example: usernames |> any([name -> name == "admin"]) checks for admin
   ]]--
   any: Stream.a * (a -> Bool) -> Bool [strm predicate ->
     @Generator.any(strm.generator, predicate)
   ]
 
   --[[
-    all checks if all values in the Stream satisfy a predicate.
+    all - Check if every element matches
+
+    Tests if all elements in the stream satisfy a condition.
+    Stops processing as soon as any element fails the test,
+    making it efficient for validation.
+
+    Example: passwords |> all([pw -> pw.length >= 8]) validates min length
   ]]--
   all: Stream.a * (a -> Bool) -> Bool [strm predicate ->
     @Generator.all(strm.generator, predicate)
   ]
 
   --[[
-    count returns the number of elements in a Stream.
+    count - Count the number of elements
+
+    Returns the total number of elements in the stream.
+    Use this when you need just the quantity of elements rather
+    than the elements themselves.
+
+    Example: emails |> filter([e -> e.contains("@company.com")]) |> count
   ]]--
   count: Stream.a -> Z [strm ->
     @Generator.count(strm.generator)
   ]
 
   --[[
-    is_empty checks if a Stream is empty.
+    is_empty - Check if stream contains any elements
+
+    Tests if the stream has no elements.
+    Useful for validation, error handling, or conditional processing.
+
+    Example: results |> filter([r -> r.has_error]) |> is_empty checks success
   ]]--
   is_empty: Stream.a -> Bool [strm ->
     @Generator.is_empty(strm.generator)
   ]
 
   --------------------------------------------------
-  -- Examples
+  -- PRACTICAL EXAMPLES
   --------------------------------------------------
 
   example: {
     --[[
-      Example 1: Basic Stream operations
+      Example 1: Data Transformation
+
+      This example shows a typical data processing pipeline that:
+      1. Takes a range of numbers
+      2. Doubles each value
+      3. Filters for values greater than 5
+      4. Collects the results
+
+      This pattern is common for ETL processes, data cleaning, and transformations.
     ]]--
-    basic_usage: () -> [Z] [->
+    data_transformation: () -> [Z] [->
       from_range(1, 10, 1)
         |> [s -> map(s, [x -> x * 2])]
         |> [s -> filter(s, [x -> x > 5])]
         |> collect
+      -- Returns [6, 8, 10, 12, 14, 16, 18, 20]
     ],
 
     --[[
-      Example 2: Combining Streams
-    ]]--
-    combining_streams: () -> [(S * Z)] [->
-      let letters = from_array(["a", "b", "c"]) in
-      let numbers = from_range(1, 4, 1) in
+      Example 2: Data Joining
 
-      zip(letters, numbers)
+      This example demonstrates combining related data from two different sources:
+      1. Creates a stream of user names
+      2. Creates a stream of corresponding roles
+      3. Pairs them together to create user role assignments
+
+      This pattern is useful for database joins, CSV processing, or data merging.
+    ]]--
+    data_joining: () -> [(S * S)] [->
+      let users = from_array(["alice", "bob", "charlie"]) in
+      let roles = from_array(["admin", "user", "editor"]) in
+
+      zip(users, roles)
         |> collect
+      -- Returns [("alice", "admin"), ("bob", "user"), ("charlie", "editor")]
     ],
 
     --[[
-      Example 3: Processing a large dataset
+      Example 3: Big Data Processing
+
+      This example shows how to efficiently work with large datasets:
+      1. Creates a stream simulating millions of records
+      2. Filters for even numbers (like selecting specific records)
+      3. Transforms the data (like enrichment or normalization)
+      4. Aggregates to a final result without loading everything in memory
+
+      This pattern is essential for log processing, analytics, or big data pipelines.
     ]]--
-    process_dataset: () -> Z [->
-      -- Simulate a large dataset
+    big_data_processing: () -> Z [->
+      -- Simulate a large dataset (millions of records)
       let data = from_range(1, 1000000, 1) in
 
-      -- Process it efficiently
+      -- Process it using constant memory regardless of input size
       data
-        |> [s -> filter(s, [x -> x % 2 == 0])]
-        |> [s -> map(s, [x -> x * x])]
-        |> [s -> reduce(s, [acc x -> acc + x], 0)]
+        |> [s -> filter(s, [x -> x % 2 == 0])] -- Select only even numbers
+        |> [s -> map(s, [x -> x * x])]         -- Square each value
+        |> [s -> reduce(s, [acc x -> acc + x], 0)] -- Sum them all
+      -- Returns sum of squares of even numbers from 1 to 1000000
     ],
 
     --[[
-      Example 4: Infinite stream with termination
+      Example 4: Infinite Data Sources
+
+      This example shows working with potentially infinite data:
+      1. Creates a stream that theoretically never ends
+      2. Processes it until a specific condition is met
+      3. Terminates without exhausting memory
+
+      This pattern is valuable for sensor data, user events, or monitoring.
     ]]--
-    infinite_stream: () -> Z | Null [->
-      from_function([n -> n * n], 1)
-        |> [s -> find(s, [x -> x > 1000])]
+    infinite_data_source: () -> Z | Null [->
+      -- Create an infinite sequence of squares: 1, 4, 9, 16, 25, ...
+      from_function([n -> n + 1], 1)  -- Generate 1, 2, 3, 4, ...
+        |> [s -> map(s, [n -> n * n])] -- Square each value
+        |> [s -> find(s, [x -> x > 1000])] -- Stop when we find one > 1000
+      -- Returns 1024 (32²) efficiently without generating all values
+    ],
+
+    --[[
+      Example 5: Data Validation Pipeline
+
+      This example demonstrates using streams for validation:
+      1. Takes a collection of input data
+      2. Applies multiple validation rules
+      3. Collects all validation errors into a report
+
+      This pattern is useful for form validation, data quality checks, or testing.
+    ]]--
+    validation_pipeline: () -> [S] [->
+      -- Simulate a batch of data records to validate
+      let records = from_array([
+        {id: 1, email: "user@example.com", age: 25},
+        {id: 2, email: "invalid-email", age: 17},
+        {id: 3, email: "another@example.com", age: 15},
+        {id: 4, email: "test@example.com", age: 42}
+      ]) in
+
+      -- Apply multiple validation rules and collect all errors
+      records
+        |> [s -> map(s, [record ->
+          let errors = [] in
+          let errors = if record.age < 18 {
+            errors ++ ["Age " + record.age.to_string() + " below minimum"]
+          } else {
+            errors
+          } in
+          let errors = if not (record.email |> contains("@")) {
+            errors ++ ["Invalid email format: " + record.email]
+          } else {
+            errors
+          } in
+          {id: record.id, errors: errors}
+        ])]
+        |> [s -> filter(s, [result -> result.errors |> length > 0])]
+        |> [s -> map(s, [result -> "ID " + result.id.to_string() + ": " + result.errors.join(", ")])]
+        |> collect
+      -- Returns validation failures with details
     ]
   }
 }

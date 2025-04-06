@@ -1,6 +1,6 @@
 --[[
   Coroutines
-  
+
   This module defines cooperative coroutines using linear types and direct composition
   rather than monadic operations. Coroutines enable cooperative multitasking with
   explicit suspension points, allowing computations to be paused and resumed.
@@ -14,7 +14,7 @@
     !Resume
     !Yield
     !Scheduler
-    
+
     -- Coroutine transformations
     !CoroutineMap
     !CoroutineZip
@@ -34,22 +34,22 @@
     yield
     resume
     completed
-    
+
     -- Constructors
     from_function
     from_generator
-    
+
     -- Transformation functions
     map
     sequence
     zip
     combine
-    
+
     -- Execution functions
     run
     run_to_completion
     run_with_scheduler
-    
+
     -- Utility functions
     transform
     is_completed
@@ -222,13 +222,13 @@
     coroutine(
       [state ->
         let next_result = @Generator.next(state.generator) in
-        
+
         if next_result._type == "completed" {
           completed(null)
         } else {
           yield(
             next_result.value,
-            [_ -> 
+            [_ ->
               let generator = state.generator in
               generator.state = next_result.next_state in
               from_generator(generator).step({ generator: generator })
@@ -251,7 +251,7 @@
     coroutine(
       [state ->
         let susp = state.coroutine.step(state.coroutine.state) in
-        
+
         match susp with
           | !Suspension.Yield { value, next } ->
               yield(
@@ -260,7 +260,7 @@
                   map(
                     { _type: "Coroutine", state: state.coroutine.state, step: next, value_type: typeof(b) },
                     f
-                  ).step({ 
+                  ).step({
                     coroutine: { _type: "Coroutine", state: input, step: next, value_type: typeof(b) },
                     transform: f
                   })
@@ -282,7 +282,7 @@
       [state ->
         if state.running_first {
           let susp = state.first.step(state.first.state) in
-          
+
           match susp with
             | !Suspension.Yield { value, next } ->
                 yield(
@@ -318,7 +318,7 @@
       [state ->
         let susp1 = state.coro1.step(state.coro1.state) in
         let susp2 = state.coro2.step(state.coro2.state) in
-        
+
         match (susp1, susp2) with
           | (!Suspension.Yield { value: v1, next: n1 }, !Suspension.Yield { value: v2, next: n2 }) ->
               yield(
@@ -367,16 +367,16 @@
   ]]--
   run: !Coroutine -> (!Suspension * !Coroutine) [coro ->
     let susp = coro.step(coro.state) in
-    
+
     -- Create a new coroutine that can continue from here
     let next_coro = match susp with
-      | !Suspension.Yield { next } -> 
+      | !Suspension.Yield { next } ->
           { _type: "Coroutine", state: coro.state, step: next, value_type: coro.value_type }
-      | !Suspension.Completed { } -> 
+      | !Suspension.Completed { } ->
           -- Return the same coroutine if completed, as it can't advance further
           coro
     in
-    
+
     (susp, next_coro)
   ]
 
@@ -387,10 +387,10 @@
   run_to_completion: !Coroutine -> ([a], b) [coro ->
     let yielded_values = [] in
     let current = coro in
-    
+
     loop {
       let (susp, next_coro) = run(current) in
-      
+
       match susp with
         | !Suspension.Yield { value } ->
             yielded_values = yielded_values + [value]
@@ -407,14 +407,14 @@
     let yielded_values = [] in
     let completed_values = [] in
     let active_coroutines = scheduler.coroutines in
-    
+
     while length(active_coroutines) > 0 {
       -- Select the next coroutine to run
       let index = scheduler.schedule(active_coroutines) in
       let current = active_coroutines[index] in
-      
+
       let (susp, next_coro) = run(current) in
-      
+
       match susp with
         | !Suspension.Yield { value } ->
             yielded_values = yielded_values + [value]
@@ -422,11 +422,11 @@
         | !Suspension.Completed { value } ->
             completed_values = completed_values + [value]
             -- Remove the completed coroutine
-            active_coroutines = 
-              active_coroutines[0:index] + 
+            active_coroutines =
+              active_coroutines[0:index] +
               active_coroutines[index+1:length(active_coroutines)]
     }
-    
+
     (yielded_values, completed_values)
   ]
 
@@ -441,7 +441,7 @@
     coroutine(
       [state ->
         let susp = state.coroutine.step(state.coroutine.state) in
-        
+
         match susp with
           | !Suspension.Yield { value, next } ->
               yield(
@@ -468,7 +468,7 @@
   ]]--
   is_completed: !Coroutine -> Bool [coro ->
     let (susp, _) = run(coro) in
-    
+
     match susp with
       | !Suspension.Completed { } -> true
       | _ -> false
@@ -479,7 +479,7 @@
   ]]--
   current_value: !Coroutine -> a | Null [coro ->
     let (susp, _) = run(coro) in
-    
+
     match susp with
       | !Suspension.Yield { value } -> value
       | !Suspension.Completed { value } -> value
@@ -517,13 +517,13 @@
 
   --[[
     Structure mapping that establishes @Coroutine as a category.
-    
+
     In this categorical structure:
     - Objects are types
     - Morphisms are coroutines that transform values of one type to another
     - Identity is the identity coroutine that yields its input unchanged
     - Composition is sequential composition of coroutines
-    
+
     This forms a proper category with linear semantics rather than
     monadic effects for sequencing operations.
   ]]--
@@ -531,42 +531,42 @@
     -- Map Coroutine to a category
     objects: typeof(a),         -- Objects are types
     morphisms: !Coroutine,      -- Morphisms are coroutines
-    
+
     -- Core category structure
     dom: [f -> f.value_type],              -- Domain of a coroutine
     cod: [f -> typeof(cod(f.step))],       -- Codomain of a coroutine
     id: [a -> from_function([x -> x])],    -- Identity morphism
     compose: [f g -> sequence(f, g)],      -- Sequential composition
-    
+
     -- Laws
     law: {
-      identity: [f -> 
-        sequence(id(dom(f)), f) == f && 
+      identity: [f ->
+        sequence(id(dom(f)), f) == f &&
         sequence(f, id(cod(f))) == f
       ],
-      
-      associativity: [f g h -> 
+
+      associativity: [f g h ->
         sequence(f, sequence(g, h)) == sequence(sequence(f, g), h)
       ]
     },
-    
+
     -- Additional categorical structures
     product: {
       -- Product structure
       prod: [a b -> (a, b)],
       pi1: [_ -> from_function([(a, _) -> a])],
       pi2: [_ -> from_function([(_, b) -> b])],
-      
+
       -- Product introduction
       fanout: [f g -> combine(f, g, [(a, b) -> (a, b)])]
     },
-    
+
     coproduct: {
       -- Coproduct structure
       coprod: [a b -> Either a b],
       inj1: [_ -> from_function([a -> Either.Left(a)])],
       inj2: [_ -> from_function([b -> Either.Right(b)])],
-      
+
       -- Coproduct elimination
       case: [f g -> coroutine(
         [state ->
@@ -595,9 +595,9 @@
           } else {
             yield(
               state.count,
-              [_ -> 
+              [_ ->
                 coroutine(
-                  [inner_state -> 
+                  [inner_state ->
                     if inner_state.count >= inner_state.limit {
                       completed(inner_state.count)
                     } else {
@@ -616,7 +616,7 @@
         { count: 0, limit: limit }
       )
     ],
-    
+
     --[[
       Example 2: Fibonacci coroutine
     ]]--
@@ -636,8 +636,8 @@
                     } else {
                       yield(
                         inner_state.current,
-                        [_ -> inner_state |> [s -> { 
-                          current: s.next, 
+                        [_ -> inner_state |> [s -> {
+                          current: s.next,
                           next: s.current + s.next,
                           count: s.count + 1,
                           limit: s.limit
@@ -654,7 +654,7 @@
         { current: 0, next: 1, count: 0, limit: limit }
       )
     ],
-    
+
     --[[
       Example 3: Composing coroutines
     ]]--
@@ -664,7 +664,7 @@
       let filtered = coroutine(
         [state ->
           let susp = state.source.step(state.source.state) in
-          
+
           match susp with
             | !Suspension.Yield { value, next } ->
                 if value % 2 == 0 {
@@ -674,15 +674,15 @@
                       coroutine(
                         [inner_state ->
                           let inner_susp = inner_state.source.step(inner_state.source.state) in
-                          
+
                           match inner_susp with
                             | !Suspension.Yield { value: inner_value, next: inner_next } ->
                                 if inner_value % 2 == 0 {
                                   yield(
                                     inner_value,
-                                    [x -> { ...inner_state, source: { 
-                                      _type: "Coroutine", 
-                                      state: x, 
+                                    [x -> { ...inner_state, source: {
+                                      _type: "Coroutine",
+                                      state: x,
                                       step: inner_next,
                                       value_type: typeof(Z)
                                     }}]
@@ -705,9 +705,9 @@
         ],
         { source: doubled }
       ) in
-      
+
       let (values, _) = run_to_completion(filtered) in
       values
     ]
   }
-} 
+}

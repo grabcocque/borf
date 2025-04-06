@@ -1,6 +1,6 @@
 --[[
   Parser Transformations
-  
+
   This module defines transformations between parser categories
   and other categorical structures, enabling the representation of
   parsing operations in different mathematical frameworks while
@@ -13,12 +13,12 @@
     ParserFunctor
     ParserNatTransformation
     ParserAdjunction
-    
+
     -- Special functors
     MonoidalParserFunctor
     AlternativeParserFunctor
     DerivativeFunctor
-    
+
     -- Parser transformation categories
     ParserCategory
   }
@@ -26,7 +26,7 @@
   op: {
     -- Functor composition
     ∘
-    
+
     -- Parser operators
     <|> <*> <$> <?>
   }
@@ -36,35 +36,35 @@
     parser_functor
     parser_nat_transformation
     parser_adjunction
-    
+
     -- Functor constructors
     monoidal_parser_functor
     alternative_parser_functor
     derivative_functor
-    
+
     -- Natural transformation constructors
     parser_to_kleisli_nt
     kleisli_to_parser_nt
-    
+
     -- Adjunction constructors
     parser_kleisli_adjunction
-    
+
     -- Functor operations
     apply_functor
     compose_functors
-    
+
     -- Natural transformation operations
     apply_nat_transformation
     vertical_composition
     horizontal_composition
-    
+
     -- Category construction
     parser_category
-    
+
     -- Parser/Kleisli transformations
     parser_to_kleisli
     kleisli_to_parser
-    
+
     -- Parser/Derivative transformations
     parser_to_derivative
     derivative_to_parser
@@ -88,7 +88,7 @@
 
   --[[
     ParserFunctor represents a functor between parser categories.
-    
+
     This structure captures transformations that preserve the parser
     structure while changing the underlying representation.
   ]]--
@@ -130,8 +130,8 @@
   --[[
     parser_functor creates a functor between parser categories
   ]]--
-  parser_functor: S * @Cat.Category * @Cat.Category * (a -> b) * 
-                (@Parser.Parser -> @Parser.Parser) -> 
+  parser_functor: S * @Cat.Category * @Cat.Category * (a -> b) *
+                (@Parser.Parser -> @Parser.Parser) ->
                 ParserFunctor [
     name source target obj_map parser_map ->
     {
@@ -147,8 +147,8 @@
   --[[
     parser_nat_transformation creates a natural transformation between parser functors
   ]]--
-  parser_nat_transformation: S * ParserFunctor * ParserFunctor * 
-                          (a -> @Parser.Parser) -> 
+  parser_nat_transformation: S * ParserFunctor * ParserFunctor *
+                          (a -> @Parser.Parser) ->
                           ParserNatTransformation [
     name source_functor target_functor components ->
     {
@@ -162,8 +162,8 @@
   --[[
     parser_adjunction creates an adjunction between parser categories
   ]]--
-  parser_adjunction: S * ParserFunctor * ParserFunctor * 
-                   ParserNatTransformation * ParserNatTransformation -> 
+  parser_adjunction: S * ParserFunctor * ParserFunctor *
+                   ParserNatTransformation * ParserNatTransformation ->
                    ParserAdjunction [
     name left right unit counit ->
     {
@@ -224,7 +224,7 @@
       [a -> a],
       [deriv -> @Parser.extractor(
         "DerivativeParser",
-        [input -> 
+        [input ->
           -- Convert derivative automaton to parser and run it
           let parser = @Parser.derivative_to_parser(deriv) in
           parser.parse(input)
@@ -269,7 +269,7 @@
   --[[
     apply_functor applies a parser functor to a parser
   ]]--
-  apply_functor: ParserFunctor * @Parser.Parser -> 
+  apply_functor: ParserFunctor * @Parser.Parser ->
                @Parser.Parser [
     functor parser ->
     functor.map_parser(parser)
@@ -307,13 +307,13 @@
   --[[
     vertical_composition composes two natural transformations vertically
   ]]--
-  vertical_composition: ParserNatTransformation * ParserNatTransformation -> 
+  vertical_composition: ParserNatTransformation * ParserNatTransformation ->
                       ParserNatTransformation [
     alpha beta ->
     {
       source_functor: beta.source_functor,
       target_functor: alpha.target_functor,
-      components: [a -> 
+      components: [a ->
         let beta_component = beta.components(a) in
         let alpha_component = alpha.components(a) in
         @Parser.sequence([beta_component, alpha_component])
@@ -325,13 +325,13 @@
   --[[
     horizontal_composition composes two natural transformations horizontally
   ]]--
-  horizontal_composition: ParserNatTransformation * ParserNatTransformation -> 
+  horizontal_composition: ParserNatTransformation * ParserNatTransformation ->
                         ParserNatTransformation [
     alpha beta ->
     {
       source_functor: compose_functors(alpha.source_functor, beta.source_functor),
       target_functor: compose_functors(alpha.target_functor, beta.target_functor),
-      components: [a -> 
+      components: [a ->
         let beta_component = beta.components(a) in
         let mapped_beta = apply_functor(alpha.target_functor, beta_component) in
         let alpha_component = alpha.components(beta.source_functor.map_obj(a)) in
@@ -351,7 +351,7 @@
   parser_to_kleisli: @Parser.Parser -> @Kleisli.KleisliArrow [parser ->
     @Kleisli.kleisli_arrow(
       "Parser",
-      [input -> 
+      [input ->
         let result = parser.parse(input) in
         if result.success {
           @Kleisli.pure(result.value)
@@ -368,7 +368,7 @@
   kleisli_to_parser: @Kleisli.KleisliArrow -> @Parser.Parser [arrow ->
     @Parser.extractor(
       "Kleisli",
-      [input -> 
+      [input ->
         -- Run the Kleisli arrow with the input
         let result = @Kleisli.run(arrow, input) in
         -- Check if the result is a success or failure
@@ -411,11 +411,11 @@
   derivative_to_parser: @Parser.DerivativeAutomaton -> @Parser.Parser [automaton ->
     @Parser.extractor(
       "Derivative",
-      [input -> 
+      [input ->
         -- Run the derivative automaton on the input
         let state = automaton.initial_state in
         let final_state = fold(input, [s c -> automaton.derive(s, c)], state) in
-        
+
         if automaton.is_accepting(final_state) {
           {
             success: true,
@@ -472,15 +472,15 @@
   --------------------------------------------------
 
   --[[
-    Structure mapping that establishes @ParserXf as a category of 
+    Structure mapping that establishes @ParserXf as a category of
     transformations between parser categories.
-    
+
     In this categorical structure:
     - Objects are parser functors
     - Morphisms are natural transformations between parser functors
     - Identity is the identity natural transformation
     - Composition is vertical composition of natural transformations
-    
+
     This structure enables rigorous transformation of parsing operations
     between different categorical representations.
   ]]--
@@ -488,7 +488,7 @@
     -- Map ParserXf to a category
     objects: ParserFunctor,
     morphisms: ParserNatTransformation,
-    
+
     -- Base category structure
     dom: [nt -> nt.source_functor],
     cod: [nt -> nt.target_functor],
@@ -499,31 +499,31 @@
       [a -> @Parser.pure(a)]
     )],
     compose: [alpha beta -> vertical_composition(alpha, beta)],
-    
+
     -- Functor constructors
     monoidal_parser_functor: monoidal_parser_functor,
     alternative_parser_functor: alternative_parser_functor,
     derivative_functor: derivative_functor,
-    
+
     -- Natural transformation constructors
     parser_to_kleisli_nt: parser_to_kleisli_nt,
     kleisli_to_parser_nt: kleisli_to_parser_nt,
-    
+
     -- Functor operations
     apply_functor: apply_functor,
     compose_functors: compose_functors,
-    
+
     -- Laws of functorial transformations
     law: {
-      functor_identity: [f p -> 
+      functor_identity: [f p ->
         apply_functor(f, @Parser.pure(anything)) == @Parser.pure(anything)
       ],
-      
+
       functor_composition: [f p1 p2 ->
         apply_functor(f, @Parser.sequence([p1, p2])) ==
         @Parser.sequence([apply_functor(f, p1), apply_functor(f, p2)])
       ],
-      
+
       naturality: [nt f g a ->
         let left_path = @Parser.sequence([
           nt.components(a),
@@ -535,13 +535,13 @@
         ]) in
         left_path == right_path
       ],
-      
+
       adjunction_unit_counit: [adj a b ->
         let F = adj.left_functor in
         let G = adj.right_functor in
         let η = adj.unit in
         let ε = adj.counit in
-        
+
         @Parser.sequence([
           η.components(a),
           apply_functor(G, ε.components(a))
@@ -567,7 +567,7 @@
       let kleisli = parser_to_kleisli(parser) in
       kleisli_to_parser(kleisli)
     ],
-    
+
     --[[
       Example 2: Transforming a parser to a derivative and back
     ]]--
@@ -575,7 +575,7 @@
       let derivative = parser_to_derivative(parser) in
       derivative_to_parser(derivative)
     ],
-    
+
     --[[
       Example 3: Using a functor to transform a parser
     ]]--
@@ -583,7 +583,7 @@
       let functor = alternative_parser_functor("Alternative") in
       apply_functor(functor, parser)
     ],
-    
+
     --[[
       Example 4: Composing parsers using Kleisli composition
     ]]--
@@ -594,4 +594,4 @@
       kleisli_to_parser(composed)
     ]
   }
-} 
+}

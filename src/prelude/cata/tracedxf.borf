@@ -1,10 +1,10 @@
 --[[
   Traced Monoidal Category Transformations
-  
+
   This module defines transformations between traced monoidal categories
   and other categorical structures, enabling the representation of
   feedback systems and recursive processes in different frameworks.
-  
+
   These transformations use linear types instead of monadic patterns
   for precise resource tracking and composition.
 ]]--
@@ -15,7 +15,7 @@
     TracedFunctor
     TracedNaturalTransformation
     TracedAdjunction
-    
+
     -- Special functors
     CartesianTracedFunctor
     FeedbackFunctor
@@ -26,7 +26,7 @@
   op: {
     -- Functor composition
     ∘
-    
+
     -- Traced monoidal operations
     Tr
     ⊗
@@ -38,35 +38,35 @@
     traced_functor
     traced_nat_transformation
     traced_adjunction
-    
+
     -- Functor constructors
     cartesian_traced_functor
     feedback_functor
     fixed_point_functor
     iteration_functor
-    
+
     -- Natural transformation constructors
     traced_to_monoidal_nt
     monoidal_to_traced_nt
     traced_to_cartesian_nt
     cartesian_to_traced_nt
-    
+
     -- Adjunction constructors
     traced_monoidal_adjunction
-    
+
     -- Functor operations
     apply_functor
     compose_functors
-    
+
     -- Natural transformation operations
     apply_nat_transformation
     vertical_composition
     horizontal_composition
-    
+
     -- Traced/Monoidal transformations
     traced_to_monoidal
     monoidal_to_traced
-    
+
     -- Trace-specific transformations
     trace_to_feedback
     feedback_to_trace
@@ -96,7 +96,7 @@
 
   --[[
     TracedFunctor represents a functor between traced monoidal categories.
-    
+
     This structure captures transformations that preserve the traced monoidal
     structure while changing the underlying representation.
   ]]--
@@ -177,10 +177,10 @@
   --[[
     traced_functor creates a functor between traced monoidal categories.
   ]]--
-  traced_functor: S * @Traced.!TracedMonoidalCategory * 
-                @Traced.!TracedMonoidalCategory * 
-                (a -> c) * ((a -o> b) -> (c -o> d)) * 
-                @MonoidalXf.MonoidalFunctor -> 
+  traced_functor: S * @Traced.!TracedMonoidalCategory *
+                @Traced.!TracedMonoidalCategory *
+                (a -> c) * ((a -o> b) -> (c -o> d)) *
+                @MonoidalXf.MonoidalFunctor ->
                 TracedFunctor [
     name source target obj_map morph_map monoidal_functor ->
     {
@@ -197,9 +197,9 @@
     traced_nat_transformation creates a natural transformation
     between traced functors.
   ]]--
-  traced_nat_transformation: S * TracedFunctor * TracedFunctor * 
-                          (a -> (c -o> d)) * 
-                          @MonoidalXf.MonoidalNaturalTransformation -> 
+  traced_nat_transformation: S * TracedFunctor * TracedFunctor *
+                          (a -> (c -o> d)) *
+                          @MonoidalXf.MonoidalNaturalTransformation ->
                           TracedNaturalTransformation [
     name source target components monoidal_nt ->
     {
@@ -215,9 +215,9 @@
   --[[
     traced_adjunction creates an adjunction between traced monoidal categories.
   ]]--
-  traced_adjunction: S * TracedFunctor * TracedFunctor * 
-                  TracedNaturalTransformation * TracedNaturalTransformation * 
-                  @MonoidalXf.MonoidalAdjunction -> 
+  traced_adjunction: S * TracedFunctor * TracedFunctor *
+                  TracedNaturalTransformation * TracedNaturalTransformation *
+                  @MonoidalXf.MonoidalAdjunction ->
                   TracedAdjunction [
     name left right unit counit monoidal_adj ->
     {
@@ -235,13 +235,13 @@
   --------------------------------------------------
 
   --[[
-    cartesian_traced_functor creates a functor from a general traced monoidal category 
+    cartesian_traced_functor creates a functor from a general traced monoidal category
     to a Cartesian traced category.
   ]]--
   cartesian_traced_functor: S -> CartesianTracedFunctor [
     name ->
     let cartesian = @Traced.cartesian_traced(name).base in
-    
+
     {
       base: traced_functor(
         name,
@@ -403,7 +403,7 @@
     if f.source != g.target {
       error("Cannot compose functors with incompatible categories")
     }
-    
+
     traced_functor(
       f.source.name + "∘" + g.source.name,
       g.source,
@@ -443,21 +443,21 @@
   --[[
     vertical_composition composes two natural transformations vertically.
   ]]--
-  vertical_composition: TracedNaturalTransformation * TracedNaturalTransformation -> 
+  vertical_composition: TracedNaturalTransformation * TracedNaturalTransformation ->
                       TracedNaturalTransformation [
     alpha beta ->
     if alpha.source != beta.target {
       error("Cannot compose natural transformations with incompatible functors")
     }
-    
+
     traced_nat_transformation(
       alpha.source.name + "∘" + beta.source.name,
       beta.source,
       alpha.target,
-      [a -> 
+      [a ->
         let beta_component = beta.components(a) in
         let alpha_component = alpha.components(beta.target.obj_map(a)) in
-        
+
         [c -o>
           alpha_component(beta_component(c))
         ]
@@ -472,17 +472,17 @@
   --[[
     horizontal_composition composes two natural transformations horizontally.
   ]]--
-  horizontal_composition: TracedNaturalTransformation * TracedNaturalTransformation -> 
+  horizontal_composition: TracedNaturalTransformation * TracedNaturalTransformation ->
                         TracedNaturalTransformation [
     alpha beta ->
     traced_nat_transformation(
       alpha.source.name + "⊗" + beta.source.name,
       compose_functors(alpha.source, beta.source),
       compose_functors(alpha.target, beta.target),
-      [a -> 
+      [a ->
         let beta_component = beta.components(a) in
         let alpha_component = alpha.components(beta.target.obj_map(a)) in
-        
+
         [c -o>
           alpha_component(apply_functor(alpha.source, beta_component)(c))
         ]
@@ -499,7 +499,7 @@
   --------------------------------------------------
 
   --[[
-    traced_to_monoidal transforms a traced monoidal structure to 
+    traced_to_monoidal transforms a traced monoidal structure to
     a monoidal structure, forgetting the trace.
   ]]--
   traced_to_monoidal: a -> (c -o> d) [
@@ -508,7 +508,7 @@
   ]
 
   --[[
-    monoidal_to_traced transforms a monoidal structure to 
+    monoidal_to_traced transforms a monoidal structure to
     a traced monoidal structure, adding a trace.
   ]]--
   monoidal_to_traced: a -> (c -o> d) [
@@ -523,15 +523,15 @@
   --[[
     trace_to_feedback transforms a trace operation to a feedback operation.
   ]]--
-  trace_to_feedback: (a * b * c * ((a ⊗ b) -o> (a ⊗ c))) -> 
+  trace_to_feedback: (a * b * c * ((a ⊗ b) -o> (a ⊗ c))) ->
                    (a * b * c * d * ((a ⊗ c) -o> (b ⊗ d))) [
     (object_a, object_b, object_c, morphism) ->
     -- Convert trace to feedback
     -- This is a simplified conversion for demonstration
     (
-      object_a, 
+      object_a,
       object_a,  -- In simple case, b = a
-      object_b, 
+      object_b,
       object_c,
       [(a_c) -o>
         let (a, c) = a_c in
@@ -545,7 +545,7 @@
   --[[
     feedback_to_trace transforms a feedback operation to a trace operation.
   ]]--
-  feedback_to_trace: (a * b * c * d * ((a ⊗ c) -o> (b ⊗ d))) -> 
+  feedback_to_trace: (a * b * c * d * ((a ⊗ c) -o> (b ⊗ d))) ->
                    (a * c * d * ((a ⊗ c) -o> (a ⊗ d))) [
     (object_a, object_b, object_c, object_d, morphism) ->
     -- Convert feedback to trace
@@ -577,9 +577,9 @@
       let (new_a, _) = result in
       new_a
     ] in
-    
+
     let initial = default_value(object_a) in
-    
+
     (fixed_point_fn, initial)
   ]
 
@@ -592,7 +592,7 @@
     -- For simplicity, we'll use unit as the b object
     let object_a = typeof(initial) in
     let object_b = unit in
-    
+
     (
       object_a,
       object_b,
@@ -607,12 +607,12 @@
   --[[
     trace_to_iteration transforms a trace operation to an iteration operation.
   ]]--
-  trace_to_iteration: (a * b * c * ((a ⊗ b) -o> (a ⊗ c))) -> 
+  trace_to_iteration: (a * b * c * ((a ⊗ b) -o> (a ⊗ c))) ->
                     (a * b * ((a ⊗ b) -o> (a ⊗ b)) * Z) [
     (object_a, object_b, object_c, morphism) ->
     -- Convert trace to iteration
     -- This assumes b = c and we're performing iterations
-    
+
     -- Create a step function that will be iterated
     let step = [(a_b) -o>
       let (a, b) = a_b in
@@ -620,7 +620,7 @@
       let (new_a, new_b) = result in
       (new_a, new_b)
     ] in
-    
+
     -- Default to 10 iterations
     (object_a, object_b, step, 10)
   ]
@@ -628,7 +628,7 @@
   --[[
     iteration_to_trace transforms an iteration operation to a trace operation.
   ]]--
-  iteration_to_trace: (a * b * ((a ⊗ b) -o> (a ⊗ b)) * Z) -> 
+  iteration_to_trace: (a * b * ((a ⊗ b) -o> (a ⊗ b)) * Z) ->
                     (a * b * b * ((a ⊗ b) -o> (a ⊗ b))) [
     (object_a, object_b, step, n) ->
     -- Convert iteration to trace
@@ -708,7 +708,7 @@
       [f -> f],
       @MonoidalXf.identity_functor(@Monoidal.standard_monoidal)
     ) in
-    
+
     let right = traced_functor(
       name + "_R",
       @Traced.standard_traced,
@@ -717,7 +717,7 @@
       [f -> f],
       @MonoidalXf.identity_functor(@Monoidal.standard_monoidal)
     ) in
-    
+
     traced_adjunction(
       name,
       left,
@@ -733,15 +733,15 @@
   --------------------------------------------------
 
   --[[
-    Structure mapping that establishes @TracedXf as a category of 
+    Structure mapping that establishes @TracedXf as a category of
     transformations between traced monoidal categories.
-    
+
     In this categorical structure:
     - Objects are traced functors
     - Morphisms are traced natural transformations
     - Identity is the identity traced natural transformation
     - Composition is vertical composition of traced natural transformations
-    
+
     This enables rigorous transformation of feedback systems and recursive
     processes between different categorical frameworks.
   ]]--
@@ -749,7 +749,7 @@
     -- Map TracedXf to a category
     objects: TracedFunctor,
     morphisms: TracedNaturalTransformation,
-    
+
     -- Core category structure
     dom: [nt -> nt.source],
     cod: [nt -> nt.target],
@@ -761,16 +761,16 @@
       @MonoidalXf.id(f.monoidal_functor)
     )],
     compose: [alpha beta -> vertical_composition(alpha, beta)],
-    
+
     -- Monoidal structure
     monoidal: {
-      tensor: [f g -> 
+      tensor: [f g ->
         traced_functor(
           f.source.name + "⊗" + g.source.name,
           f.source,
           g.target,
           [a -> f.obj_map(a) ⊗ g.obj_map(a)],
-          [morphism -> 
+          [morphism ->
             [(a_b) -o>
               let (a, b) = a_b in
               let f_result = apply_functor(f, [a' -o> a'])(a) in
@@ -784,16 +784,16 @@
           )
         )
       ],
-      
+
       unit: identity_functor(@Traced.standard_traced),
-      
+
       -- Tensor of natural transformations
-      tensor_morphisms: [alpha beta -> 
+      tensor_morphisms: [alpha beta ->
         traced_nat_transformation(
           alpha.source.name + "⊗" + beta.source.name,
           alpha.source,
           beta.target,
-          [a -> 
+          [a ->
             [(a_b) -o>
               let (a, b) = a_b in
               let alpha_result = apply_nat_transformation(alpha, a)(a) in
@@ -807,16 +807,16 @@
           )
         )
       ],
-      
+
       -- Inherited from monoidal structure
       associator: identity_functor(@Traced.standard_traced).monoidal_functor.source_category.associator,
       left_unitor: identity_functor(@Traced.standard_traced).monoidal_functor.source_category.left_unitor,
       right_unitor: identity_functor(@Traced.standard_traced).monoidal_functor.source_category.right_unitor
     },
-    
+
     -- Traced structure
     traced: {
-      trace: [a b c f -> 
+      trace: [a b c f ->
         -- Apply trace to a functor between traced categories
         [functor ->
           traced_functor(
@@ -824,7 +824,7 @@
             functor.source,
             functor.target,
             [a' -> functor.obj_map(a')],
-            [morphism -> 
+            [morphism ->
               -- Apply the trace operation in the target category
               let traced_morph = @Traced.trace(
                 functor.target,
@@ -847,40 +847,40 @@
           )
         ]
       ],
-      
+
       -- Axioms for traced transformations
-      yanking: [functor a -> 
+      yanking: [functor a ->
         -- Yanking axiom applied to functors
         -- F(yanking(a)) = yanking(F(a))
-        @Traced.yanking(functor.source, a) == 
+        @Traced.yanking(functor.source, a) ==
         @Traced.yanking(functor.target, functor.obj_map(a))
       ]
     },
-    
+
     -- Laws
     law: {
       -- Basic category laws
-      identity: [nt -> 
-        vertical_composition(id(dom(nt)), nt) == nt && 
+      identity: [nt ->
+        vertical_composition(id(dom(nt)), nt) == nt &&
         vertical_composition(nt, id(cod(nt))) == nt
       ],
-      
-      associativity: [alpha beta gamma -> 
+
+      associativity: [alpha beta gamma ->
         vertical_composition(
-          vertical_composition(alpha, beta), 
+          vertical_composition(alpha, beta),
           gamma
         ) == vertical_composition(
-          alpha, 
+          alpha,
           vertical_composition(beta, gamma)
         )
       ],
-      
+
       -- Functor laws
-      functor_identity: [f a -> 
+      functor_identity: [f a ->
         apply_functor(f, [x -o> x]) == [x -o> x]
       ],
-      
-      functor_composition: [f g h -> 
+
+      functor_composition: [f g h ->
         apply_functor(
           f,
           @Traced.∘(g, h)
@@ -889,7 +889,7 @@
           apply_functor(f, h)
         )
       ],
-      
+
       -- Trace preservation
       trace_preservation: [f a b c morphism ->
         let source_trace = @Traced.trace(
@@ -899,7 +899,7 @@
           c,
           morphism
         ) in
-        
+
         let target_trace = @Traced.trace(
           f.target,
           f.obj_map(a),
@@ -907,11 +907,11 @@
           f.obj_map(c),
           apply_functor(f, morphism)
         ) in
-        
-        apply_functor(f, source_trace.result).toString() == 
+
+        apply_functor(f, source_trace.result).toString() ==
         target_trace.result.toString()
       ],
-      
+
       -- Natural transformation laws
       naturality: [nt a morphism ->
         @Traced.∘(
@@ -922,7 +922,7 @@
           apply_functor(nt.target, morphism)
         ).toString()
       ],
-      
+
       -- Naturality with respect to trace
       trace_naturality: [nt a b c morphism ->
         let lhs = apply_nat_transformation(
@@ -935,7 +935,7 @@
           c,
           morphism
         ).result) in
-        
+
         let rhs = @Traced.trace(
           nt.target.source,
           nt.target.obj_map(a),
@@ -946,17 +946,17 @@
             apply_nat_transformation(nt, a ⊗ c)
           )
         ).result in
-        
+
         lhs.toString() == rhs.toString()
       ],
-      
+
       -- Adjunction laws
       adjunction_unit_counit: [adj a ->
         let F = adj.left_functor in
         let G = adj.right_functor in
         let η = adj.unit in
         let ε = adj.counit in
-        
+
         @Traced.∘(
           apply_nat_transformation(η, a),
           apply_functor(G, apply_nat_transformation(ε, F.obj_map(a)))
@@ -988,7 +988,7 @@
         @MonoidalXf.identity_functor(@Monoidal.standard_monoidal)
       )
     ],
-    
+
     --[[
       Example 2: Converting a trace to a feedback operation
     ]]--
@@ -998,11 +998,11 @@
         let (state, input) = state_input in
         (state + 1, input * 2)
       ] in
-      
+
       -- Convert to feedback form
       let feedback_args = trace_to_feedback((Z, Z, Z, traced_morphism)) in
       let (a, b, c, d, feedback_morphism) = feedback_args in
-      
+
       -- Apply feedback to get result morphism
       @Traced.feedback(
         @Traced.standard_traced,
@@ -1010,7 +1010,7 @@
         feedback_morphism
       )
     ],
-    
+
     --[[
       Example 3: Converting a fixed point to a trace operation
     ]]--
@@ -1018,11 +1018,11 @@
       -- Create a fixed point operation
       let fixed_point_fn = [x -> if x > 100 { x } else { x * 2 }] in
       let initial = 1 in
-      
+
       -- Convert to trace form
       let trace_args = fixed_point_to_trace((fixed_point_fn, initial)) in
       let (a, b, c, trace_morphism) = trace_args in
-      
+
       -- Apply trace to get result morphism
       @Traced.trace(
         @Traced.standard_traced,
@@ -1030,7 +1030,7 @@
         trace_morphism
       ).result
     ],
-    
+
     --[[
       Example 4: Creating a natural transformation between traced functors
     ]]--
@@ -1044,7 +1044,7 @@
         [f -> f],  -- Identity on morphisms
         @MonoidalXf.identity_functor(@Monoidal.standard_monoidal)
       ) in
-      
+
       let g = traced_functor(
         "G",
         @Traced.standard_traced,
@@ -1053,7 +1053,7 @@
         [f -> f],  -- Identity on morphisms
         @MonoidalXf.identity_functor(@Monoidal.standard_monoidal)
       ) in
-      
+
       -- Create a natural transformation between them
       traced_nat_transformation(
         "ExampleNT",
@@ -1068,7 +1068,7 @@
         )
       )
     ],
-    
+
     --[[
       Example 5: Creating an adjunction between traced categories
     ]]--
@@ -1076,4 +1076,4 @@
       traced_monoidal_adjunction("ExampleAdjunction")
     ]
   }
-} 
+}

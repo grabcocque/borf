@@ -1,15 +1,15 @@
 --[[
   Traced Monoidal Categories
-  
+
   This module defines traced monoidal categories, which are monoidal categories
   equipped with a trace operation that allows "feedback" or "looping" of morphisms.
-  
+
   Traced monoidal categories provide a foundation for:
   - Feedback in process networks
   - Fixed point operators
   - Partial trace operations in quantum computing
   - Modeling recursion and iteration
-  
+
   This implementation uses linear types instead of monadic patterns to ensure
   proper resource tracking.
 ]]--
@@ -20,7 +20,7 @@
     !TracedMonoidalCategory
     !Trace
     !TraceMorphism
-    
+
     -- Specific instances
     !CartesianTracedCategory
     !VectorSpaceTracedCategory
@@ -40,17 +40,17 @@
     traced_monoidal_category
     trace
     yanking
-    
+
     -- Instance constructors
     cartesian_traced
     vector_space_traced
     relation_traced
-    
+
     -- Derived operations
     feedback
     fixed_point
     iterate
-    
+
     -- Standard instances
     standard_traced
   }
@@ -72,7 +72,7 @@
 
   --[[
     !TracedMonoidalCategory represents a traced monoidal category.
-    
+
     A traced monoidal category is a monoidal category with a trace operation
     that satisfies certain coherence conditions.
   ]]--
@@ -146,8 +146,8 @@
     traced_monoidal_category creates a traced monoidal category from a
     monoidal category and a trace operation.
   ]]--
-  traced_monoidal_category: S * @Monoidal.!MonoidalCategory * 
-                         (a * b * c * ((a ⊗ b) -o> (a ⊗ c)) -> (b -o> c)) -> 
+  traced_monoidal_category: S * @Monoidal.!MonoidalCategory *
+                         (a * b * c * ((a ⊗ b) -o> (a ⊗ c)) -> (b -o> c)) ->
                          !TracedMonoidalCategory [
     name base trace_op ->
     {
@@ -180,7 +180,7 @@
 
   --[[
     yanking checks the yanking axiom for a traced category.
-    
+
     The yanking axiom states that tracing the symmetry morphism gives the identity.
   ]]--
   yanking: !TracedMonoidalCategory * a -> Bool [
@@ -189,7 +189,7 @@
       let (a, b) = pair in
       (b, a)
     ] in
-    
+
     let traced = trace(
       category,
       object_a,     -- Object A being traced over
@@ -197,10 +197,10 @@
       object_a,     -- Output object
       braiding      -- Symmetry morphism being traced
     ) in
-    
+
     -- Check if the result is the identity morphism
     let id_morphism = [a -o> a] in
-    
+
     traced.result.toString() == id_morphism.toString()
   ]
 
@@ -218,26 +218,26 @@
       name,
       @Cat.structure
     ) in
-    
+
     let trace_op = [object_a object_b object_c morphism ->
       -- In the Cartesian case, the trace can be implemented as a fixed point
       [b -o>
         -- Start with a default value for the loop
         let initial_a = default_value(object_a) in
-        
+
         -- Iterate to find a fixed point
         let fixed_a = fixed_point([a ->
           let result = morphism((a, b)) in
           let (new_a, _) = result in
           new_a
         ], initial_a) in
-        
+
         -- Apply the morphism with the fixed point
         let (_, c) = morphism((fixed_a, b)) in
         c
       ]
     ] in
-    
+
     {
       _type: "CartesianTracedCategory",
       base: traced_monoidal_category(name, cartesian_monoidal, trace_op)
@@ -254,7 +254,7 @@
       name,
       @Linear.linear_category("VectorSpace")
     ) in
-    
+
     let trace_op = [object_a object_b object_c morphism ->
       -- In the vector space case, trace corresponds to matrix trace
       [b -o>
@@ -263,21 +263,21 @@
         -- the matrix representing the linear map
         let basis_elements = basis(object_a) in
         let result = object_c.zero() in
-        
+
         for element in basis_elements {
           let output = morphism((element, b)) in
           let (component, value) = output in
-          
+
           -- Add the "diagonal" components
           if is_same_basis(element, component) {
             result = add(result, value)
           }
         }
-        
+
         result
       ]
     ] in
-    
+
     {
       _type: "VectorSpaceTracedCategory",
       base: traced_monoidal_category(name, vector_monoidal, trace_op)
@@ -293,7 +293,7 @@
       name,
       @Cat.structure  -- Use a placeholder category for relations
     ) in
-    
+
     let trace_op = [object_a object_b object_c morphism ->
       -- For relations, the trace corresponds to existential quantification
       [b -o> c ->
@@ -301,7 +301,7 @@
         exists([a -> morphism((a, b), (a, c))])
       ]
     ] in
-    
+
     {
       _type: "RelationTracedCategory",
       base: traced_monoidal_category(name, relation_monoidal, trace_op)
@@ -315,19 +315,19 @@
   --[[
     feedback implements feedback loops using trace.
   ]]--
-  feedback: !TracedMonoidalCategory * a * b * c * d * 
+  feedback: !TracedMonoidalCategory * a * b * c * d *
           ((a ⊗ c) -o> (b ⊗ d)) -> (c -o> d) [
     category object_a object_b object_c object_d morphism ->
     -- This requires a slightly different setup than plain trace
     -- We need to rearrange the morphism to fit the trace signature
-    
+
     let rearranged = [(a_c) -o>
       let (a, c) = a_c in
       let result = morphism((a, c)) in
       let (b, d) = result in
       (a, d)  -- The output type needs to match (A ⊗ D)
     ] in
-    
+
     trace(
       category,
       object_a,
@@ -345,7 +345,7 @@
     -- A simple iterative implementation for demonstration
     let max_iterations = 100 in
     let current = initial in
-    
+
     for i in range(max_iterations) {
       let next = f(current) in
       if next == current {
@@ -353,14 +353,14 @@
       }
       current = next
     }
-    
+
     current  -- Return the last value if max iterations reached
   ]
 
   --[[
     iterate implements iteration using trace.
   ]]--
-  iterate: !TracedMonoidalCategory * a * b * ((a ⊗ b) -o> (a ⊗ b)) * Z -> 
+  iterate: !TracedMonoidalCategory * a * b * ((a ⊗ b) -o> (a ⊗ b)) * Z ->
          ((a ⊗ b) -o> (a ⊗ b)) [
     category object_a object_b morphism n ->
     if n <= 0 {
@@ -372,14 +372,14 @@
       -- Compose morphism with itself n times
       let half = n / 2 in
       let remainder = n % 2 in
-      
+
       let half_iteration = iterate(category, object_a, object_b, morphism, half) in
       let iteration = @Monoidal.compose(
         category.base_monoidal,
         half_iteration,
         half_iteration
       ) in
-      
+
       if remainder == 1 {
         @Monoidal.compose(
           category.base_monoidal,
@@ -497,12 +497,12 @@
 
   --[[
     Structure mapping that establishes @Traced as a categorical structure.
-    
+
     In this categorical structure:
     - Objects are the same as in the base monoidal category
     - Morphisms are the same as in the base monoidal category
     - The trace operation provides a way of creating feedback loops
-    
+
     This forms a traced monoidal category, which enhances a monoidal
     category with the ability to model recursion and feedback.
   ]]--
@@ -510,19 +510,19 @@
     -- Map Traced to a category
     objects: a,
     morphisms: (a -o> b),
-    
+
     -- Core category operations from base monoidal category
     dom: [f -> typeof(a) given f: (a -o> b)],
     cod: [f -> typeof(b) given f: (a -o> b)],
     id: [a -> [x -o> x]],
     compose: [f g -> [a -o> g(f(a))]],
-    
+
     -- Monoidal structure from base monoidal category
     monoidal: {
       tensor: [a b -> a ⊗ b],
       unit: @Monoidal.tensor_unit(@Monoidal.standard_monoidal),
-      
-      tensor_morphisms: [f g -> 
+
+      tensor_morphisms: [f g ->
         [(a_b) -o>
           let (a, b) = a_b in
           let fa = f(a) in
@@ -530,27 +530,27 @@
           (fa, gb)
         ]
       ],
-      
+
       associator: standard_traced.base_monoidal.associator,
       left_unitor: standard_traced.base_monoidal.left_unitor,
       right_unitor: standard_traced.base_monoidal.right_unitor
     },
-    
+
     -- Traced structure
     traced: {
-      trace: [a b c f -> 
+      trace: [a b c f ->
         trace(standard_traced, a, b, c, f).result
       ],
-      
+
       -- Axioms for traced monoidal categories
       yanking: [a -> yanking(standard_traced, a)],
-      
-      vanishing: [f -> 
+
+      vanishing: [f ->
         -- Vanishing axiom: trace over unit object is identity
         let unit = @Monoidal.tensor_unit(standard_traced.base_monoidal) in
         trace(standard_traced, unit, a, b, f).result == f
       ],
-      
+
       superposing: [a c d g h ->
         -- Superposing axiom: trace commutes with tensor product
         let lhs = @Monoidal.tensor_morphisms(
@@ -558,7 +558,7 @@
           trace(standard_traced, a, b, c, g).result,
           h
         ) in
-        
+
         let rhs = trace(
           standard_traced,
           a,
@@ -570,10 +570,10 @@
             h
           )
         ).result in
-        
+
         lhs.toString() == rhs.toString()
       ],
-      
+
       sliding: [f g ->
         -- Sliding axiom: trace is invariant under "sliding"
         let lhs = trace(
@@ -591,7 +591,7 @@
             g
           )
         ).result in
-        
+
         let rhs = trace(
           standard_traced,
           a,
@@ -607,27 +607,27 @@
             )
           )
         ).result in
-        
+
         lhs.toString() == rhs.toString()
       ]
     },
-    
+
     -- Laws
     law: {
       -- All laws from monoidal categories still apply
-      
+
       -- Category laws
-      identity: [f -> 
-        compose([x -o> x], f) == f && 
+      identity: [f ->
+        compose([x -o> x], f) == f &&
         compose(f, [x -o> x]) == f
       ],
-      
-      associativity: [f g h -> 
+
+      associativity: [f g h ->
         compose(compose(f, g), h) == compose(f, compose(g, h))
       ],
-      
+
       -- Monoidal laws (inherited)
-      
+
       -- Trace laws
       trace_naturality: [f g h ->
         -- Naturality: Trace commutes with composition
@@ -646,7 +646,7 @@
             g
           )
         ).result in
-        
+
         let rhs = @Monoidal.compose(
           standard_traced.base_monoidal,
           f,
@@ -658,10 +658,10 @@
             g
           ).result
         ) in
-        
+
         lhs.toString() == rhs.toString()
       ],
-      
+
       trace_yanking: [a ->
         -- Yanking axiom: tracing the symmetry gives identity
         yanking(standard_traced, a)
@@ -685,7 +685,7 @@
         let output = next_state * 2 in
         (next_state, output)
       ] in
-      
+
       let traced = trace(
         standard_traced,
         Z,       -- State type (integer)
@@ -693,10 +693,10 @@
         Z,       -- Output type
         feedback_morphism
       ) in
-      
+
       traced.result(input)
     ],
-    
+
     --[[
       Example 2: Computing a fixed point
     ]]--
@@ -704,7 +704,7 @@
       initial ->
       fixed_point([x -> if x > 100 { x } else { x * 2 }], initial)
     ],
-    
+
     --[[
       Example 3: Implementing iteration using trace
     ]]--
@@ -716,7 +716,7 @@
         let next_value = value * 2 in
         (next_state, next_value)
       ] in
-      
+
       let iterated = iterate(
         standard_traced,
         Z,       -- Counter type
@@ -724,13 +724,13 @@
         step,
         iterations
       ) in
-      
+
       let result = iterated((0, initial)) in
       let (final_state, final_value) = result in
-      
+
       final_value
     ],
-    
+
     --[[
       Example 4: Creating a composition of traces
     ]]--
@@ -746,7 +746,7 @@
           (state + 1, input * 2)
         ]
       ) in
-      
+
       let second_trace = trace(
         standard_traced,
         Z,       -- State type
@@ -757,16 +757,16 @@
           (state + 2, input + 3)
         ]
       ) in
-      
+
       let composed = @Monoidal.compose(
         standard_traced.base_monoidal,
         first_trace.result,
         second_trace.result
       ) in
-      
+
       composed(input)
     ],
-    
+
     --[[
       Example 5: Implementing a recursive function using trace
     ]]--
@@ -774,7 +774,7 @@
       n ->
       let factorial_step = [(state_input) -o>
         let (state, input) = state_input in
-        
+
         if input <= 1 {
           (state, 1)
         } else {
@@ -783,7 +783,7 @@
           (state, input * result)
         }
       ] in
-      
+
       -- This is a Y-combinator pattern using trace
       let traced = trace(
         standard_traced,
@@ -792,8 +792,8 @@
         Z,         -- Output type
         factorial_step
       ) in
-      
+
       traced.result(n)
     ]
   }
-} 
+}

@@ -1,9 +1,9 @@
 --[[
   CAVs
-  
+
   This module defines CAVs, which are the context aware values.
   CAVs encapsulatecontexts that can extract values.
-  
+
   This implementation avoids monadic patterns by using linear types
   for precise resource tracking and composition.
 ]]--
@@ -14,7 +14,7 @@
     !CAV
     !CAVMorphism
     !CAVTransformation
-    
+
     -- Common CAVs
     !IdentityCAV
     !ProductCAV
@@ -38,7 +38,7 @@
     extract
     duplicate
     extend
-    
+
     -- CAV instance constructors
     identity_CAV
     product_CAV
@@ -47,16 +47,16 @@
     store_CAV
     env_CAV
     traced_CAV
-    
+
     -- CAV morphisms
     CAV_morphism
     composed_CAV
-    
+
     -- Cokleisli operations
     cokleisli
     co_return
     co_compose
-    
+
     -- CAV transformations
     CAV_transformation
   }
@@ -94,7 +94,7 @@
     !CAVMorphism represents a morphism between CAVs.
   ]]--
   !CAVMorphism: {
-    _type: "CAVMorphism", 
+    _type: "CAVMorphism",
     source: !CAV,                 -- Source CAV
     target: !CAV,                 -- Target CAV
     transform: (w a -o> v a),         -- Natural transformation
@@ -135,7 +135,7 @@
     !FunctionCAV represents the function CAV (Reader).
   ]]--
   !FunctionCAV: {
-    _type: "FunctionCAV", 
+    _type: "FunctionCAV",
     environment_type: T.Type,         -- Type of environment
     base: !CAV                    -- The underlying CAV
   }
@@ -182,7 +182,7 @@
   --[[
     CAV creates a new CAV from its components.
   ]]--
-  CAV: S * T.Type * T.Type * (w a -o> a) * (w a -o> w (w a)) * 
+  CAV: S * T.Type * T.Type * (w a -o> a) * (w a -o> w (w a)) *
            ((a -o> b) -o> (w a -o> w b)) -> !CAV [
     name content container extract_fn duplicate_fn map_fn ->
     {
@@ -254,7 +254,7 @@
     name left right ->
     let base = CAV(
       name,
-      typeof(a),         -- Content type 
+      typeof(a),         -- Content type
       (typeof(w a), typeof(v a)),  -- Container is product of containers
       [(w_a, v_a) -o>
         (extract(left, w_a), extract(right, v_a))
@@ -308,7 +308,7 @@
       typeof(a),         -- Content type
       typeof([a]),       -- Container type (infinite stream)
       [stream -o> stream[0]],  -- Extract takes head of stream
-      [stream -o> 
+      [stream -o>
         [i -o> [j -o> stream[i + j]]]
       ],                 -- Duplicate creates streams of substreams
       [f -o> [stream -o> [i -o> f(stream[i])]]]  -- Map applies f to each element
@@ -329,10 +329,10 @@
       typeof(a),         -- Content type
       typeof((s -> a, s)),  -- Container is (getter, state)
       [(getter, state) -o> getter(state)],  -- Extract applies getter to state
-      [(getter, state) -o> 
+      [(getter, state) -o>
         [s -o> (getter, s)]
       ],                 -- Duplicate creates a store of stores
-      [f -o> [(getter, state) -o> 
+      [f -o> [(getter, state) -o>
         ([s -o> f(getter(s))], state)
       ]]                 -- Map composes f with getter
     ) in
@@ -433,7 +433,7 @@
   --[[
     CAV_transformation creates a natural transformation between CAVs.
   ]]--
-  CAV_transformation: S * !CAV * !CAV * (a -> (w a -o> v a)) -> 
+  CAV_transformation: S * !CAV * !CAV * (a -> (w a -o> v a)) ->
                        !CAVTransformation [
     name source target components ->
     {
@@ -512,13 +512,13 @@
 
   -- Identity CAV
   identity: !IdentityCAV = identity_CAV("Identity")
-  
+
   -- Environment CAV for String environment
   env: !EnvCAV = env_CAV("Env", typeof(S))
-  
+
   -- Store CAV for Integer state
   store: !StoreCAV = store_CAV("Store", typeof(Z))
-  
+
   -- Stream CAV
   stream: !StreamCAV = stream_CAV("Stream")
 
@@ -528,43 +528,43 @@
 
   --[[
     Structure mapping that establishes @CAV as a categorical structure.
-    
+
     In this structure:
     - Objects are types
     - Morphisms are cokleisli arrows (w a -> b)
     - Identity is extract
     - Composition is cokleisli composition
-    
+
     This forms a category known as the cokleisli category of the CAV.
   ]]--
   cokleisli_structure: {
     -- Map CAV to a category
     objects: a,                              -- Objects are types
     morphisms: (w a -o> b),                  -- Morphisms are cokleisli arrows
-    
+
     -- Core category structure
     dom: [f -> typeof(w a) given f: (w a -o> b)],
     cod: [f -> typeof(b) given f: (w a -o> b)],
     id: [a -> [w_a -o> extract(standard_CAV, w_a)]],  -- Identity is extract
     compose: [f g -> co_compose(standard_CAV, f, g)], -- Composition is cokleisli composition
-    
+
     -- Laws
     law: {
-      identity: [f -> 
+      identity: [f ->
         -- Left identity: extract =>> f = f
-        co_compose(standard_CAV, 
-          [w_a -o> extract(standard_CAV, w_a)], 
+        co_compose(standard_CAV,
+          [w_a -o> extract(standard_CAV, w_a)],
           f
         ) == f
         &&
         -- Right identity: f =>> extract = f
-        co_compose(standard_CAV, 
-          f, 
+        co_compose(standard_CAV,
+          f,
           [w_b -o> extract(standard_CAV, w_b)]
         ) == f
       ],
-      
-      associativity: [f g h -> 
+
+      associativity: [f g h ->
         -- (f =>> g) =>> h = f =>> (g =>> h)
         co_compose(standard_CAV,
           co_compose(standard_CAV, f, g),
@@ -579,7 +579,7 @@
 
   --[[
     Structure mapping that establishes CAVs themselves as a category.
-    
+
     In this structure:
     - Objects are CAVs
     - Morphisms are CAV morphisms
@@ -590,30 +590,30 @@
     -- Map CAV to a category
     objects: !CAV,                         -- Objects are CAVs
     morphisms: !CAVMorphism,               -- Morphisms are CAV morphisms
-    
+
     -- Core category structure
     dom: [m -> m.source],
     cod: [m -> m.target],
     id: [cmd -> CAV_morphism(cmd, cmd, [w_a -o> w_a])],
-    compose: [m1 m2 -> 
+    compose: [m1 m2 ->
       if m1.target != m2.source {
         error("Cannot compose CAV morphisms with incompatible types")
       }
       CAV_morphism(
-        m1.source, 
-        m2.target, 
+        m1.source,
+        m2.target,
         [w_a -o> m2.transform(m1.transform(w_a))]
       )
     ],
-    
+
     -- Laws
     law: {
-      identity: [m -> 
-        compose(id(dom(m)), m) == m && 
+      identity: [m ->
+        compose(id(dom(m)), m) == m &&
         compose(m, id(cod(m))) == m
       ],
-      
-      associativity: [m1 m2 m3 -> 
+
+      associativity: [m1 m2 m3 ->
         compose(compose(m1, m2), m3) == compose(m1, compose(m2, m3))
       ]
     }
@@ -633,65 +633,65 @@
     store_example: () -> Z [->
       let get_value = [position -o> position * 2] in
       let store_container = (get_value, 5) in
-      
+
       extract(store.base, store_container)  -- Should return 10 (= 5 * 2)
     ],
-    
+
     --[[
       Example 2: Using the Env CAV
     ]]--
     env_example: () -> Z [->
       let env_container = ("config", 42) in
-      
+
       extract(env.base, env_container)  -- Should return 42
     ],
-    
+
     --[[
       Example 3: Extending a Store CAV
     ]]--
     extend_example: () -> ((Z -> Z), Z) [->
       let get_value = [position -o> position * 2] in
       let store_container = (get_value, 5) in
-      
+
       -- Create a function that adds the current value to the value at position+1
-      let f = [(getter, state) -o> 
+      let f = [(getter, state) -o>
         getter(state) + getter(state + 1)
       ] in
-      
+
       extend(store.base, f, store_container)
       -- Should return a new store with a modified getter function
     ],
-    
+
     --[[
       Example 4: Composing Cokleisli arrows
     ]]--
     cokleisli_example: () -> S [->
       let env_container = ("config", 42) in
-      
+
       -- First arrow: from Env Int to Int (extracts the value and adds 1)
       let f = [(e, a) -o> a + 1] in
-      
+
       -- Second arrow: from Env Int to String (converts to string)
       let g = [(e, a) -o> "Value: " + string(a)] in
-      
+
       -- Compose them
       let h = co_compose(env.base, f, g) in
-      
+
       h(env_container)  -- Should return "Value: 43"
     ],
-    
+
     --[[
       Example 5: Composing CAVs
     ]]--
     composed_CAV_example: () -> Z [->
       -- Create a composition of Store and Env
       let composed = composed_CAV("StoreEnv", store.base, env.base) in
-      
+
       -- Create a composite container ((s -> a, s), e)
       let get_value = [position -o> position * 2] in
       let container = ((get_value, 5), "config") in
-      
+
       extract(composed, container)  -- Should return 10
     ]
   }
-} 
+}

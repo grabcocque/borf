@@ -1,11 +1,18 @@
 --[[
-  Linear IO System
+  Resource-Safe IO Tools - Interact with the Outside World Safely
 
-  This module defines the input/output capabilities of the Borf language using
-  linear types to ensure proper resource handling. It provides a framework for
-  safely handling I/O operations in a pure functional context, where each IO
-  resource must be explicitly acquired, used exactly once, and properly released.
-  Linear typing guarantees that resources cannot be duplicated or forgotten.
+  This module provides powerful tools for working with files, networks, and other
+  external systems, letting you:
+
+  - Read and write files with automatic resource cleanup
+  - Connect to networks and process data streams reliably
+  - Access environment variables and command-line arguments
+  - Handle errors gracefully with structured error reporting
+  - Guarantee that resources like files and connections are never leaked
+  - Process data safely without resource duplication or loss
+
+  All operations use resource tracking to ensure files are closed, connections
+  terminated, and memory released - even when errors occur.
 ]]--
 
 @IO: {
@@ -62,67 +69,79 @@
   vis: E |> [e -> true]
 
   --------------------------------------------------
-  -- Structure Mapping to Linear Effectful Category
+  -- GUARANTEES: Resource Safety Principles
   --------------------------------------------------
 
   --[[
-    Structure mapping that explicitly connects the IO module to the
-    categorical framework as a Linear Effectful Category. This mapping
-    establishes @IO.IO as a linear effect type constructor with resource
-    tracking guarantees and proper cleanup semantics.
+    The IO System's Resource Safety Guarantees
 
-    Instead of using monadic structure, we use linear morphisms where resources
-    are consumed exactly once and must be explicitly released.
+    This module provides a strong set of guarantees that protect you from
+    common resource management errors:
+
+    1. No Resource Leaks: All files, connections and resources MUST be
+       properly closed or released
+
+    2. No Use After Close: You cannot accidentally use a file after closing it
+
+    3. No Double Close: You cannot accidentally close a resource twice
+
+    4. Error Safety: Resources are properly released even when errors occur
+
+    5. Safe Composition: You can safely combine IO operations without
+       breaking resource management rules
   ]]--
   structure: {
-    -- Map IO to LinearEffectCategory
+    -- How Resource Safety Works Behind the Scenes
+    -- (You don't need to understand this to use the IO system safely)
+
+    -- Type system foundation
     objects: T.Type_0,
     morphisms: [a b -> (!a -o> !IO(!b))],
 
-    -- Base category structure
+    -- Core composition rules (how operations chain together)
     dom: [f -> f.domain],
     cod: [f -> f.codomain],
     id: [a -> [!x -o> !IO(x)]],
     compose: [f g -> [!x -o> f(x) |>> g]],
 
-    -- Symmetric monoidal structure (for pairing values linearly)
+    -- Resource tracking mechanics
     tensor: [a b -> (!a * !b)],
     unit: T.Unit,
 
-    -- Effect type constructor
+    -- IO operation handling
     effect_obj: [a -> !IO(a)],
     effect_map: [f -> [!io -o> io |>> [x -> pure(f(x))]]],
 
-    -- Linear operations on IO
+    -- Success/failure handling
     pure_linear: [a -> (!a -o> !IO(a))],
     fail_linear: [a -> (!Error -o> !IO(a))],
 
-    -- Linear combinators that consume their inputs
+    -- Operation combining tools
     sequence_linear: [a b -> (!IO(a) * (!a -o> !IO(b)) -o> !IO(b))],
     combine_linear: [a b -> (!IO(a) * !IO(b) -o> !IO(a * b))],
     parallel_linear: [a -> ![!IO(a)] -o> !IO([a])],
 
-    -- Resource handling operations
+    -- Safe resource management pattern
     with_resource_linear: [r a -> (!IO(!r) * (!r -o> !IO(a)) * (!r -o> !IO(Unit)) -o> !IO(a))],
 
-    -- Linear pipe operator that sequences operations
+    -- Operation sequencing (pipe operator implementation)
     pipe_linear: [a b -> (!IO(a) * (!a -o> !IO(b)) -o> !IO(b))],
 
-    -- Linear resource consumption laws
-    laws: {
-      -- Each resource is acquired and released exactly once
+    -- How the Safety Guarantees Are Enforced
+    validation: {
+      -- Guarantee 1: No Resource Leaks
       resource_lifecycle: forall [acquire use release ->
-        with_resource(acquire, use, release) |> resource_handled_properly
+        with_resource(acquire, use, release) |> resources_always_released
       ],
 
-      -- IO operations consume their inputs exactly once
-      linear_consumption: forall [io f -> let !x = io in f(!x) |> resource_consumed_exactly_once],
+      -- Guarantee 2 & 3: No Use After Close, No Double Close
+      linear_consumption: forall [io f -> let !x = io in f(!x) |> used_exactly_once],
 
-      -- Resources can't be duplicated
-      no_copy: forall [r -> let !x = r in {!x, !x} |> type_error],
+      -- How Duplicate Use Prevention Works
+      no_copy: forall [r -> let !x = r in {!x, !x} |> compiler_prevents_this],
 
-      -- Resources can't be discarded without proper cleanup
-      no_discard: forall [r -> let !x = r in unit |> type_error]
+      -- How Resource Leak Prevention Works
+      no_discard: forall [r -> let !x = r in unit |> compiler_prevents_this]
     }
   }
 
@@ -139,108 +158,213 @@
   Mode: {:read, :write, :append, :read_write, :create, :truncate, :exclusive}
 
   --[[
-    !Result represents either success with a value or an error
+    !Result - Safe error handling container
+
+    Represents either a successful value or an error.
+    Using this type ensures you always handle potential errors
+    rather than assuming operations will succeed.
   ]]--
   !Result: Type -> Type
 
   --[[
-    !Error represents a structured error with code and message
+    !Error - Detailed error information
+
+    Provides specific information about what went wrong during an operation.
+    Includes both a machine-readable error code and a human-readable message
+    to help with debugging and error reporting.
   ]]--
   !Error: { code: ErrorCode, message: S }
 
   --[[
-    !File represents a file handle that must be properly closed
+    !File - Resource-tracked file handle
+
+    Represents an open file that you can read from or write to.
+    The resource tracking system ensures this handle will always
+    be properly closed when you're done using it.
   ]]--
   !File: { path: !Path, mode: Mode, handle: Handle }
 
   --[[
-    !Socket represents a network connection that must be properly closed
+    !Socket - Resource-tracked network connection
+
+    Represents an open network connection for sending and receiving data.
+    The resource tracking system ensures connections are always properly
+    closed, preventing network resource leaks.
   ]]--
   !Socket: { address: S, port: Z, protocol: {:tcp, :udp}, handle: Handle }
 
   --[[
-    !Console represents terminal interaction capabilities
+    !Console - Terminal interaction tools
+
+    Provides access to the terminal for user interaction.
+    Includes configuration for special display modes like colors
+    and cursor control for building interactive CLI applications.
   ]]--
   !Console: { raw_mode: Bool, color_support: Bool, width: Z, height: Z }
 
   --[[
-    !Stream represents a sequential data stream
+    !Stream - Sequential data flow handler
+
+    Handles data that arrives or is sent sequentially over time.
+    Used for continuous reading/writing operations like reading
+    log files, processing network data, or handling user input.
   ]]--
   !Stream: { kind: {:input, :output, :bidirectional}, buffer: !Buffer }
 
   --[[
-    !Dir represents a directory handle that must be properly closed
+    !Dir - Resource-tracked directory handle
+
+    Provides access to directory contents for listing and traversal.
+    Like all resource handles, it's automatically tracked to ensure
+    proper cleanup when you're done using it.
   ]]--
   !Dir: { path: !Path, handle: Handle }
 
   --[[
-    !Path represents a filesystem path
+    !Path - Filesystem location reference
+
+    Represents a location in the filesystem that can be manipulated safely.
+    Provides operations for path combination, extraction of components,
+    and navigation of the filesystem hierarchy.
   ]]--
   !Path: { segments: [S], absolute: Bool }
 
   --[[
-    !Buffer represents a mutable data buffer
+    !Buffer - Raw data container
+
+    Holds raw binary data for efficient reading and writing operations.
+    Used when working with files, network transmissions, or any other
+    situation requiring direct data manipulation.
   ]]--
   !Buffer: { data: [Byte], position: Z, capacity: Z }
 
   --[[
-    !Env represents environment access
+    !Env - Environment variable access
+
+    Provides controlled access to system environment variables.
+    Used to read configuration from the environment or pass
+    information between processes and systems.
   ]]--
   !Env: { vars: {S: S} }
 
   --[[
-    !IO represents an IO operation that produces a result
+    !IO - Resource-safe operation container
+
+    The core type that makes resource safety possible.
+    Wraps operations that interact with the outside world to ensure
+    all resources are properly managed and errors are handled correctly.
+    Every IO operation returns this type.
   ]]--
   !IO: Type -> Type
 
   --[[
-    Creates a successful result
+    ok - Create a success result
+
+    Wraps a value in a success result container.
+    Use this when implementing functions that can fail but
+    need to return a successful value in the happy path.
+
+    Example: user_data |> ok
   ]]--
   ok: a -o> !Result(a)
 
   --[[
-    Creates an error result
+    error - Create a failure result
+
+    Creates a result that represents a failure.
+    Use this when an operation cannot complete successfully
+    and you need to explain what went wrong.
+
+    Example: "File not found" |> error
   ]]--
   error: !Error -o> !Result(a)
   error: S -o> !Result(a) [msg -> {code: :unknown_error, message: msg} |> error]
 
   --[[
-    Pattern matches on a result, consuming it and producing a value
+    match_result - Handle both success and failure paths
+
+    Processes a result with different handlers for success and failure.
+    This is the main way to safely extract values from results while
+    ensuring all error cases are properly handled.
+
+    Example: db_query |> match_result([data -> process(data)], [err -> log(err)])
   ]]--
   match_result: !Result(a) * (a -o> b) * (!Error -o> b) -o> b
 
   --[[
-    Tries an operation, returning the result directly
+    try - Run an operation and get its result
+
+    Executes an IO operation and returns its success or failure.
+    Use this when you want to handle errors manually rather than
+    having them propagate automatically.
+
+    Example: open_critical_file |> try |> handle_possible_failure
   ]]--
   try: !IO(a) -o> !Result(a)
 
   --[[
-    Catches errors in an IO operation
+    catch - Recover from errors in operations
+
+    Provides a way to handle errors and continue execution.
+    Like a try/catch block in other languages, this lets you
+    recover from errors without terminating the entire operation.
+
+    Example: read_config |> catch([err -> use_default_config()])
   ]]--
   catch: !IO(a) * (!Error -o> !IO(a)) -o> !IO(a)
 
   --[[
-    Performs cleanup after an operation regardless of success/failure
+    with_cleanup - Ensure resources are released
+
+    Guarantees that cleanup code runs whether an operation succeeds or fails.
+    Similar to try/finally blocks in other languages, this ensures
+    resources are always properly released even if errors occur.
+
+    Example: db_transaction |> with_cleanup([_ -> db_rollback()])
   ]]--
   with_cleanup: !IO(a) * (() -o> !IO(Unit)) -o> !IO(a)
 
   --[[
-    Opens a file, returning a handle that must be closed
+    open_file - Access a file for reading or writing
+
+    Opens a file and returns a resource-tracked handle for access.
+    The handle must be properly closed when you're done with it,
+    which the resource tracking system will enforce.
+
+    Example: "data.json" |> path |> open_file(:read)
   ]]--
   open_file: !Path * Mode -o> !IO(!Result(!File))
 
   --[[
-    Closes a file, consuming the handle
+    close_file - Release a file resource
+
+    Closes a file handle, releasing the resource.
+    After calling this, the file handle is consumed and cannot be used again,
+    which prevents common bugs like use-after-close or double-close.
+
+    Example: file |> close_file
   ]]--
   close_file: !File -o> !IO(!Result(Unit))
 
   --[[
-    Reads the entire contents of a file
+    read_file - Load complete file contents
+
+    Reads an entire file into memory as a string.
+    Convenient for smaller files where you need all the content at once,
+    like configuration files, small documents, or data files.
+
+    Example: "config.yaml" |> path |> read_file
   ]]--
   read_file: !Path -o> !IO(!Result(S))
 
   --[[
-    Writes content to a file
+    write_file - Save data to a file
+
+    Creates or overwrites a file with the given content.
+    Use this when you need to save data, create a file from scratch,
+    or completely replace an existing file's contents.
+
+    Example: "output.txt" |> path |> write_file("Hello, world!")
   ]]--
   write_file: !Path * S -o> !IO(!Result(Unit))
 
@@ -540,13 +664,109 @@
   --     (file -> file |> close_file)
   -- ]
 
+  --------------------------------------------------
+  -- PRACTICAL EXAMPLES
+  --------------------------------------------------
+
   --[[
-    Safely reads a file with proper resource management
+    Example 1: Safe File Reading with Resource Management
+
+    This pattern shows how to safely read a file with proper cleanup,
+    demonstrating the resource safety guarantees in action.
   ]]--
-  -- safe_read: !Path -o> !IO(!Result(S)) [path ->
-  --   path |> with_file :read [file ->
-  --     let {contents, file} = file |> read_to_string;
-  --     contents |> ok
-  --   ]
-  -- ]
+
+  safe_read: !Path -o> !IO(!Result(S)) [path ->
+    -- Define how to acquire the resource
+    let acquire = path |> open_file(:read);
+
+    -- Define what to do with the resource
+    let use = [file ->
+      file |> read_line |> match_result(
+        [result ->
+          let {content, _} = result;
+          content |> ok
+        ],
+        [err -> err |> error]
+      )
+    ];
+
+    -- Define how to release the resource (always happens)
+    let release = [file -> file |> close_file];
+
+    -- Put it all together with automatic resource management
+    acquire use release |> with_resource
+  ]
+
+  --[[
+    Example 2: Processing a Configuration File
+
+    This example demonstrates reading a config file, parsing it,
+    and applying the configuration with proper error handling.
+  ]]--
+
+  load_config: !Path -o> !IO(!Result({S: S})) [config_path ->
+    config_path |> read_file |> catch([error ->
+      "Failed to read configuration: " + error.message |> error |> pure
+    ]) |>> [result ->
+      result |> match_result(
+        [content ->
+          -- Parse the configuration file
+          content |> parse_config |> pure
+        ],
+        [err -> err |> error |> pure]
+      )
+    ]
+  ]
+
+  --[[
+    Example 3: Web Request with Timeout and Retry
+
+    This example shows making a network request with timeout
+    protection and automatic retry on failure.
+  ]]--
+
+  fetch_data: S -o> !IO(!Result(S)) [url ->
+    let connect_operation = url 80 :tcp |> connect |>> [socket_result ->
+      socket_result |> match_result(
+        [socket ->
+          -- Prepare request
+          "GET / HTTP/1.1\r\nHost: " + url + "\r\n\r\n" |> buffer |> serialize |>> [data ->
+            data |> match_result(
+              [buffer ->
+                -- Send request
+                socket buffer |> send |>> [send_result ->
+                  send_result |> match_result(
+                    [socket ->
+                      -- Receive response
+                      socket 1024 |> receive |>> [recv_result ->
+                        recv_result |> match_result(
+                          [data_and_socket ->
+                            let {buffer, socket} = data_and_socket;
+                            -- Clean up
+                            socket |> disconnect;
+                            -- Return data
+                            buffer |> buffer_to_string |> snd |> ok |> pure
+                          ],
+                          [err -> err |> error |> pure]
+                        )
+                      ]
+                    ],
+                    [err -> err |> error |> pure]
+                  )
+                ]
+              ],
+              [err -> err |> error |> pure]
+            )
+          ]
+        ],
+        [err -> err |> error |> pure]
+      )
+    ];
+
+    -- Add timeout and retry protection
+    connect_operation |> timeout(5000) |> catch([_ ->
+      -- Retry once after failure
+      connect_operation |> timeout(5000)
+    ])
+  ]
 }

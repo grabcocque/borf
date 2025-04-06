@@ -30,7 +30,7 @@
 
   tau: T.tau
 
-  vis: E |> [e -> true]
+  vis: E |> [e -> e true]
 
   deps: {
     (@Verify, @T, true),       -- Add dependency on Type system
@@ -52,42 +52,34 @@
   ]]--
   verify_functorial: forall(A: @Cata.Theory.Category B: @Cata.Theory.Category) ->
                     (A -> B) -> VerificationResult [F ->
-    let objects = A.objects in
-    let morphisms = A.morphisms in
+    A objects -> objects
+    A morphisms -> morphisms
 
     -- Verify identity preservation
-    let identity_preserved = objects |> forall [o ->
-      let F_id_o = F(A.id(o)) in
-      let id_F_o = B.id(F(o)) in
-      F_id_o == id_F_o
-    ] in
+    objects [o ->
+      o A id F -> F_id_o
+      o F B id -> id_F_o
+      F_id_o id_F_o ceq
+    ] forall -> identity_preserved
 
     -- Verify composition preservation
-    let composition_preserved = morphisms |> forall [f g ->
-      if A.composable(f, g) {
-        let F_f_circ_g = F(A.compose(f, g)) in
-        let F_f_circ_F_g = B.compose(F(f), F(g)) in
-        F_f_circ_g == F_f_circ_F_g
-      } else {
-        true  -- Skip non-composable morphisms
+    morphisms [f, g ->
+      {
+        f g A compose F -> F_f_circ_g
+        f F g F B compose -> F_f_circ_F_g
+        F_f_circ_g F_f_circ_F_g ceq
+      } iff f g A composable or_else {
+        true
       }
-    ] in
+    ] forall -> composition_preserved
 
-    if identity_preserved and composition_preserved {
-      {success: true, errors: []}
-    } else {
-      let errors = [] in
-      let errors = if not identity_preserved {
-        errors ++ ["Functor does not preserve identities"]
-      } else {
-        errors
-      } in
-      let errors = if not composition_preserved {
-        errors ++ ["Functor does not preserve composition"]
-      } else {
-        errors
-      } in
-      {success: false, errors: errors}
+    {
+      [] true
+    } iff identity_preserved composition_preserved and or_else {
+      [] -> errors
+      identity_preserved not { errors ["Functor does not preserve identities"] + } { errors } iff -> errors
+      composition_preserved not { errors ["Functor does not preserve composition"] + } { errors } iff -> errors
+      errors false
     }
   ]
 
@@ -96,25 +88,24 @@
   ]]--
   verify_natural: forall(A: @Cata.Theory.Category B: @Cata.Theory.Category F: @Cata.Theory.Functor A B G: @Cata.Theory.Functor A B) ->
                  (forall(X: A.O) -> B.M(F(X), G(X))) -> VerificationResult [alpha ->
-    let objects = A.objects in
-    let morphisms = A.morphisms in
+    A objects |> objects
+    A morphisms |> morphisms
 
     -- Verify naturality square for each morphism
-    let naturality_squares_commute = morphisms |> forall [f ->
-      let domain = A.dom(f) in
-      let codomain = A.cod(f) in
+    morphisms [f ->
+      f A dom |> domain
+      f A cod |> codomain
 
-      let top_path = B.compose(F(f), alpha(codomain)) in
-      let bottom_path = B.compose(alpha(domain), G(f)) in
+      f F codomain alpha B compose |> top_path
+      domain alpha domain G f B compose |> bottom_path
 
-      top_path == bottom_path
-    ] in
+      top_path bottom_path ceq
+    ] forall |> naturality_squares_commute
 
-    if naturality_squares_commute {
-      {success: true, errors: []}
-    } else {
-      {success: false, errors: ["Natural transformation does not satisfy naturality condition"]}
-    }
+    naturality_squares_commute {
+      | true -> [] true
+      | false -> ["Natural transformation does not satisfy naturality condition"] false
+    } match
   ]
 
   --[[
@@ -123,39 +114,31 @@
   verify_adjunction: forall(A: Category B: Category F: Functor B A G: Functor A B) ->
                     (Unit: forall(X: A.O) -> A.M(X, F(G(X)))) ->
                     (Counit: forall(Y: B.O) -> B.M(G(F(Y)), Y)) ->
-                    VerificationResult [unit counit ->
-    let A_objects = A.objects in
-    let B_objects = B.objects in
+                    VerificationResult [unit, counit ->
+    A objects |> A_objects
+    B objects |> B_objects
 
     -- Verify triangle identities
-    let left_triangle = B_objects |> forall [Y ->
-      let identity_path = B.id(G(Y)) in
-      let composite_path = B.compose(G(unit(F(Y))), counit(Y)) in
-      identity_path == composite_path
-    ] in
+    B_objects [Y ->
+      Y G B id |> identity_path
+      Y F unit G Y counit B compose |> composite_path
+      identity_path composite_path veq
+    ] forall |> left_triangle
 
-    let right_triangle = A_objects |> forall [X ->
-      let identity_path = A.id(F(X)) in
-      let composite_path = A.compose(unit(X), F(counit(G(X)))) in
-      identity_path == composite_path
-    ] in
+    A_objects [X ->
+      X F A id |> identity_path
+      X unit X G F counit F A compose |> composite_path
+      identity_path composite_path veq
+    ] forall |> right_triangle
 
-    if left_triangle and right_triangle {
-      {success: true, errors: []}
-    } else {
-      let errors = [] in
-      let errors = if not left_triangle {
-        errors ++ ["Left triangle identity does not hold"]
-      } else {
-        errors
-      } in
-      let errors = if not right_triangle {
-        errors ++ ["Right triangle identity does not hold"]
-      } else {
-        errors
-      } in
-      {success: false, errors: errors}
-    }
+    left_triangle right_triangle and [
+      [] true
+    ] [
+      [] |> errors
+      left_triangle not [errors ["Left triangle identity does not hold"] +] [errors] if |> errors
+      right_triangle not [errors ["Right triangle identity does not hold"] +] [errors] if |> errors
+      errors false
+    ] if
   ]
 
   --[[
@@ -163,21 +146,22 @@
   ]]--
   verify_type_preservation: forall(A: T.Type_0 B: T.Type_0) ->
                            (A -> B) -> (A -> T.Type) -> (B -> T.Type) ->
-                           (forall(a: A) -> B -> Bool) -> VerificationResult [f source_type target_type predicate ->
-    let sample_inputs = Prim.generate_samples(A, 10) in
+                           (forall(a: A) -> B -> Bool) -> VerificationResult [f, source_type, target_type, predicate ->
+    A 10 Prim generate_samples -> sample_inputs
 
-    let type_preserved = sample_inputs |> forall [a ->
-      let output_type = target_type(f(a)) in
-      let expected_type = source_type(a) |> Prim.map_type in
+    sample_inputs [a ->
+      a f -> result
+      result target_type -> output_type
+      a source_type Prim map_type -> expected_type
 
-      output_type == expected_type and predicate(a, f(a))
-    ] in
+      output_type expected_type teq a result predicate and
+    ] forall -> type_preserved
 
-    if type_preserved {
-      {success: true, errors: []}
-    } else {
-      {success: false, errors: ["Type preservation violated"]}
-    }
+    type_preserved [
+      [] true
+    ] [
+      ["Type preservation violated"] false
+    ] if
   ]
 
   --[[
@@ -185,40 +169,40 @@
   ]]--
   verify_resource_usage: forall(A: T.Type_0 B: T.Type_0) ->
                         (!A -o> B) -> VerificationResult [f ->
-    let sample_inputs = Prim.generate_linear_samples(A, 10) in
+    A 10 Prim generate_linear_samples -> sample_inputs
 
-    let resources_consumed = sample_inputs |> forall [a ->
+    sample_inputs [a ->
       -- In a real implementation, would check consumption more precisely
-      Prim.is_consumed(a) after f(a)
-    ] in
+      a f a Prim is_consumed after
+    ] forall -> resources_consumed
 
-    if resources_consumed {
-      {success: true, errors: []}
-    } else {
-      {success: false, errors: ["Resource usage violation detected"]}
-    }
+    resources_consumed [
+      [] true
+    ] [
+      ["Resource usage violation detected"] false
+    ] if
   ]
 
   --[[
     Verify two transformations are consistent
   ]]--
   verify_consistent: forall(A: T.Type_0 B: T.Type_0) ->
-                    (A -> B) -> (B -> A) -> VerificationResult [f g ->
-    let sample_inputs = Prim.generate_samples(A, 10) in
+                    (A -> B) -> (B -> A) -> VerificationResult [f, g ->
+    A 10 Prim generate_samples -> sample_inputs
 
-    let round_trip_consistent = sample_inputs |> forall [a ->
-      let b = f(a) in
-      let a_prime = g(b) in
+    sample_inputs [a ->
+      a f -> b
+      b g -> a_prime
 
       -- Check consistency based on structure, not exact equality
-      Prim.structurally_equivalent(a, a_prime)
-    ] in
+      a a_prime Prim structurally_equivalent
+    ] forall -> round_trip_consistent
 
-    if round_trip_consistent {
-      {success: true, errors: []}
-    } else {
-      {success: false, errors: ["Round-trip transformation inconsistency detected"]}
-    }
+    round_trip_consistent [
+      [] true
+    ] [
+      ["Round-trip transformation inconsistency detected"] false
+    ] if
   ]
 
   --[[
@@ -226,21 +210,21 @@
   ]]--
   verify_composition_preservation: forall(A: T.Type_0 B: T.Type_0) ->
                                  (A -> B) -> (A * A -> A) -> (B * B -> B) ->
-                                 VerificationResult [f compose_a compose_b ->
-    let sample_pairs = Prim.generate_sample_pairs(A, 10) in
+                                 VerificationResult [f, compose_a, compose_b ->
+    A 10 Prim generate_sample_pairs -> sample_pairs
 
-    let composition_preserved = sample_pairs |> forall [[a1, a2] ->
-      let direct_path = f(compose_a(a1, a2)) in
-      let composed_path = compose_b(f(a1), f(a2)) in
+    sample_pairs [[a1, a2] ->
+      a1 a2 compose_a f -> direct_path
+      a1 f a2 f compose_b -> composed_path
 
-      direct_path == composed_path
-    ] in
+      direct_path composed_path veq
+    ] forall -> composition_preserved
 
-    if composition_preserved {
-      {success: true, errors: []}
-    } else {
-      {success: false, errors: ["Composition preservation violated"]}
-    }
+    composition_preserved [
+      [] true
+    ] [
+      ["Composition preservation violated"] false
+    ] if
   ]
 
   --------------------------------------------------
@@ -250,64 +234,66 @@
   --[[
     Example verification of the graph-to-category functor
   ]]--
-  example.verify_graph_to_category: VerificationResult [->
-    verify_functorial(@Cata.GraphXf.graph_to_category)
+  example.verify_graph_to_category: VerificationResult [_ ->
+    @Cata.GraphXf.graph_to_category verify_functorial
   ]
 
   --[[
     Example verification of the wire-to-graph functor
   ]]--
-  example.verify_wire_to_graph: VerificationResult [->
-    verify_functorial(@Cata.WireXf.wire_to_graph)
+  example.verify_wire_to_graph: VerificationResult [_ ->
+    @Cata.WireXf.wire_to_graph verify_functorial
   ]
 
   --[[
     Example verification of the net-to-wire functor
   ]]--
-  example.verify_net_to_wire: VerificationResult [->
-    verify_functorial(@Cata.INetXf.net_to_wire)
+  example.verify_net_to_wire: VerificationResult [_ ->
+    @Cata.INetXf.net_to_wire verify_functorial
   ]
 
   --[[
     Verify a simple transformation pipeline
   ]]--
-  example.verify_transformation_pipeline: VerificationResult [->
-    let g = Prim.sample_graph() in  -- Generate a sample graph
+  example.verify_transformation_pipeline: VerificationResult [_ ->
+    Prim sample_graph -> g  -- Generate a sample graph
 
     -- Direct path
-    let direct_result = @Cata.GraphXf.graph_to_wire(g) in
+    g @Cata.GraphXf graph_to_wire -> direct_result
 
     -- Alternative path
-    let wire = @Cata.WireXf.graph_to_wire(g) in
-    let alt_result = wire in
+    g @Cata.WireXf graph_to_wire -> wire
+    wire -> alt_result
 
     -- Check equality
-    {
-      success: direct_result == alt_result,
-      errors: if direct_result == alt_result { [] } else { ["Pipeline inconsistency"] }
-    }
+    direct_result alt_result veq -> results_match
+
+    results_match [
+      [] true
+    ] [
+      ["Pipeline inconsistency"] false
+    ] if
   ]
 
   --[[
     Verify a more complex transformation pipeline
   ]]--
-  example.verify_complex_pipeline: VerificationResult [->
-    let graph_to_wire = @Cata.GraphXf.graph_to_wire in
-    let wire_to_net = @Cata.WireXf.wire_to_net in
-    let graph_to_net = @Cata.GraphXf.graph_to_net in
+  example.verify_complex_pipeline: VerificationResult [_ ->
+    @Cata.GraphXf.graph_to_wire -> graph_to_wire
+    @Cata.WireXf.wire_to_net -> wire_to_net
+    @Cata.GraphXf.graph_to_net -> graph_to_net
 
-    verify_composition_preservation(
-      graph_to_net,
-      [g1 g2 -> Grph.merge(g1, g2)],
-      [n1 n2 -> INet.compose(n1, n2)]
-    )
+    graph_to_net
+    [g1, g2 -> g1 g2 Grph.merge]
+    [n1, n2 -> n1 n2 INet.compose]
+    verify_composition_preservation
   ]
 
   --[[
     Verify consistency between a transformation and its inverse
   ]]--
-  example.verify_transformation_inverse: VerificationResult [->
-    verify_consistent(@Cata.GraphXf.graph_to_category, @Cata.GraphXf.category_to_graph)
+  example.verify_transformation_inverse: VerificationResult [_ ->
+    @Cata.GraphXf.graph_to_category @Cata.GraphXf.category_to_graph verify_consistent
   ]
 
   --------------------------------------------------
@@ -326,40 +312,44 @@
   structure: {
     -- Map Verify to a category
     objects: [v | v is (a -> VerificationResult) for some a],
-    morphisms: [f g -> (f -> g)],
+    morphisms: [f, g -> (f -> g)],
 
     -- Base category structure
-    dom: [t -> t.source],
-    cod: [t -> t.target],
+    dom: [t -> t source],
+    cod: [t -> t target],
     id: [v -> [v' -> v']],  -- Identity transformation
-    compose: [t1 t2 -> [v -> t2(t1(v))]],  -- Composition of transformations
+    compose: [t1, t2 -> [v -> v t1 t2]],  -- Composition of transformations
 
     -- Functor to transformation category
-    to_transform: [v -> @Cata.VerifyXf.verification_identity(v)],
-    from_transform: [t -> t.target],
+    to_transform: [v -> v @Cata.VerifyXf.verification_identity],
+    from_transform: [t -> t target],
 
     -- Properties of transformations
-    preserves_correctness: [t v ->
-      let original_result = v(input) in
-      let transformed_result = t(v)(input) in
-      original_result.success implies transformed_result.success
+    preserves_correctness: [t, v ->
+      input v -> original_result
+      input t v -> transformed_result
+      original_result success not transformed_result success not or
     ],
 
     -- Laws for the category
     laws: {
       -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
-      associativity: forall [t1 t2 t3 ->
-        compose(compose(t1, t2), t3) == compose(t1, compose(t2, t3))
+      associativity: forall [t1, t2, t3 ->
+        t1 t2 compose t3 compose
+        t1 t2 t3 compose compose
+        veq
       ],
 
       -- Identity: id ∘ f = f = f ∘ id
       identity: forall [t ->
-        compose(id(dom(t)), t) == t && compose(t, id(cod(t))) == t
+        t dom id t compose t veq
+        t t cod id compose t veq
+        and
       ],
 
       -- Correctness preservation
-      correctness: forall [t v ->
-        preserves_correctness(t, v)
+      correctness: forall [t, v ->
+        t v preserves_correctness
       ]
     }
   }

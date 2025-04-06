@@ -1,0 +1,367 @@
+--[[
+  Grammar Utilities - Tools for Working with Formal Grammars
+  
+  This module provides tools for defining, manipulating, and converting
+  grammars in formats like BNF and EBNF into working parsers.
+]]--
+
+@Parser.Grammar: {
+  typ: {
+    Grammar
+    Rule
+    RuleBody
+    BinaryGrammar
+    FactoredGrammar
+    GrammarNode
+  }
+  
+  op: {}
+  
+  fn: {
+    parse_ebnf
+    parse_bnf
+    grammar_to_parser
+    optimize_grammar
+    factor_grammar
+    parse_grammar
+    simple_grammar_parser
+  }
+  
+  E: typ cup op cup fn
+  
+  deps: {
+    (@Parser.Grammar, @Parser.Types, true),
+    (@Parser.Grammar, @Parser.Primitives, true),
+    (@Parser.Grammar, @Parser.Combinators, true),
+    (@Parser.Grammar, @Parser.Derivative, true),
+    (@Parser.Grammar, @T, true)
+  }
+  
+  --[[
+    GRAMMAR DEFINITION TOOLS
+    
+    These tools help you work with formal grammar definitions:
+    
+    1. Parse grammar specifications in standard formats like BNF and EBNF
+    2. Convert grammar definitions into working parsers
+    3. Optimize grammars for more efficient parsing
+    4. Factor grammars to eliminate redundancy and inefficiency
+  ]]--
+  
+  --[[
+    Grammar - Formal grammar definition
+    
+    Represents a formal grammar with rules and productions.
+    Can be parsed from standard notation or constructed programmatically.
+  ]]--
+  Grammar: {
+    rules: [Rule],
+    start_rule: String
+  }
+  
+  --[[
+    Rule - Grammar production rule
+    
+    Represents a single production rule in a grammar.
+    Consists of a name and one or more alternative bodies.
+  ]]--
+  Rule: {
+    name: String,
+    bodies: [RuleBody]
+  }
+  
+  --[[
+    RuleBody - Rule alternative
+    
+    Represents one alternative production in a grammar rule.
+    Can contain sequences, alternatives, repetitions, and other constructs.
+  ]]--
+  RuleBody: {
+    type: String,  -- "sequence", "alternative", "repetition", "optional", "terminal", "nonterminal"
+    value: a       -- Depends on type
+  }
+  
+  --[[
+    BinaryGrammar - Optimized grammar representation
+    
+    A binary encoding of a grammar for efficient processing.
+    Used internally for grammar conversion and optimization.
+  ]]--
+  BinaryGrammar: {
+    rules: {String: BinaryRule},
+    start_rule: String
+  }
+  
+  --[[
+    FactoredGrammar - Factored grammar form
+    
+    A grammar representation that has been factored to eliminate
+    common prefixes and other redundancies for more efficient parsing.
+  ]]--
+  FactoredGrammar: {
+    nodes: [GrammarNode],
+    start_node: Z
+  }
+  
+  --[[
+    GrammarNode - Node in factored grammar
+    
+    Represents a node in a factored grammar graph.
+    Contains transitions to other nodes and semantic actions.
+  ]]--
+  GrammarNode: {
+    type: String,  -- "terminal", "nonterminal", "epsilon", "action"
+    value: a,
+    transitions: [Z]
+  }
+  
+  --[[
+    parse_ebnf - Parse EBNF grammar text
+    
+    Parses an Extended Backus-Naur Form grammar specification.
+    Converts the textual grammar definition into a structured Grammar object.
+    
+    Example: parse_ebnf("expr ::= term ('+' term | '-' term)*;")
+  ]]--
+  parse_ebnf: String -> Grammar [ebnf_text ->
+    -- Create an EBNF parser using derivative parsing
+    let ebnf_parser = create_ebnf_parser() in
+    
+    -- Parse the EBNF text
+    let result = ebnf_parser.parse({
+      input: ebnf_text,
+      position: {line: 1, column: 1, offset: 0},
+      memo: create_memo_table(),
+      error_stack: [],
+      furthest_error: null
+    }) in
+    
+    if result.success {
+      result.value
+    } else {
+      @Error.error("Failed to parse EBNF grammar: " + result.error.message)
+    }
+  ]
+  
+  --[[
+    parse_bnf - Parse BNF grammar text
+    
+    Parses a Backus-Naur Form grammar specification.
+    Converts the textual grammar definition into a structured Grammar object.
+    
+    Example: parse_bnf("<expr> ::= <term> | <expr> '+' <term>")
+  ]]--
+  parse_bnf: String -> Grammar [bnf_text ->
+    -- Create a BNF parser using derivative parsing
+    let bnf_parser = create_bnf_parser() in
+    
+    -- Parse the BNF text
+    let result = bnf_parser.parse({
+      input: bnf_text,
+      position: {line: 1, column: 1, offset: 0},
+      memo: create_memo_table(),
+      error_stack: [],
+      furthest_error: null
+    }) in
+    
+    if result.success {
+      result.value
+    } else {
+      @Error.error("Failed to parse BNF grammar: " + result.error.message)
+    }
+  ]
+  
+  --[[
+    grammar_to_parser - Convert grammar to parser
+    
+    Transforms a Grammar object into a working Parser.
+    This is how you turn a formal grammar into an executable parser.
+    
+    Example: grammar_to_parser(parse_ebnf("expr ::= term ('+' term | '-' term)*;"))
+  ]]--
+  grammar_to_parser: Grammar -> Parser [grammar ->
+    -- Convert the grammar to a binary form for easier processing
+    let binary_grammar = grammar_to_binary(grammar) in
+    
+    -- Create lazy parsers for each rule
+    let parsers = {} in
+    
+    -- Create parser for each rule
+    for rule_name in keys(binary_grammar.rules) {
+      parsers[rule_name] = lazy_parser()
+    }
+    
+    -- Set parser implementations
+    for rule_name in keys(binary_grammar.rules) {
+      let rule = binary_grammar.rules[rule_name] in
+      let parser = rule_body_to_parser(rule.body, parsers) in
+      
+      set_parser(parsers[rule_name], parser)
+    }
+    
+    -- Return the start rule parser
+    parsers[binary_grammar.start_rule]
+  ]
+  
+  --[[
+    optimize_grammar - Improve grammar efficiency
+    
+    Applies various optimizations to a grammar to improve parsing performance.
+    Includes left-factoring, elimination of left recursion, and more.
+    
+    Example: optimize_grammar(parse_ebnf("expr ::= expr '+' term | term;"))
+  ]]--
+  optimize_grammar: Grammar -> Grammar [grammar ->
+    -- Apply various grammar optimizations
+    let g1 = left_factor(grammar) in
+    let g2 = eliminate_left_recursion(g1) in
+    let g3 = eliminate_epsilon_rules(g2) in
+    let g4 = eliminate_unit_rules(g3) in
+    
+    g4
+  ]
+  
+  --[[
+    factor_grammar - Factor grammar for efficiency
+    
+    Factors a grammar to eliminate common prefixes and other redundancies.
+    Produces a FactoredGrammar that can be more efficiently parsed.
+    
+    Example: factor_grammar(parse_ebnf("stmt ::= 'if' expr 'then' stmt | 'if' expr 'then' stmt 'else' stmt;"))
+  ]]--
+  factor_grammar: Grammar -> FactoredGrammar [grammar ->
+    -- Convert the grammar to a binary form
+    let binary_grammar = grammar_to_binary(grammar) in
+    
+    -- Factor the binary grammar
+    factor_binary_grammar(binary_grammar)
+  ]
+  
+  --[[
+    parse_grammar - Parse input with a grammar
+    
+    Parses an input string using a specified grammar.
+    Provides a high-level interface for grammar-based parsing.
+    
+    Example: parse_grammar("expr ::= term ('+' term | '-' term)*;", "1+2+3", "ebnf")
+  ]]--
+  parse_grammar: String * String * String -> (Bool * a * String) [grammar_text, input, grammar_type ->
+    -- Parse the grammar based on the specified type
+    let grammar = null in
+    
+    if grammar_type == "ebnf" {
+      grammar = parse_ebnf(grammar_text)
+    }
+    else if grammar_type == "bnf" {
+      grammar = parse_bnf(grammar_text)
+    }
+    else {
+      return (false, null, "Unknown grammar type: " + grammar_type)
+    }
+    
+    -- Convert grammar to parser
+    let parser = grammar_to_parser(grammar) in
+    
+    -- Use the parser to parse the input
+    parse(parser, input)
+  ]
+  
+  --[[
+    simple_grammar_parser - Create parser from EBNF
+    
+    A simplified helper that creates a parser directly from an EBNF grammar string.
+    Perfect for quickly building parsers from grammar specifications.
+    
+    Example: simple_grammar_parser("expr ::= term ('+' term | '-' term)*;")
+  ]]--
+  simple_grammar_parser: String -> Parser [ebnf_text ->
+    let grammar = parse_ebnf(ebnf_text) in
+    grammar_to_parser(grammar)
+  ]
+  
+  -- Internal types and functions (not exported)
+  
+  BinaryRule: {
+    name: String,
+    body: BinaryRuleBody
+  }
+  
+  BinaryRuleBody: {
+    type: String,
+    value: a,
+    left: ?BinaryRuleBody,
+    right: ?BinaryRuleBody
+  }
+  
+  create_ebnf_parser: () -> Parser [ ->
+    -- Create a parser for EBNF grammar syntax
+    -- Simplified placeholder implementation
+    null
+  ]
+  
+  create_bnf_parser: () -> Parser [ ->
+    -- Create a parser for BNF grammar syntax
+    -- Simplified placeholder implementation
+    null
+  ]
+  
+  grammar_to_binary: Grammar -> BinaryGrammar [grammar ->
+    -- Convert a Grammar to a BinaryGrammar
+    -- Simplified placeholder implementation
+    null
+  ]
+  
+  rule_body_to_parser: BinaryRuleBody * {String: Parser} -> Parser [body, parsers ->
+    -- Convert a BinaryRuleBody to a Parser
+    -- Simplified placeholder implementation
+    null
+  ]
+  
+  left_factor: Grammar -> Grammar [grammar ->
+    -- Apply left factoring to a grammar
+    -- Simplified placeholder implementation
+    grammar
+  ]
+  
+  eliminate_left_recursion: Grammar -> Grammar [grammar ->
+    -- Eliminate left recursion from a grammar
+    -- Simplified placeholder implementation
+    grammar
+  ]
+  
+  eliminate_epsilon_rules: Grammar -> Grammar [grammar ->
+    -- Eliminate epsilon rules from a grammar
+    -- Simplified placeholder implementation
+    grammar
+  ]
+  
+  eliminate_unit_rules: Grammar -> Grammar [grammar ->
+    -- Eliminate unit rules from a grammar
+    -- Simplified placeholder implementation
+    grammar
+  ]
+  
+  factor_binary_grammar: BinaryGrammar -> FactoredGrammar [grammar ->
+    -- Factor a binary grammar
+    -- Simplified placeholder implementation
+    null
+  ]
+  
+  parse: Parser * String -> (Bool * a * String) [parser, input ->
+    -- Parse an input string with a parser
+    let result = parser.parse({
+      input: input,
+      position: {line: 1, column: 1, offset: 0},
+      memo: create_memo_table(),
+      error_stack: [],
+      furthest_error: null
+    }) in
+    
+    if result.success {
+      (true, result.value, "")
+    } else {
+      (false, null, "Parse error at " + result.error.position.line + ":" + 
+       result.error.position.column + ": " + result.error.message)
+    }
+  ]
+}

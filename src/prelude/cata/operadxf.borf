@@ -1,10 +1,10 @@
 --[[
   Operad Transformations
-  
+
   This module defines transformations between operads, including
-  operad functors, operad natural transformations, and other 
+  operad functors, operad natural transformations, and other
   structure-preserving maps between operads.
-  
+
   These transformations use linear types instead of monadic patterns
   for precise resource tracking and composition.
 ]]--
@@ -15,7 +15,7 @@
     OperadFunctor
     OperadNaturalTransformation
     OperadAdjunction
-    
+
     -- Special functors
     ColoredOperadFunctor
     SymmetricOperadFunctor
@@ -26,7 +26,7 @@
   op: {
     -- Functor composition
     ∘
-    
+
     -- Operad operations
     ∘ₒ -- Composition of operations
     ∘ᵢ -- Partial composition at position i
@@ -38,30 +38,30 @@
     operad_functor
     operad_natural_transformation
     operad_adjunction
-    
+
     -- Functor constructors
     colored_operad_functor
     symmetric_operad_functor
     enrichment_functor
     endomorphism_operad_functor
-    
+
     -- Natural transformation constructors
     operad_to_cat_nt
     cat_to_operad_nt
-    
+
     -- Functor operations
     apply_operad_functor
     compose_operad_functors
-    
+
     -- Natural transformation operations
     apply_operad_nt
     vertical_composition
     horizontal_composition
-    
+
     -- Operad/Category transformations
     operad_to_cat
     cat_to_operad
-    
+
     -- Specialized operations
     restrict_to_arity
     lift_to_colored
@@ -87,7 +87,7 @@
 
   --[[
     OperadFunctor represents a functor between operads.
-    
+
     An operad functor F: P → Q consists of:
     - A function mapping operations in P to operations in Q
     - Preserving arities, composition structure, and identities
@@ -103,7 +103,7 @@
   --[[
     OperadNaturalTransformation represents a natural transformation
     between operad functors.
-    
+
     An operad natural transformation α: F ⟹ G consists of:
     - A family of operations (morphisms) in the target operad
     - Satisfying naturality conditions with respect to operadic composition
@@ -143,7 +143,7 @@
   }
 
   --[[
-    EnrichmentFunctor represents a functor that enriches an operad 
+    EnrichmentFunctor represents a functor that enriches an operad
     over a monoidal category.
   ]]--
   EnrichmentFunctor: {
@@ -167,7 +167,7 @@
   --[[
     operad_functor creates a functor between operads.
   ]]--
-  operad_functor: S * @Operad.!Operad * @Operad.!Operad * 
+  operad_functor: S * @Operad.!Operad * @Operad.!Operad *
                  (f -> g) -> OperadFunctor [
     name source target op_map ->
     {
@@ -183,7 +183,7 @@
     operad_natural_transformation creates a natural transformation
     between operad functors.
   ]]--
-  operad_natural_transformation: S * OperadFunctor * OperadFunctor * 
+  operad_natural_transformation: S * OperadFunctor * OperadFunctor *
                                (f -> g) -> OperadNaturalTransformation [
     name source target components ->
     {
@@ -198,7 +198,7 @@
     operad_adjunction creates an adjunction between operads.
   ]]--
   operad_adjunction: S * OperadFunctor * OperadFunctor *
-                    OperadNaturalTransformation * 
+                    OperadNaturalTransformation *
                     OperadNaturalTransformation -> OperadAdjunction [
     name left right unit counit ->
     {
@@ -217,7 +217,7 @@
   --[[
     colored_operad_functor creates a functor between colored operads.
   ]]--
-  colored_operad_functor: S * @Operad.!ColoredOperad * @Operad.!ColoredOperad * 
+  colored_operad_functor: S * @Operad.!ColoredOperad * @Operad.!ColoredOperad *
                          (f -> g) * (c -> d) -> ColoredOperadFunctor [
     name source target op_map color_map ->
     {
@@ -234,7 +234,7 @@
   --[[
     symmetric_operad_functor creates a functor between symmetric operads.
   ]]--
-  symmetric_operad_functor: S * @Operad.!SymmetricOperad * @Operad.!SymmetricOperad * 
+  symmetric_operad_functor: S * @Operad.!SymmetricOperad * @Operad.!SymmetricOperad *
                            (f -> g) -> SymmetricOperadFunctor [
     name source target op_map ->
     {
@@ -252,7 +252,7 @@
     enrichment_functor creates a functor that enriches an operad over
     a monoidal category.
   ]]--
-  enrichment_functor: S * @Operad.!Operad * @Operad.!Operad * 
+  enrichment_functor: S * @Operad.!Operad * @Operad.!Operad *
                       @Cat.Category * (f -> V) * (f -> g) -> EnrichmentFunctor [
     name source target monoidal_cat enrichment_map op_map ->
     {
@@ -270,21 +270,21 @@
   --[[
     endomorphism_operad_functor creates a functor between endomorphism operads.
   ]]--
-  endomorphism_operad_functor: S * @Operad.!EndomorphismOperad * 
-                              @Operad.!EndomorphismOperad * 
+  endomorphism_operad_functor: S * @Operad.!EndomorphismOperad *
+                              @Operad.!EndomorphismOperad *
                               (X -> Y) -> EndomorphismOperadFunctor [
     name source target obj_map ->
     let op_map = [f ->
       -- Map an operation between endomorphism operads
       -- If f: Xⁿ → X, then F(f): Yⁿ → Y via the object map
-      
+
       -- This is a simplified implementation
       [ys ->
         -- Apply the inverse object map to inputs, apply f, then apply object map
         obj_map(f([obj_map_inverse(y) for y in ys]))
       ]
     ] in
-    
+
     {
       base: operad_functor(
         name,
@@ -308,21 +308,21 @@
     name ->
     let source_operad = @Operad.standard_operad in
     let target_cat = @Cat.structure in
-    
+
     let source_functor = operad_functor(
       name + "_Source",
       source_operad,
       source_operad,
       [f -> f]  -- Identity on operations
     ) in
-    
+
     let target_functor = operad_functor(
       name + "_Target",
       source_operad,
       source_operad,
       [f -> f]  -- Identity on operations
     ) in
-    
+
     operad_natural_transformation(
       name,
       source_functor,
@@ -339,21 +339,21 @@
     name ->
     let source_cat = @Cat.structure in
     let target_operad = @Operad.standard_operad in
-    
+
     let source_functor = operad_functor(
       name + "_Source",
       target_operad,
       target_operad,
       [f -> f]  -- Identity on operations
     ) in
-    
+
     let target_functor = operad_functor(
       name + "_Target",
       target_operad,
       target_operad,
       [f -> f]  -- Identity on operations
     ) in
-    
+
     operad_natural_transformation(
       name,
       source_functor,
@@ -382,7 +382,7 @@
     if F.source != G.target {
       error("Cannot compose operad functors with incompatible operads")
     }
-    
+
     operad_functor(
       F.source.name + "∘" + G.source.name,
       G.source,
@@ -402,13 +402,13 @@
   --[[
     vertical_composition composes two operad natural transformations vertically.
   ]]--
-  vertical_composition: OperadNaturalTransformation * OperadNaturalTransformation -> 
+  vertical_composition: OperadNaturalTransformation * OperadNaturalTransformation ->
                         OperadNaturalTransformation [
     α β ->
     if α.source != β.target {
       error("Cannot compose natural transformations with incompatible functors")
     }
-    
+
     operad_natural_transformation(
       α.source.name + "∘" + β.source.name,
       β.source,
@@ -418,7 +418,7 @@
         let F_f = β.source.operation_map(f) in
         let αF_f = α.components(F_f) in
         let βf = β.components(f) in
-        
+
         -- In a proper implementation, we would need to compose these operations
         -- Here we use a placeholder
         αF_f
@@ -429,13 +429,13 @@
   --[[
     horizontal_composition composes operad natural transformations horizontally.
   ]]--
-  horizontal_composition: OperadNaturalTransformation * OperadNaturalTransformation -> 
+  horizontal_composition: OperadNaturalTransformation * OperadNaturalTransformation ->
                           OperadNaturalTransformation [
     α β ->
     if α.target.source != β.source.target {
       error("Cannot horizontally compose natural transformations with incompatible functors")
     }
-    
+
     operad_natural_transformation(
       α.source.name + "⋆" + β.source.name,
       compose_operad_functors(α.source, β.source),
@@ -446,7 +446,7 @@
         let β_f = β.components(f) in
         let F_βf = α.source.operation_map(β_f) in
         let α_Gf = α.components(β.target.operation_map(f)) in
-        
+
         -- In a proper implementation, we would need to compose these operations
         -- Here we use a placeholder
         F_βf
@@ -463,9 +463,9 @@
     -- - A single object (the implicit object of the operad)
     -- - Morphisms are operations of arity 1
     -- - Composition is operadic composition for arity 1 operations
-    
+
     let obj_name = operad.name + "_obj" in
-    
+
     let morphisms = {} in
     if operad.operations && operad.operations[1] {
       for op in operad.operations[1] {
@@ -476,22 +476,22 @@
         }
       }
     }
-    
+
     let compose_fn = [f g ->
       -- Compose two arity-1 operations using operadic composition
       let f_op = find_operation(operad, 1, f) in
       let g_op = find_operation(operad, 1, g) in
-      
+
       if f_op && g_op {
         return @Operad.compose(operad, f_op, [g_op]).result.value
       }
-      
+
       -- Default fallback
       f
     ] in
-    
+
     let id_morphism = operad.identity ? operad.identity.value : null in
-    
+
     @Cat.category(
       "Cat(" + operad.name + ")",
       [obj_name],
@@ -510,10 +510,10 @@
     -- - Operations of arity 1 correspond to morphisms in the category
     -- - Higher arity operations are not present (or are formal composites)
     -- - Operadic composition for arity 1 matches categorical composition
-    
+
     let operations = {} in
     operations[1] = [] in  -- Arity 1 operations (from category morphisms)
-    
+
     -- Add all morphisms from the category as arity-1 operations
     for morphism_key in category.morphisms {
       let morphism = category.morphisms[morphism_key] in
@@ -524,19 +524,19 @@
         morphism.value == category.identity
       ))
     }
-    
+
     -- Define composition function
     let compose_fn = [f g_list ->
       -- For arity 1, use categorical composition
       if g_list.length == 1 && typeof(f) == typeof(g_list[0]) {
         return category.compose(f, g_list[0])
       }
-      
+
       -- For higher arities, create a formal composite
       -- This is a placeholder implementation
       "composed_" + f + "_with_" + g_list.join("_")
     ] in
-    
+
     -- Find the identity operation
     let id_op = null in
     for op in operations[1] {
@@ -545,7 +545,7 @@
         break
       }
     }
-    
+
     -- If no identity operation found, create one
     if !id_op && category.identity {
       id_op = @Operad.operation(
@@ -556,27 +556,27 @@
       )
       operations[1].push(id_op)
     }
-    
+
     let result_operad = @Operad.operad(
       "Operad(" + category.name + ")",
       operations,
       compose_fn,
       id_op
     ) in
-    
+
     -- Update operations with the operad reference
     for arity in operations {
       for op in operations[arity] {
         op.operad = result_operad
       }
     }
-    
+
     -- Update the identity reference
     if id_op {
       id_op.operad = result_operad
       result_operad.identity = id_op
     }
-    
+
     result_operad
   ]
 
@@ -595,7 +595,7 @@
         if op {
           return F.operation_map(f)
         }
-        
+
         -- Default fallback for operations of other arities
         f
       ]
@@ -610,7 +610,7 @@
     -- Assume the source and target operads are colored operads or can be treated as such
     let source_colored = as_colored_operad(F.source) in
     let target_colored = as_colored_operad(F.target) in
-    
+
     colored_operad_functor(
       F.source.name + "_colored",
       source_colored,
@@ -628,7 +628,7 @@
     -- Assume the source and target operads are symmetric operads or can be treated as such
     let source_symmetric = as_symmetric_operad(F.source) in
     let target_symmetric = as_symmetric_operad(F.target) in
-    
+
     symmetric_operad_functor(
       F.source.name + "_symmetric",
       source_symmetric,
@@ -665,7 +665,7 @@
         }
       }
     }
-    
+
     null
   ]
 
@@ -677,11 +677,11 @@
     if operad._type == "ColoredOperad" {
       return operad
     }
-    
+
     if operad.base && operad.base._type == "ColoredOperad" {
       return operad.base
     }
-    
+
     -- Create a trivial colored operad with a single color
     @Operad.colored_operad(
       operad.name + "_as_colored",
@@ -697,11 +697,11 @@
     if operad._type == "SymmetricOperad" {
       return operad
     }
-    
+
     if operad.base && operad.base._type == "SymmetricOperad" {
       return operad.base
     }
-    
+
     -- Create a trivial symmetric operad
     @Operad.symmetric_operad(operad.name + "_as_symmetric")
   ]
@@ -761,19 +761,19 @@
     - Objects are operads
     - 1-morphisms are operad functors
     - 2-morphisms are operad natural transformations
-    
+
     This structure enables transformations between operads while
     preserving their compositional and algebraic properties.
   ]]--
   structure: {
     -- 2-categorical structure
-    
+
     -- Level 0: Objects are operads
     objects: @Operad.!Operad,
-    
+
     -- Level 1: 1-morphisms are operad functors
     morphisms: OperadFunctor,
-    
+
     -- Core structure for 1-morphisms
     dom: [F -> F.source],
     cod: [F -> F.target],
@@ -784,10 +784,10 @@
       [f -> f]  -- Identity on operations
     )],
     compose: [F G -> compose_operad_functors(F, G)],
-    
+
     -- Level 2: 2-morphisms are operad natural transformations
     two_morphisms: OperadNaturalTransformation,
-    
+
     -- Core structure for 2-morphisms
     two_dom: [α -> α.source],
     two_cod: [α -> α.target],
@@ -798,35 +798,35 @@
       [f -> F.operation_map(f)]  -- Identity component
     )],
     two_compose: [α β -> vertical_composition(α, β)],
-    
+
     -- Laws
     law: {
       -- 1-morphism laws
-      identity: [F -> 
-        compose(id(dom(F)), F) == F && 
+      identity: [F ->
+        compose(id(dom(F)), F) == F &&
         compose(F, id(cod(F))) == F
       ],
-      
-      associativity: [F G H -> 
+
+      associativity: [F G H ->
         compose(compose(F, G), H) == compose(F, compose(G, H))
       ],
-      
+
       -- 2-morphism laws
-      two_identity: [α -> 
-        two_compose(two_id(two_dom(α)), α) == α && 
+      two_identity: [α ->
+        two_compose(two_id(two_dom(α)), α) == α &&
         two_compose(α, two_id(two_cod(α))) == α
       ],
-      
-      two_associativity: [α β γ -> 
+
+      two_associativity: [α β γ ->
         two_compose(
-          two_compose(α, β), 
+          two_compose(α, β),
           γ
         ) == two_compose(
-          α, 
+          α,
           two_compose(β, γ)
         )
       ],
-      
+
       -- Operad functor laws
       preserves_composition: [F f gs ->
         -- F(f ∘ₒ [g₁, ..., gₙ]) = F(f) ∘ₒ [F(g₁), ..., F(gₙ)]
@@ -835,26 +835,26 @@
           find_operation(F.source, gs.length, f),
           [find_operation(F.source, g.arity, g) for g in gs]
         ).result in
-        
+
         let F_source_composed = F.operation_map(source_composed.value) in
-        
+
         let F_f = F.operation_map(f) in
         let F_gs = [F.operation_map(g) for g in gs] in
-        
+
         let target_composed = @Operad.compose(
           F.target,
           find_operation(F.target, F_gs.length, F_f),
           [find_operation(F.target, F_g.arity, F_g) for F_g in F_gs]
         ).result in
-        
+
         F_source_composed == target_composed.value
       ],
-      
+
       preserves_identity: [F ->
         -- F(id) = id
         F.operation_map(F.source.identity.value) == F.target.identity.value
       ],
-      
+
       -- Operad natural transformation laws
       naturality: [α f gs ->
         -- Naturality with respect to operadic composition
@@ -876,7 +876,7 @@
     symmetric_functor_example: () -> SymmetricOperadFunctor [->
       let source = @Operad.symmetric_operad("SourceSymmetricOperad") in
       let target = @Operad.symmetric_operad("TargetSymmetricOperad") in
-      
+
       symmetric_operad_functor(
         "ExampleSymmetricFunctor",
         source,
@@ -888,14 +888,14 @@
         ]
       )
     ],
-    
+
     --[[
       Example 2: Creating a functor between endomorphism operads
     ]]--
     endomorphism_functor_example: () -> EndomorphismOperadFunctor [->
       let source = @Operad.endomorphism_operad("SourceEndomorphismOperad", Z) in
       let target = @Operad.endomorphism_operad("TargetEndomorphismOperad", S) in
-      
+
       endomorphism_operad_functor(
         "ExampleEndomorphismFunctor",
         source,
@@ -903,28 +903,28 @@
         [n -> n.toString()]  -- Map integers to strings
       )
     ],
-    
+
     --[[
       Example 3: Creating a natural transformation between operad functors
     ]]--
     natural_transformation_example: () -> OperadNaturalTransformation [->
       let source_operad = @Operad.symmetric_operad("SourceOperad") in
       let target_operad = @Operad.symmetric_operad("TargetOperad") in
-      
+
       let F = operad_functor(
         "F",
         source_operad.base,
         target_operad.base,
         [f -> "F_" + f]
       ) in
-      
+
       let G = operad_functor(
         "G",
         source_operad.base,
         target_operad.base,
         [f -> "G_" + f]
       ) in
-      
+
       operad_natural_transformation(
         "ExampleNaturalTransformation",
         F,
@@ -936,57 +936,57 @@
         ]
       )
     ],
-    
+
     --[[
       Example 4: Converting an operad to a category and back
     ]]--
     operad_category_conversion_example: () -> (@Cat.Category, @Operad.!Operad) [->
       let original_operad = @Operad.symmetric_operad("OriginalOperad").base in
-      
+
       -- Convert to a category
       let category = operad_to_cat(original_operad) in
-      
+
       -- Convert back to an operad
       let new_operad = cat_to_operad(category) in
-      
+
       (category, new_operad)
     ],
-    
+
     --[[
       Example 5: Creating an adjunction between operads
     ]]--
     adjunction_example: () -> OperadAdjunction [->
       let source_operad = @Operad.symmetric_operad("SourceOperad").base in
       let target_operad = @Operad.symmetric_operad("TargetOperad").base in
-      
+
       let left = operad_functor(
         "Left",
         source_operad,
         target_operad,
         [f -> "left_" + f]
       ) in
-      
+
       let right = operad_functor(
         "Right",
         target_operad,
         source_operad,
         [f -> "right_" + f]
       ) in
-      
+
       let unit = operad_natural_transformation(
         "Unit",
         id(source_operad),
         compose_operad_functors(right, left),
         [f -> "unit_" + f]
       ) in
-      
+
       let counit = operad_natural_transformation(
         "Counit",
         compose_operad_functors(left, right),
         id(target_operad),
         [f -> "counit_" + f]
       ) in
-      
+
       operad_adjunction(
         "ExampleAdjunction",
         left,
@@ -996,4 +996,4 @@
       )
     ]
   }
-} 
+}

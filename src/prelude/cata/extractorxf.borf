@@ -1,6 +1,6 @@
 --[[
   Extractor Transformations
-  
+
   This module defines transformations between extractor categories
   and other categorical structures, enabling the representation of
   extraction operations in different mathematical frameworks while
@@ -13,12 +13,12 @@
     ExtractorFunctor
     ExtractorNatTransformation
     ExtractorAdjunction
-    
+
     -- Special functors
     LensFunctor
     PrismFunctor
     ArrowFunctor
-    
+
     -- Extractor transformation categories
     ExtractorCategory
   }
@@ -26,7 +26,7 @@
   op: {
     -- Functor composition
     ∘
-    
+
     -- Extractor operators
     >>> <<< .. :>
   }
@@ -36,35 +36,35 @@
     extractor_functor
     extractor_nat_transformation
     extractor_adjunction
-    
+
     -- Functor constructors
     lens_functor
     prism_functor
     arrow_functor
-    
+
     -- Natural transformation constructors
     extractor_to_lens_nt
     lens_to_extractor_nt
-    
+
     -- Adjunction constructors
     lens_extractor_adjunction
-    
+
     -- Functor operations
     apply_functor
     compose_functors
-    
+
     -- Natural transformation operations
     apply_nat_transformation
     vertical_composition
     horizontal_composition
-    
+
     -- Category construction
     extractor_category
-    
+
     -- Extractor/Lens transformations
     extractor_to_lens
     lens_to_extractor
-    
+
     -- Extractor/Arrow transformations
     extractor_to_arrow
     arrow_to_extractor
@@ -89,7 +89,7 @@
 
   --[[
     ExtractorFunctor represents a functor between extractor categories.
-    
+
     This structure captures transformations that preserve the extractor
     structure while changing the underlying representation.
   ]]--
@@ -131,8 +131,8 @@
   --[[
     extractor_functor creates a functor between extractor categories
   ]]--
-  extractor_functor: S * @Cat.Category * @Cat.Category * (a -> b) * 
-                   (@Extractor.!Extractor -> @Extractor.!Extractor) -> 
+  extractor_functor: S * @Cat.Category * @Cat.Category * (a -> b) *
+                   (@Extractor.!Extractor -> @Extractor.!Extractor) ->
                    ExtractorFunctor [
     name source target obj_map ext_map ->
     {
@@ -148,8 +148,8 @@
   --[[
     extractor_nat_transformation creates a natural transformation between extractor functors
   ]]--
-  extractor_nat_transformation: S * ExtractorFunctor * ExtractorFunctor * 
-                             (a -> @Extractor.!Extractor) -> 
+  extractor_nat_transformation: S * ExtractorFunctor * ExtractorFunctor *
+                             (a -> @Extractor.!Extractor) ->
                              ExtractorNatTransformation [
     name source_functor target_functor components ->
     {
@@ -163,8 +163,8 @@
   --[[
     extractor_adjunction creates an adjunction between extractor categories
   ]]--
-  extractor_adjunction: S * ExtractorFunctor * ExtractorFunctor * 
-                      ExtractorNatTransformation * ExtractorNatTransformation -> 
+  extractor_adjunction: S * ExtractorFunctor * ExtractorFunctor *
+                      ExtractorNatTransformation * ExtractorNatTransformation ->
                       ExtractorAdjunction [
     name left right unit counit ->
     {
@@ -269,7 +269,7 @@
   --[[
     apply_functor applies an extractor functor to an extractor
   ]]--
-  apply_functor: ExtractorFunctor * @Extractor.!Extractor -> 
+  apply_functor: ExtractorFunctor * @Extractor.!Extractor ->
                @Extractor.!Extractor [
     functor ext ->
     functor.map_ext(ext)
@@ -307,7 +307,7 @@
   --[[
     vertical_composition composes two natural transformations vertically
   ]]--
-  vertical_composition: ExtractorNatTransformation * ExtractorNatTransformation -> 
+  vertical_composition: ExtractorNatTransformation * ExtractorNatTransformation ->
                       ExtractorNatTransformation [
     alpha beta ->
     {
@@ -321,14 +321,14 @@
   --[[
     horizontal_composition composes two natural transformations horizontally
   ]]--
-  horizontal_composition: ExtractorNatTransformation * ExtractorNatTransformation -> 
+  horizontal_composition: ExtractorNatTransformation * ExtractorNatTransformation ->
                         ExtractorNatTransformation [
     alpha beta ->
     {
       source_functor: compose_functors(alpha.source_functor, beta.source_functor),
       target_functor: compose_functors(alpha.target_functor, beta.target_functor),
       components: [a -> @Extractor.compose(
-        beta.components(a), 
+        beta.components(a),
         apply_functor(alpha.target_functor, beta.components(a))
       )],
       naturality: alpha.naturality && beta.naturality
@@ -369,7 +369,7 @@
   ]]--
   extractor_to_arrow: @Extractor.!Extractor -> @Arrow.!Arrow [ext ->
     @Arrow.arrow(
-      "Extractor", 
+      "Extractor",
       ext.extract
     )
   ]
@@ -390,15 +390,15 @@
   --------------------------------------------------
 
   --[[
-    Structure mapping that establishes @ExtractorXf as a category of 
+    Structure mapping that establishes @ExtractorXf as a category of
     transformations between extractor categories.
-    
+
     In this categorical structure:
     - Objects are extractor functors
     - Morphisms are natural transformations between extractor functors
     - Identity is the identity natural transformation
     - Composition is vertical composition of natural transformations
-    
+
     This structure enables rigorous transformation of extraction operations
     between different categorical representations.
   ]]--
@@ -406,7 +406,7 @@
     -- Map ExtractorXf to a category
     objects: ExtractorFunctor,
     morphisms: ExtractorNatTransformation,
-    
+
     -- Base category structure
     dom: [nt -> nt.source_functor],
     cod: [nt -> nt.target_functor],
@@ -417,31 +417,31 @@
       [a -> @Extractor.id()]
     )],
     compose: [alpha beta -> vertical_composition(alpha, beta)],
-    
+
     -- Functor constructors
     lens_functor: lens_functor,
     prism_functor: prism_functor,
     arrow_functor: arrow_functor,
-    
+
     -- Natural transformation constructors
     extractor_to_lens_nt: extractor_to_lens_nt,
     lens_to_extractor_nt: lens_to_extractor_nt,
-    
+
     -- Functor operations
     apply_functor: apply_functor,
     compose_functors: compose_functors,
-    
+
     -- Laws of functorial transformations
     law: {
-      functor_identity: [f e -> 
+      functor_identity: [f e ->
         apply_functor(f, @Extractor.id()) == @Extractor.id()
       ],
-      
+
       functor_composition: [f e1 e2 ->
         apply_functor(f, @Extractor.compose(e1, e2)) ==
         @Extractor.compose(apply_functor(f, e1), apply_functor(f, e2))
       ],
-      
+
       naturality: [nt f g a ->
         @Extractor.compose(
           nt.components(a),
@@ -452,13 +452,13 @@
           nt.components(g)
         )
       ],
-      
+
       adjunction_unit_counit: [adj a b ->
         let F = adj.left_functor in
         let G = adj.right_functor in
         let η = adj.unit in
         let ε = adj.counit in
-        
+
         @Extractor.compose(
           η.components(a),
           apply_functor(G, ε.components(a))
@@ -469,13 +469,13 @@
           ε.components(b)
         ) == @Extractor.id()
       ],
-      
+
       -- Extractor-specific laws
       extractor_id: [f e ->
         let mapped = apply_functor(f, e) in
         mapped.inject(s, mapped.extract(s)) == s
       ],
-      
+
       extractor_compose: [f e1 e2 ->
         let composed = @Extractor.compose(apply_functor(f, e1), apply_functor(f, e2)) in
         composed.extract == [s -> apply_functor(f, e2).extract(apply_functor(f, e1).extract(s))]
@@ -497,7 +497,7 @@
       let lens = @Optics.lens([x -> x.a], [(x, a) -> { x with a: a }]) in
       lens_to_extractor(lens)
     ],
-    
+
     --[[
       Example 2: Transforming an extractor to an arrow
     ]]--
@@ -505,4 +505,4 @@
       extractor_to_arrow(ext)
     ]
   }
-} 
+}

@@ -1,0 +1,722 @@
+--[[
+  Parser Combinators - Compose Simple Parsers into Complex Ones
+  
+  This module provides combinators that let you compose basic parsers into
+  more complex ones. These are the building blocks for creating sophisticated
+  parsers from simple components.
+]]--
+
+@Parser.Combinators: {
+  typ: {}
+  
+  op: {
+    then
+    or
+    many
+    some
+    map
+    flat_map
+    optional
+  }
+  
+  fn: {
+    sequence
+    choice
+    repeat
+    at_least
+    maybe
+    transform
+    bind
+    followed_by
+    not_followed_by
+    lazy_parser
+    set_parser
+    label
+  }
+  
+  E: typ cup op cup fn
+  
+  deps: {
+    (@Parser.Combinators, @Parser.Types, true),
+    (@Parser.Combinators, @Parser.Memo, true),
+    (@Parser.Combinators, @T, true)
+  }
+  
+  --[[
+    PARSER COMPOSITION TOOLS
+    
+    These combinators help you build complex parsers from simple ones:
+    
+    1. Sequence parsers to match patterns in order
+    2. Try alternative parsers when one fails
+    3. Repeat parsers to match multiple occurrences
+    4. Transform parser results into different forms
+    5. Create parsers for recursive structures
+  ]]--
+
+  --[[
+    then/sequence - Match parsers in sequence
+    
+    Combines two parsers that must match in order, one after the other.
+    The core building block for creating complex grammar patterns.
+    
+    Example: string("if") |> then(expr) |> then(string("then")) |> then(expr)
+  ]]--
+  then: Parser * Parser -> Parser [p1, p2 ->
+    sequence(p1, p2)
+  ]
+  
+  sequence: Parser * Parser -> Parser [p1, p2 ->
+    memoize(
+      @Extractor.extractor(
+        -- Parse function
+        [state ->
+          let result1 = p1.parse(state) in
+          
+          if result1.success {
+            let state2 = {
+              input: result1.remaining,
+              position: result1.position,
+              memo: state.memo,
+              error_stack: state.error_stack,
+              furthest_error: state.furthest_error
+            } in
+            
+            let result2 = p2.parse(state2) in
+            
+            if result2.success {
+              {
+                success: true,
+                value: [result1.value, result2.value],
+                remaining: result2.remaining,
+                position: result2.position,
+                memo_stats: {
+                  hits: result2.memo_stats.hits,
+                  misses: result2.memo_stats.misses
+                }
+              }
+            } else {
+              {
+                success: false,
+                value: null,
+                remaining: state.input,
+                position: state.position,
+                error: result2.error,
+                memo_stats: {
+                  hits: result2.memo_stats.hits,
+                  misses: result2.memo_stats.misses
+                }
+              }
+            }
+          } else {
+            {
+              success: false,
+              value: null,
+              remaining: state.input,
+              position: state.position,
+              error: result1.error,
+              memo_stats: {
+                hits: result1.memo_stats.hits,
+                misses: result1.memo_stats.misses
+              }
+            }
+          }
+        ],
+
+        -- Print function
+        [value ->
+          if is_array(value) && length(value) == 2 {
+            p1.print(value[0]) + p2.print(value[1])
+          } else {
+            @Error.error("Cannot print non-sequence value")
+          }
+        ]
+      ),
+      hash_parsers([p1, p2]),
+      "sequence"
+    )
+  ]
+
+  --[[
+    or/choice - Try alternative parsers
+    
+    Tries the first parser, and if it fails, tries the second parser.
+    Essential for handling different possible grammar patterns at a given point.
+    
+    Example: string("true") |> or(string("false")) matches either boolean literal
+  ]]--
+  or: Parser * Parser -> Parser [p1, p2 ->
+    choice(p1, p2)
+  ]
+  
+  choice: Parser * Parser -> Parser [p1, p2 ->
+    memoize(
+      @Extractor.extractor(
+        -- Parse function
+        [state ->
+          let result1 = p1.parse(state) in
+          
+          if result1.success {
+            result1
+          } else {
+            let result2 = p2.parse(state) in
+            
+            if result2.success {
+              result2
+            } else {
+              -- Create a combined error that shows both possibilities
+              let error = {
+                message: "Expected " + result1.error.expected + " or " + result2.error.expected,
+                position: state.position,
+                expected: result1.error.expected + " or " + result2.error.expected,
+                found: if length(state.input) > 0 { state.input[0] } else { "end of input" },
+                context: []
+              } in
+              
+              {
+                success: false,
+                value: null,
+                remaining: state.input,
+                position: state.position,
+                error: error,
+                memo_stats: {
+                  hits: result1.memo_stats.hits + result2.memo_stats.hits,
+                  misses: result1.memo_stats.misses + result2.memo_stats.misses
+                }
+              }
+            }
+          }
+        ],
+
+        -- Print function
+        [value ->
+          if p1.print(value) != @Error.error {
+            p1.print(value)
+          } else {
+            p2.print(value)
+          }
+        ]
+      ),
+      hash_parsers([p1, p2]),
+      "choice"
+    )
+  ]
+
+  --[[
+    many/repeat - Match a parser zero or more times
+    
+    Repeatedly applies a parser as many times as possible, potentially zero times.
+    Perfect for parsing lists, repeated elements, or optional sequences.
+    
+    Example: digit() |> many() parses any number of digits, including none
+  ]]--
+  many: Parser -> Parser [p ->
+    repeat(p)
+  ]
+  
+  repeat: Parser -> Parser [p ->
+    memoize(
+      @Extractor.extractor(
+        -- Parse function
+        [state ->
+          let results = [] in
+          let current_state = state in
+          let continue = true in
+          
+          while continue {
+            let result = p.parse(current_state) in
+            
+            if result.success {
+              results = results |> append(result.value)
+              current_state = {
+                input: result.remaining,
+                position: result.position,
+                memo: current_state.memo,
+                error_stack: current_state.error_stack,
+                furthest_error: current_state.furthest_error
+              }
+            } else {
+              continue = false
+            }
+          }
+          
+          {
+            success: true,  -- many always succeeds, even with zero matches
+            value: results,
+            remaining: current_state.input,
+            position: current_state.position,
+            memo_stats: {
+              hits: state.memo.hits,
+              misses: state.memo.misses
+            }
+          }
+        ],
+
+        -- Print function
+        [value ->
+          if is_array(value) {
+            "[" + join(", ", map([v -> p.print(v)], value)) + "]"
+          } else {
+            @Error.error("Cannot print non-array value for many")
+          }
+        ]
+      ),
+      hash_parser(p),
+      "many"
+    )
+  ]
+
+  --[[
+    some/at_least - Match a parser one or more times
+    
+    Repeatedly applies a parser as many times as possible, at least once.
+    Useful for parsing non-empty lists and required repeated elements.
+    
+    Example: digit() |> some() parses one or more digits, failing if none are found
+  ]]--
+  some: Parser -> Parser [p ->
+    at_least(p)
+  ]
+  
+  at_least: Parser -> Parser [p ->
+    memoize(
+      @Extractor.extractor(
+        -- Parse function
+        [state ->
+          let result = p.parse(state) in
+          
+          if result.success {
+            let rest_result = repeat(p).parse({
+              input: result.remaining,
+              position: result.position,
+              memo: state.memo,
+              error_stack: state.error_stack,
+              furthest_error: state.furthest_error
+            }) in
+            
+            {
+              success: true,
+              value: [result.value] |> concat(rest_result.value),
+              remaining: rest_result.remaining,
+              position: rest_result.position,
+              memo_stats: {
+                hits: result.memo_stats.hits + rest_result.memo_stats.hits,
+                misses: result.memo_stats.misses + rest_result.memo_stats.misses
+              }
+            }
+          } else {
+            {
+              success: false,
+              value: null,
+              remaining: state.input,
+              position: state.position,
+              error: result.error,
+              memo_stats: result.memo_stats
+            }
+          }
+        ],
+
+        -- Print function
+        [value ->
+          if is_array(value) && length(value) > 0 {
+            "[" + join(", ", map([v -> p.print(v)], value)) + "]"
+          } else {
+            @Error.error("Cannot print non-array value for some")
+          }
+        ]
+      ),
+      hash_parser(p),
+      "some"
+    )
+  ]
+
+  --[[
+    map/transform - Convert parser results
+    
+    Applies a function to transform the result of a successful parse.
+    Essential for building structured data from parsed text.
+    
+    Example: number() |> map([n -> n * 2]) parses a number and doubles it
+  ]]--
+  map: Parser * (a -> b) -> Parser [p, f ->
+    transform(p, f)
+  ]
+  
+  transform: Parser * (a -> b) -> Parser [p, f ->
+    memoize(
+      @Extractor.extractor(
+        -- Parse function
+        [state ->
+          let result = p.parse(state) in
+          
+          if result.success {
+            {
+              success: true,
+              value: f(result.value),
+              remaining: result.remaining,
+              position: result.position,
+              memo_stats: result.memo_stats
+            }
+          } else {
+            result
+          }
+        ],
+
+        -- Print function
+        [value ->
+          -- We can't really print the transformed value without inverting f
+          -- In a real implementation, we might include a print function as well
+          to_string(value)
+        ]
+      ),
+      hash_parser(p),
+      "map"
+    )
+  ]
+
+  --[[
+    flat_map/bind - Parser sequencing with context
+    
+    Applies a function to the result of a parser to produce a new parser.
+    Powerful for context-sensitive parsing where later parsing depends on
+    earlier results.
+    
+    Example: identifier() |> flat_map([id -> if id == "if" { if_statement() } else { expr() }])
+  ]]--
+  flat_map: Parser * (a -> Parser) -> Parser [p, f ->
+    bind(p, f)
+  ]
+  
+  bind: Parser * (a -> Parser) -> Parser [p, f ->
+    memoize(
+      @Extractor.extractor(
+        -- Parse function
+        [state ->
+          let result = p.parse(state) in
+          
+          if result.success {
+            let next_parser = f(result.value) in
+            let next_result = next_parser.parse({
+              input: result.remaining,
+              position: result.position,
+              memo: state.memo,
+              error_stack: state.error_stack,
+              furthest_error: state.furthest_error
+            }) in
+            
+            {
+              success: next_result.success,
+              value: next_result.value,
+              remaining: next_result.remaining,
+              position: next_result.position,
+              error: next_result.error,
+              memo_stats: {
+                hits: result.memo_stats.hits + next_result.memo_stats.hits,
+                misses: result.memo_stats.misses + next_result.memo_stats.misses
+              }
+            }
+          } else {
+            result
+          }
+        ],
+
+        -- Print function
+        [value ->
+          -- We can't know which specific parser was used, so just stringify
+          to_string(value)
+        ]
+      ),
+      hash_parser(p),
+      "bind"
+    )
+  ]
+
+  --[[
+    optional/maybe - Make a parser optional
+    
+    Wraps a parser to make it optional, succeeding with a default value
+    if the parser fails.
+    
+    Example: string("const") |> optional() matches "const" if present, succeeds regardless
+  ]]--
+  optional: Parser -> Parser [p ->
+    maybe(p, null)
+  ]
+  
+  maybe: Parser * a -> Parser [p, default_value ->
+    memoize(
+      @Extractor.extractor(
+        -- Parse function
+        [state ->
+          let result = p.parse(state) in
+          
+          if result.success {
+            result
+          } else {
+            {
+              success: true,
+              value: default_value,
+              remaining: state.input,
+              position: state.position,
+              memo_stats: result.memo_stats
+            }
+          }
+        ],
+
+        -- Print function
+        [value ->
+          if value == default_value {
+            "" -- Empty string for the default value
+          } else {
+            p.print(value)
+          }
+        ]
+      ),
+      hash_parser(p),
+      "optional"
+    )
+  ]
+
+  --[[
+    followed_by - Positive lookahead
+    
+    Checks if a parser matches but doesn't consume input.
+    Useful for contextual parsing without advancing position.
+    
+    Example: letter() |> followed_by(letter() |> or(digit())) matches a letter only if
+    it's followed by another letter or digit.
+  ]]--
+  followed_by: Parser * Parser -> Parser [p, lookahead ->
+    memoize(
+      @Extractor.extractor(
+        -- Parse function
+        [state ->
+          let result = p.parse(state) in
+          
+          if result.success {
+            let lookahead_result = lookahead.parse({
+              input: result.remaining,
+              position: result.position,
+              memo: state.memo,
+              error_stack: state.error_stack,
+              furthest_error: state.furthest_error
+            }) in
+            
+            if lookahead_result.success {
+              result
+            } else {
+              {
+                success: false,
+                value: null,
+                remaining: state.input,
+                position: state.position,
+                error: lookahead_result.error,
+                memo_stats: {
+                  hits: result.memo_stats.hits + lookahead_result.memo_stats.hits,
+                  misses: result.memo_stats.misses + lookahead_result.memo_stats.misses
+                }
+              }
+            }
+          } else {
+            result
+          }
+        ],
+
+        -- Print function
+        [value ->
+          p.print(value)
+        ]
+      ),
+      hash_parsers([p, lookahead]),
+      "followed_by"
+    )
+  ]
+
+  --[[
+    not_followed_by - Negative lookahead
+    
+    Checks if a parser matches but fails if the lookahead matches.
+    Useful for contextual parsing and negative constraints.
+    
+    Example: identifier() |> not_followed_by(string("(")) matches identifiers not followed by "("
+  ]]--
+  not_followed_by: Parser * Parser -> Parser [p, lookahead ->
+    memoize(
+      @Extractor.extractor(
+        -- Parse function
+        [state ->
+          let result = p.parse(state) in
+          
+          if result.success {
+            let lookahead_result = lookahead.parse({
+              input: result.remaining,
+              position: result.position,
+              memo: state.memo,
+              error_stack: state.error_stack,
+              furthest_error: state.furthest_error
+            }) in
+            
+            if lookahead_result.success {
+              {
+                success: false,
+                value: null,
+                remaining: state.input,
+                position: state.position,
+                error: {
+                  message: "Unexpected " + lookahead_result.value,
+                  position: result.position,
+                  expected: "not " + lookahead_result.value,
+                  found: lookahead_result.value,
+                  context: []
+                },
+                memo_stats: {
+                  hits: result.memo_stats.hits + lookahead_result.memo_stats.hits,
+                  misses: result.memo_stats.misses + lookahead_result.memo_stats.misses
+                }
+              }
+            } else {
+              result
+            }
+          } else {
+            result
+          }
+        ],
+
+        -- Print function
+        [value ->
+          p.print(value)
+        ]
+      ),
+      hash_parsers([p, lookahead]),
+      "not_followed_by"
+    )
+  ]
+
+  --[[
+    lazy_parser - Create recursive parsers
+    
+    Creates a placeholder parser that can be defined later.
+    Essential for recursive grammar definitions.
+    
+    Example: 
+    let expr = lazy_parser()
+    // ... define parsers that use expr ...
+    set_parser(expr, actual_expr_implementation)
+  ]]--
+  lazy_parser: () -> Parser [ ->
+    let impl = null in
+    
+    @Extractor.extractor(
+      -- Parse function forwards to the implementation once set
+      [state ->
+        if impl == null {
+          {
+            success: false,
+            value: null,
+            remaining: state.input,
+            position: state.position,
+            error: {
+              message: "Lazy parser not initialized",
+              position: state.position,
+              expected: "initialized parser",
+              found: "uninitialized parser",
+              context: []
+            },
+            memo_stats: {
+              hits: state.memo.hits,
+              misses: state.memo.misses
+            }
+          }
+        } else {
+          impl.parse(state)
+        }
+      ],
+
+      -- Print function
+      [value ->
+        if impl == null {
+          "<?>"
+        } else {
+          impl.print(value)
+        }
+      ]
+    )
+  ]
+
+  --[[
+    set_parser - Initialize a lazy parser
+    
+    Sets the implementation of a lazy parser created with lazy_parser.
+    Completes the setup for recursive parser definitions.
+  ]]--
+  set_parser: Parser * Parser -> () [lazy_p, impl_p ->
+    -- Set the implementation on the lazy parser
+    lazy_p.impl = impl_p
+  ]
+
+  --[[
+    label - Add error context
+    
+    Adds a descriptive label to a parser for better error messages.
+    Helps with debugging and improving user-facing error messages.
+    
+    Example: expr |> label("expression") improves errors when expression parsing fails
+  ]]--
+  label: Parser * String -> Parser [p, label ->
+    memoize(
+      @Extractor.extractor(
+        -- Parse function
+        [state ->
+          let result = p.parse(state) in
+          
+          if result.success {
+            result
+          } else {
+            {
+              success: false,
+              value: null,
+              remaining: result.remaining,
+              position: result.position,
+              error: {
+                message: "Expected " + label,
+                position: result.position,
+                expected: label,
+                found: result.error.found,
+                context: [label] |> concat(result.error.context)
+              },
+              memo_stats: result.memo_stats
+            }
+          }
+        ],
+
+        -- Print function
+        [value ->
+          p.print(value)
+        ]
+      ),
+      hash_parser(p),
+      "label_" + label
+    )
+  ]
+
+  -- Utility functions (not exported)
+  
+  hash_parser: Parser -> Z [p ->
+    -- Simplified hash for parsers
+    address_of(p)
+  ]
+  
+  hash_parsers: [Parser] -> Z [parsers ->
+    fold(
+      [h, p -> h * 31 + hash_parser(p)],
+      0,
+      parsers
+    )
+  ]
+  
+  address_of: a -> Z [x ->
+    -- This is a placeholder that would return a unique identifier for the value
+    -- In a real implementation, this would use runtime introspection
+    123456
+  ]
+}

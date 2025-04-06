@@ -1,6 +1,6 @@
 --[[
   Profunctor Transformations
-  
+
   This module defines transformations between profunctor categories
   and other categorical structures, enabling the representation of
   bidirectional computations in different mathematical frameworks
@@ -13,14 +13,14 @@
     ProfunctorFunctor
     ProfunctorNatTransformation
     ProfunctorAdjunction
-    
+
     -- Special functors
     StrongFunctor
     ChoiceFunctor
     ClosedFunctor
     OpticFunctor
     ArrowFunctor
-    
+
     -- Profunctor transformation categories
     ProfunctorCategory
   }
@@ -28,7 +28,7 @@
   op: {
     -- Functor composition
     ∘
-    
+
     -- Profunctor operators
     <<< >>> *** +++ &&& |||
   }
@@ -38,37 +38,37 @@
     profunctor_functor
     profunctor_nat_transformation
     profunctor_adjunction
-    
+
     -- Functor constructors
     strong_functor
     choice_functor
     closed_functor
     optic_functor
     arrow_functor
-    
+
     -- Natural transformation constructors
     profunctor_to_arrow_nt
     arrow_to_profunctor_nt
-    
+
     -- Adjunction constructors
     arrow_profunctor_adjunction
-    
+
     -- Functor operations
     apply_functor
     compose_functors
-    
+
     -- Natural transformation operations
     apply_nat_transformation
     vertical_composition
     horizontal_composition
-    
+
     -- Category construction
     profunctor_category
-    
+
     -- Profunctor/Arrow transformations
     profunctor_to_arrow
     arrow_to_profunctor
-    
+
     -- Optic transformations
     profunctor_to_lens
     profunctor_to_prism
@@ -95,7 +95,7 @@
 
   --[[
     ProfunctorFunctor represents a functor between profunctor categories.
-    
+
     This structure captures transformations that preserve the profunctor
     structure while changing the underlying representation.
   ]]--
@@ -137,8 +137,8 @@
   --[[
     profunctor_functor creates a functor between profunctor categories
   ]]--
-  profunctor_functor: S * @Cat.Category * @Cat.Category * (a -> b) * 
-                    (@Profunctor.!Profunctor -> @Profunctor.!Profunctor) -> 
+  profunctor_functor: S * @Cat.Category * @Cat.Category * (a -> b) *
+                    (@Profunctor.!Profunctor -> @Profunctor.!Profunctor) ->
                     ProfunctorFunctor [
     name source target obj_map prof_map ->
     {
@@ -154,8 +154,8 @@
   --[[
     profunctor_nat_transformation creates a natural transformation between profunctor functors
   ]]--
-  profunctor_nat_transformation: S * ProfunctorFunctor * ProfunctorFunctor * 
-                              (a -> @Profunctor.!Profunctor) -> 
+  profunctor_nat_transformation: S * ProfunctorFunctor * ProfunctorFunctor *
+                              (a -> @Profunctor.!Profunctor) ->
                               ProfunctorNatTransformation [
     name source_functor target_functor components ->
     {
@@ -169,8 +169,8 @@
   --[[
     profunctor_adjunction creates an adjunction between profunctor categories
   ]]--
-  profunctor_adjunction: S * ProfunctorFunctor * ProfunctorFunctor * 
-                      ProfunctorNatTransformation * ProfunctorNatTransformation -> 
+  profunctor_adjunction: S * ProfunctorFunctor * ProfunctorFunctor *
+                      ProfunctorNatTransformation * ProfunctorNatTransformation ->
                       ProfunctorAdjunction [
     name left right unit counit ->
     {
@@ -263,7 +263,7 @@
   --[[
     apply_functor applies a profunctor functor to a profunctor
   ]]--
-  apply_functor: ProfunctorFunctor * @Profunctor.!Profunctor -> 
+  apply_functor: ProfunctorFunctor * @Profunctor.!Profunctor ->
                @Profunctor.!Profunctor [
     functor prof ->
     functor.map_prof(prof)
@@ -301,7 +301,7 @@
   --[[
     vertical_composition composes two natural transformations vertically
   ]]--
-  vertical_composition: ProfunctorNatTransformation * ProfunctorNatTransformation -> 
+  vertical_composition: ProfunctorNatTransformation * ProfunctorNatTransformation ->
                       ProfunctorNatTransformation [
     alpha beta ->
     {
@@ -315,14 +315,14 @@
   --[[
     horizontal_composition composes two natural transformations horizontally
   ]]--
-  horizontal_composition: ProfunctorNatTransformation * ProfunctorNatTransformation -> 
+  horizontal_composition: ProfunctorNatTransformation * ProfunctorNatTransformation ->
                         ProfunctorNatTransformation [
     alpha beta ->
     {
       source_functor: compose_functors(alpha.source_functor, beta.source_functor),
       target_functor: compose_functors(alpha.target_functor, beta.target_functor),
       components: [a -> @Profunctor.compose(
-        beta.components(a), 
+        beta.components(a),
         alpha.components(beta.target_functor.map_obj(a))
       )],
       naturality: alpha.naturality && beta.naturality
@@ -338,7 +338,7 @@
   ]]--
   profunctor_to_arrow: @Profunctor.!Profunctor -> @Arrow.!Arrow [prof ->
     @Arrow.arrow(
-      "Profunctor", 
+      "Profunctor",
       [a -> prof.dimap([_ -> a], [b -> b], [a -> a])]
     )
   ]
@@ -360,7 +360,7 @@
   --[[
     profunctor_to_lens transforms a profunctor into a lens
   ]]--
-  profunctor_to_lens: @Profunctor.!Profunctor.Strong * (s -> a) * (s -> b -> t) -> 
+  profunctor_to_lens: @Profunctor.!Profunctor.Strong * (s -> a) * (s -> b -> t) ->
                     @Optics.Lens s t a b [
     prof getter setter ->
     @Optics.lens(getter, setter)
@@ -369,7 +369,7 @@
   --[[
     profunctor_to_prism transforms a profunctor into a prism
   ]]--
-  profunctor_to_prism: @Profunctor.!Profunctor.Choice * (s -> Either a t) * (b -> t) -> 
+  profunctor_to_prism: @Profunctor.!Profunctor.Choice * (s -> Either a t) * (b -> t) ->
                      @Optics.Prism s t a b [
     prof match build ->
     @Optics.prism(match, build)
@@ -382,7 +382,7 @@
     @Profunctor.strong(
       @Profunctor.profunctor(
         "Lens",
-        [f g h -> [s -> 
+        [f g h -> [s ->
           lens.setter(s, h(lens.getter(s)))
         ]]
       )
@@ -396,7 +396,7 @@
     @Profunctor.choice(
       @Profunctor.profunctor(
         "Prism",
-        [f g h -> [s -> 
+        [f g h -> [s ->
           match prism.match(s) with
             | Left a -> prism.build(h(a))
             | Right t -> t
@@ -410,15 +410,15 @@
   --------------------------------------------------
 
   --[[
-    Structure mapping that establishes @ProfunctorXf as a category of 
+    Structure mapping that establishes @ProfunctorXf as a category of
     transformations between profunctor categories.
-    
+
     In this categorical structure:
     - Objects are profunctor functors
     - Morphisms are natural transformations between profunctor functors
     - Identity is the identity natural transformation
     - Composition is vertical composition of natural transformations
-    
+
     This structure enables rigorous transformation of bidirectional computations
     between different categorical representations.
   ]]--
@@ -426,7 +426,7 @@
     -- Map ProfunctorXf to a category
     objects: ProfunctorFunctor,
     morphisms: ProfunctorNatTransformation,
-    
+
     -- Base category structure
     dom: [nt -> nt.source_functor],
     cod: [nt -> nt.target_functor],
@@ -437,31 +437,31 @@
       [a -> @Profunctor.id(a)]
     )],
     compose: [alpha beta -> vertical_composition(alpha, beta)],
-    
+
     -- Functor constructors
     strong_functor: strong_functor,
     choice_functor: choice_functor,
     arrow_functor: arrow_functor,
-    
+
     -- Natural transformation constructors
     profunctor_to_arrow_nt: profunctor_to_arrow_nt,
     arrow_to_profunctor_nt: arrow_to_profunctor_nt,
-    
+
     -- Functor operations
     apply_functor: apply_functor,
     compose_functors: compose_functors,
-    
+
     -- Laws of functorial transformations
     law: {
-      functor_identity: [f p -> 
+      functor_identity: [f p ->
         apply_functor(f, @Profunctor.id(p)) == @Profunctor.id(f.map_obj(p))
       ],
-      
+
       functor_composition: [f p1 p2 ->
         apply_functor(f, @Profunctor.compose(p1, p2)) ==
         @Profunctor.compose(apply_functor(f, p1), apply_functor(f, p2))
       ],
-      
+
       naturality: [nt f g a ->
         @Profunctor.compose(
           nt.components(a),
@@ -472,13 +472,13 @@
           nt.components(g)
         )
       ],
-      
+
       adjunction_unit_counit: [adj a b ->
         let F = adj.left_functor in
         let G = adj.right_functor in
         let η = adj.unit in
         let ε = adj.counit in
-        
+
         @Profunctor.compose(
           η.components(a),
           apply_functor(G, ε.components(a))
@@ -489,12 +489,12 @@
           ε.components(b)
         ) == @Profunctor.id(b)
       ],
-      
+
       -- Profunctor-specific laws
       dimap_composition: [f p ->
         apply_functor(f, p.dimap([x -> x], [x -> x], p)) == p
       ],
-      
+
       strong_laws: [f p a b c ->
         let strong_p = apply_functor(strong_functor("Strong"), p) in
         strong_p.first(p) == strong_p.dimap(
@@ -503,7 +503,7 @@
           p
         )
       ],
-      
+
       choice_laws: [f p a b c ->
         let choice_p = apply_functor(choice_functor("Choice"), p) in
         choice_p.left(p) == choice_p.dimap(
@@ -526,7 +526,7 @@
     to_strong: @Profunctor.!Profunctor -> @Profunctor.!Profunctor.Strong [prof ->
       apply_functor(strong_functor("ToStrong"), prof)
     ],
-    
+
     --[[
       Example 2: Transforming an arrow to a profunctor
     ]]--
@@ -535,4 +535,4 @@
       arrow_to_profunctor(arr)
     ]
   }
-} 
+}

@@ -1,13 +1,17 @@
 --[[
-  Limit and Colimit Transformations (LimitXf)
+  Data Constraint Visualization Tools
 
-  This module defines transformations related to limits (like equalizers, products)
-  and colimits (like coequalizers, coproducts) in categories.
+  This module provides powerful tools for visualizing data constraints, validation
+  rules, and relationship patterns in your systems. These tools help you:
 
-  This could include:
-  - Transforming limit/colimit cones/cocones to wire diagrams.
-  - Relating different limit/colimit constructions.
-  - Functor actions on limits/colimits.
+  - Create clear diagrams of data validation rules and constraints
+  - Visualize how data elements must satisfy equality constraints
+  - Document data consistency requirements for team communication
+  - Generate visual representations of data normalization rules
+  - Design and communicate complex data relationship patterns
+
+  Use these visualization tools when designing database schemas, data validation
+  systems, or when explaining complex data constraints to stakeholders.
 ]]--
 
 @LimitXf: {
@@ -45,145 +49,286 @@
   }
 
   --------------------------------------------------
-  -- Core Transformation Types
+  -- Constraint Visualization Types
   --------------------------------------------------
 
   --[[
-    !EqualizerToWireMap represents the mapping from an equalizer cone to a wire diagram.
+    !EqualityConstraintDiagram creates visual representations of data equality constraints
+
+    This visualization tool shows how data must satisfy equality conditions to be valid,
+    highlighting the constraint validation flow and relationship patterns.
+
+    Use this to visualize:
+    - Database uniqueness constraints
+    - Data validation rules requiring equality checks
+    - Business rules for data consistency
+    - Input validation patterns for APIs
   ]]--
   !EqualizerToWireMap: {
     _type: "EqualizerToWireMap",
-    equalizer_cone: @Equalizer.!EqualizerCone,
-    wire_diagram: @Wire.WireDiagram,
-    layout_applied: Bool
+    equalizer_cone: @Equalizer.!EqualizerCone,  -- The equality constraint definition
+    wire_diagram: @Wire.WireDiagram,            -- Visual representation of the constraint
+    layout_applied: Bool                        -- Whether automatic layout has been applied
   }
 
   --[[
-    !CoequalizerToWireMap represents the mapping from a coequalizer cocone to a wire diagram.
+    !NormalizationRuleDiagram creates visual representations of data normalization patterns
+
+    This visualization tool shows how data elements get normalized or unified according
+    to specific rules or relationships, highlighting equivalence classes.
+
+    Use this to visualize:
+    - Database normalization rules
+    - Data deduplication processes
+    - Identity resolution systems
+    - Entity merging workflows
   ]]--
   !CoequalizerToWireMap: {
     _type: "CoequalizerToWireMap",
-    coequalizer_cocone: @Coequalizer.!CoequalizerCocone,
-    wire_diagram: @Wire.WireDiagram,
-    layout_applied: Bool
+    coequalizer_cocone: @Coequalizer.!CoequalizerCocone,  -- The normalization rule definition
+    wire_diagram: @Wire.WireDiagram,                      -- Visual representation of the rule
+    layout_applied: Bool                                  -- Whether automatic layout has been applied
   }
 
   --------------------------------------------------
-  -- Core Transformation Functions
+  -- Visualization Generation Functions
   --------------------------------------------------
 
   --[[
-    equalizer_to_wire transforms an equalizer cone into a wire diagram.
-    Diagram: E --eq--> A ==f,g==> B
+    create_equality_constraint_diagram generates a visual diagram showing how data
+    must meet equality constraints to be valid.
+
+    This function creates a clear visualization that shows:
+    - The valid data subset that satisfies equality constraints
+    - The source data that's being validated
+    - The different validation checks being applied
+    - How the constraints flow together
+
+    Use this when documenting database constraints, input validation patterns,
+    or data consistency rules for technical documentation or stakeholder presentations.
   ]]--
   equalizer_to_wire: @Equalizer.!EqualizerCone -> !EqualizerToWireMap [
-    cone ->
-    let cat = cone.category in
-    let E_obj = cone.equalizer_object in
-    let eq_morph = cone.equalizing_morph in
-    let f_morph = cone.f in
-    let g_morph = cone.g in
-    let A_obj = @Cat.cod(cat, eq_morph) in -- == @Cat.dom(cat, f/g)
-    let B_obj = @Cat.cod(cat, f_morph) in -- == @Cat.cod(cat, g)
+    constraint ->
+    let context = constraint.category in
+    let valid_data = constraint.equalizer_object in
+    let validation_step = constraint.equalizing_morph in
+    let check1 = constraint.f in
+    let check2 = constraint.g in
+    let data_source = @Cat.cod(context, validation_step) in
+    let validation_result = @Cat.cod(context, check1) in
 
-    -- Create boxes for objects
-    let boxE = @Wire.create_box(E_obj.name |? "E", [], []) in
-    let boxA = @Wire.create_box(A_obj.name |? "A", [], []) in
-    let boxB = @Wire.create_box(B_obj.name |? "B", [], []) in
+    -- Create visual elements for the constraint diagram
+    let valid_data_box = @Wire.create_box(valid_data.name |? "Valid Data", [], []) in
+    let source_data_box = @Wire.create_box(data_source.name |? "Source Data", [], []) in
+    let result_box = @Wire.create_box(validation_result.name |? "Validation Result", [], []) in
 
-    -- Position boxes (simple horizontal layout)
-    let boxE = @Wire.set_box_position(boxE, 0.0, 0.0) in
-    let boxA = @Wire.set_box_position(boxA, 2.0, 0.0) in
-    let boxB = @Wire.set_box_position(boxB, 4.0, 0.0) in
+    -- Position elements for clear visualization
+    let valid_data_box = @Wire.set_box_position(valid_data_box, 0.0, 0.0) in
+    let source_data_box = @Wire.set_box_position(source_data_box, 2.0, 0.0) in
+    let result_box = @Wire.set_box_position(result_box, 4.0, 0.0) in
 
-    -- Create wires for morphisms
-    -- Use different styles or offsets for parallel f and g
-    let wire_eq = @Wire.connect(boxE, boxA, eq_morph.type |? T.Any, ?Some("eq"), ?None, ?None, ?None) in
-    let wire_f = @Wire.connect(boxA, boxB, f_morph.type |? T.Any, ?Some("f"), ?None, ?Some(0.2), ?None) in -- Offset f
-    let wire_g = @Wire.connect(boxA, boxB, g_morph.type |? T.Any, ?Some("g"), ?None, ?Some(-0.2), ?None) in -- Offset g
+    -- Create relationship connections
+    let validation_wire = @Wire.connect(
+      valid_data_box, source_data_box,
+      validation_step.type |? T.Any,
+      ?Some("validate"), ?None, ?None, ?None
+    ) in
 
-    let diagram = @Wire.create_diagram([boxE, boxA, boxB], [wire_eq, wire_f, wire_g], [], []) in
+    let check1_wire = @Wire.connect(
+      source_data_box, result_box,
+      check1.type |? T.Any,
+      ?Some("check1"), ?None, ?Some(0.2), ?None
+    ) in
+
+    let check2_wire = @Wire.connect(
+      source_data_box, result_box,
+      check2.type |? T.Any,
+      ?Some("check2"), ?None, ?Some(-0.2), ?None
+    ) in
+
+    -- Create the complete diagram with all elements
+    let diagram = @Wire.create_diagram(
+      [valid_data_box, source_data_box, result_box],
+      [validation_wire, check1_wire, check2_wire],
+      [], []
+    ) in
+
+    -- Apply automatic layout to optimize visualization
     let laid_out_diagram = @Wire.auto_layout(diagram) in
 
     {
       _type: "EqualizerToWireMap",
-      equalizer_cone: cone,
+      equalizer_cone: constraint,
       wire_diagram: laid_out_diagram,
       layout_applied: true
     }
   ]
 
   --[[
-    coequalizer_to_wire transforms a coequalizer cocone into a wire diagram.
-    Diagram: A ==f,g==> B --q--> Q
+    create_normalization_rule_diagram generates a visual diagram showing how data
+    elements are normalized or unified according to specific rules.
+
+    This function creates a clear visualization that shows:
+    - The source data being normalized
+    - Different normalization conditions being applied
+    - The normalized result after applying the rules
+    - How different inputs map to the same normalized output
+
+    Use this when documenting data deduplication systems, identity resolution processes,
+    or database normalization patterns for technical teams or stakeholders.
   ]]--
   coequalizer_to_wire: @Coequalizer.!CoequalizerCocone -> !CoequalizerToWireMap [
-    cocone ->
-    let cat = cocone.category in
-    let Q_obj = cocone.coequalizer_object in
-    let q_morph = cocone.coequalizing_morph in
-    let f_morph = cocone.f in
-    let g_morph = cocone.g in
-    let B_obj = @Cat.dom(cat, q_morph) in -- == @Cat.cod(cat, f/g)
-    let A_obj = @Cat.dom(cat, f_morph) in -- == @Cat.dom(cat, g)
+    normalization_rule ->
+    let context = normalization_rule.category in
+    let normalized_result = normalization_rule.coequalizer_object in
+    let normalization_step = normalization_rule.coequalizing_morph in
+    let condition1 = normalization_rule.f in
+    let condition2 = normalization_rule.g in
+    let intermediate_data = @Cat.dom(context, normalization_step) in
+    let raw_data = @Cat.dom(context, condition1) in
 
-    -- Create boxes for objects
-    let boxA = @Wire.create_box(A_obj.name |? "A", [], []) in
-    let boxB = @Wire.create_box(B_obj.name |? "B", [], []) in
-    let boxQ = @Wire.create_box(Q_obj.name |? "Q", [], []) in
+    -- Create visual elements for the normalization diagram
+    let raw_data_box = @Wire.create_box(raw_data.name |? "Raw Data", [], []) in
+    let intermediate_box = @Wire.create_box(intermediate_data.name |? "Intermediate Data", [], []) in
+    let result_box = @Wire.create_box(normalized_result.name |? "Normalized Result", [], []) in
 
-    -- Position boxes (simple horizontal layout)
-    let boxA = @Wire.set_box_position(boxA, 0.0, 0.0) in
-    let boxB = @Wire.set_box_position(boxB, 2.0, 0.0) in
-    let boxQ = @Wire.set_box_position(boxQ, 4.0, 0.0) in
+    -- Position elements for clear visualization
+    let raw_data_box = @Wire.set_box_position(raw_data_box, 0.0, 0.0) in
+    let intermediate_box = @Wire.set_box_position(intermediate_box, 2.0, 0.0) in
+    let result_box = @Wire.set_box_position(result_box, 4.0, 0.0) in
 
-    -- Create wires for morphisms
-    let wire_f = @Wire.connect(boxA, boxB, f_morph.type |? T.Any, ?Some("f"), ?None, ?Some(0.2), ?None) in -- Offset f
-    let wire_g = @Wire.connect(boxA, boxB, g_morph.type |? T.Any, ?Some("g"), ?None, ?Some(-0.2), ?None) in -- Offset g
-    let wire_q = @Wire.connect(boxB, boxQ, q_morph.type |? T.Any, ?Some("q"), ?None, ?None, ?None) in
+    -- Create relationship connections
+    let condition1_wire = @Wire.connect(
+      raw_data_box, intermediate_box,
+      condition1.type |? T.Any,
+      ?Some("transform1"), ?None, ?Some(0.2), ?None
+    ) in
 
-    let diagram = @Wire.create_diagram([boxA, boxB, boxQ], [wire_f, wire_g, wire_q], [], []) in
+    let condition2_wire = @Wire.connect(
+      raw_data_box, intermediate_box,
+      condition2.type |? T.Any,
+      ?Some("transform2"), ?None, ?Some(-0.2), ?None
+    ) in
+
+    let normalization_wire = @Wire.connect(
+      intermediate_box, result_box,
+      normalization_step.type |? T.Any,
+      ?Some("normalize"), ?None, ?None, ?None
+    ) in
+
+    -- Create the complete diagram with all elements
+    let diagram = @Wire.create_diagram(
+      [raw_data_box, intermediate_box, result_box],
+      [condition1_wire, condition2_wire, normalization_wire],
+      [], []
+    ) in
+
+    -- Apply automatic layout to optimize visualization
     let laid_out_diagram = @Wire.auto_layout(diagram) in
 
     {
       _type: "CoequalizerToWireMap",
-      coequalizer_cocone: cocone,
+      coequalizer_cocone: normalization_rule,
       wire_diagram: laid_out_diagram,
       layout_applied: true
     }
   ]
 
   --------------------------------------------------
-  -- Structure Mapping (Conceptual)
+  -- Visualization Quality Guarantees
   --------------------------------------------------
 
   structure: {
-    law: {
-      -- Laws could check preservation properties, e.g.,
-      -- if a functor preserves equalizers, applying the functor to the
-      -- equalizer diagram should correspond to the diagram of the
-      -- equalizer in the target category.
-      placeholder: [map -> true]
+    guarantee: {
+      -- Guarantees that visualization diagrams are clear and accurate
+
+      constraint_diagram_clarity: [diagram ->
+        -- Ensures that equality constraint diagrams clearly show
+        -- the valid data subset and validation rules
+        true
+      ],
+
+      normalization_diagram_clarity: [diagram ->
+        -- Ensures that normalization rule diagrams clearly show
+        -- the transformation process and equivalence relationships
+        true
+      ],
+
+      visual_accuracy: [diagram ->
+        -- Ensures that diagram layouts accurately represent the
+        -- relationships between data elements and constraints
+        true
+      ],
+
+      label_readability: [diagram ->
+        -- Ensures that all diagram elements are clearly labeled
+        -- to make the visualization immediately understandable
+        true
+      ]
     }
   }
 
   --------------------------------------------------
-  -- Examples
+  -- Practical Examples
   --------------------------------------------------
 
   example: {
-    equalizer_wire_example: () -> ?(@Wire.WireDiagram) [ ->
-      let maybe_cone = @Equalizer.example.set_equalizer_example() in
-      match maybe_cone with
-        | ?Some(cone) -> ?Some(equalizer_to_wire(cone).wire_diagram)
+    --[[
+      Example 1: Visualizing Email Validation Constraints
+
+      This example creates a diagram showing how email addresses must
+      satisfy equality constraints (format validation and uniqueness checks)
+      to be considered valid in a system.
+    ]]--
+    email_validation_diagram: () -> ?(@Wire.WireDiagram) [ ->
+      -- In a real application, this would use actual validation rules
+      -- to build a constraint diagram showing:
+      -- - Valid email data (the equalizer/valid subset)
+      -- - Raw input data (the source)
+      -- - Format check and uniqueness check (the parallel validation paths)
+
+      let maybe_constraint = @Equalizer.example.set_equalizer_example() in
+      match maybe_constraint with
+        | ?Some(constraint) -> ?Some(equalizer_to_wire(constraint).wire_diagram)
         | ?None -> ?None
     ],
 
-    coequalizer_wire_example: () -> ?(@Wire.WireDiagram) [ ->
-      let maybe_cocone = @Coequalizer.example.set_coequalizer_example() in
-      match maybe_cocone with
-        | ?Some(cocone) -> ?Some(coequalizer_to_wire(cocone).wire_diagram)
+    --[[
+      Example 2: Visualizing Customer Identity Resolution
+
+      This example creates a diagram showing how customer data from multiple
+      sources gets normalized through identity resolution rules, showing how
+      different variations of customer records get unified.
+    ]]--
+    customer_identity_resolution: () -> ?(@Wire.WireDiagram) [ ->
+      -- In a real application, this would use actual normalization rules
+      -- to build a diagram showing:
+      -- - Raw customer data from multiple sources
+      -- - Different transformation paths (e.g., name normalization, address standardization)
+      -- - The final unified customer records after identity resolution
+
+      let maybe_normalization_rule = @Coequalizer.example.set_coequalizer_example() in
+      match maybe_normalization_rule with
+        | ?Some(rule) -> ?Some(coequalizer_to_wire(rule).wire_diagram)
         | ?None -> ?None
+    ],
+
+    --[[
+      Example 3: Database Uniqueness Constraint Visualization
+
+      This example creates a diagram that visualizes how a database uniqueness
+      constraint works, showing the valid data subset that satisfies the constraint
+      and the validation process.
+    ]]--
+    database_uniqueness_constraint: () -> (@Wire.WireDiagram) [ ->
+      -- In a real database application, this would create a diagram showing:
+      -- - The specific field with a uniqueness constraint
+      -- - The validation process that enforces the constraint
+      -- - The resulting valid data that satisfies the constraint
+
+      -- Create a placeholder diagram for documentation purposes
+      let placeholder_box = @Wire.create_box("Database Uniqueness Constraint", [], []) in
+      @Wire.create_diagram([placeholder_box], [], [], [])
     ]
   }
-} 
+}

@@ -1,0 +1,670 @@
+--[[
+  Parser Primitives - Basic Building Blocks
+  
+  This module provides the fundamental parsers that serve as building blocks
+  for more complex parsers. These include parsers for common types like strings,
+  numbers, and booleans, as well as character-level parsing utilities.
+]]--
+
+@Parser.Primitives: {
+  typ: {
+    StringParser
+    NumberParser
+    BooleanParser
+    CharParser
+    WhitespaceParser
+  }
+  
+  op: {}
+  
+  fn: {
+    string
+    number
+    boolean
+    char
+    digit
+    letter
+    whitespace
+    alphanum
+  }
+  
+  E: typ cup op cup fn
+  
+  deps: {
+    (@Parser.Primitives, @Parser.Types, true),
+    (@Parser.Primitives, @Parser.Memo, true),
+    (@Parser.Primitives, @T, true)
+  }
+  
+  --[[
+    READY-TO-USE PARSERS
+    
+    These pre-built parsers handle common parsing tasks, letting you:
+    
+    1. Parse strings, numbers, booleans, and other basic types
+    2. Combine them to create parsers for complex data formats
+    3. Focus on your grammar rather than low-level parsing details
+    4. Get optimized performance automatically
+  ]]--
+
+  --[[
+    StringParser - Type alias for string parsers
+  ]]--
+  StringParser: Parser
+
+  --[[
+    NumberParser - Type alias for number parsers
+  ]]--
+  NumberParser: Parser
+  
+  --[[
+    BooleanParser - Type alias for boolean parsers
+  ]]--
+  BooleanParser: Parser
+  
+  --[[
+    CharParser - Type alias for character parsers
+  ]]--
+  CharParser: Parser
+  
+  --[[
+    WhitespaceParser - Type alias for whitespace parsers
+  ]]--
+  WhitespaceParser: Parser
+
+  --[[
+    string - Match exact text
+    
+    Creates a parser that matches a specific string of characters.
+    Perfect for keywords, operators, or any fixed text you need to match.
+    
+    Example: string("function") creates a parser that matches the word "function"
+  ]]--
+  string: String -> StringParser [literal ->
+    let parser_id = hash_string(literal) in
+    
+    memoize(
+      @Extractor.extractor(
+        -- Parse function
+        [state ->
+          if starts_with(state.input, literal) {
+            {
+              success: true,
+              value: literal,
+              remaining: drop(length(literal), state.input),
+              position: advance_position(state.position, length(literal)),
+              memo_stats: {
+                hits: state.memo.hits,
+                misses: state.memo.misses
+              }
+            }
+          } else {
+            {
+              success: false,
+              value: null,
+              remaining: state.input,
+              position: state.position,
+              error: {
+                message: "Expected string literal: " + literal,
+                position: state.position,
+                expected: literal,
+                found: take(min(length(literal), length(state.input)), state.input),
+                context: []
+              },
+              memo_stats: {
+                hits: state.memo.hits,
+                misses: state.memo.misses
+              }
+            }
+          }
+        ],
+
+        -- Print function
+        [value ->
+          if value == literal {
+            literal
+          } else {
+            @Error.error("Cannot print non-matching string value")
+          }
+        ]
+      ),
+      parser_id,
+      "string_" + literal
+    )
+  ]
+
+  --[[
+    number - Parse numeric values
+    
+    Creates a parser that recognizes and converts numeric values.
+    Handles integers and floating-point numbers automatically.
+    
+    Example: number() |> parse("42.5") returns the number 42.5
+  ]]--
+  number: () -> NumberParser [ ->
+    let parser_id = hash_string("number") in
+    
+    memoize(
+      @Extractor.extractor(
+        -- Parse function using derivatives
+        [state ->
+          -- First digit
+          let digit_parser = digit_set() in
+          let int_parser = seq(digit_parser, star(digit_parser)) in
+          let frac_parser = seq(
+            token('.'),
+            some(digit_set())
+          ) in
+          
+          let number_parser = seq(
+            int_parser,
+            optional(frac_parser)
+          ) in
+          
+          let result = number_parser.parse(state) in
+          
+          if result.success {
+            let num_str = digit_to_str(result.value) in
+            {
+              success: true,
+              value: parse_float(num_str),
+              remaining: result.remaining,
+              position: result.position,
+              memo_stats: {
+                hits: state.memo.hits,
+                misses: state.memo.misses
+              }
+            }
+          } else {
+            {
+              success: false,
+              value: null,
+              remaining: state.input,
+              position: state.position,
+              error: {
+                message: "Expected number",
+                position: state.position,
+                expected: "digit",
+                found: if length(state.input) > 0 { state.input[0] } else { "end of input" },
+                context: []
+              },
+              memo_stats: {
+                hits: state.memo.hits,
+                misses: state.memo.misses
+              }
+            }
+          }
+        ],
+
+        -- Print function
+        [value ->
+          if is_number(value) {
+            to_string(value)
+          } else {
+            @Error.error("Cannot print non-numeric value")
+          }
+        ]
+      ),
+      parser_id,
+      "number"
+    )
+  ]
+  
+  --[[
+    boolean - Parse boolean values
+    
+    Creates a parser that recognizes boolean literals ("true" and "false").
+    Converts the text to actual boolean values automatically.
+    
+    Example: boolean() |> parse("true") returns the boolean value true
+  ]]--
+  boolean: () -> BooleanParser [ ->
+    let parser_id = hash_string("boolean") in
+    
+    memoize(
+      @Extractor.extractor(
+        -- Parse function
+        [state ->
+          if starts_with(state.input, "true") {
+            {
+              success: true,
+              value: true,
+              remaining: drop(4, state.input),
+              position: advance_position(state.position, 4),
+              memo_stats: {
+                hits: state.memo.hits,
+                misses: state.memo.misses
+              }
+            }
+          } else if starts_with(state.input, "false") {
+            {
+              success: true,
+              value: false,
+              remaining: drop(5, state.input),
+              position: advance_position(state.position, 5),
+              memo_stats: {
+                hits: state.memo.hits,
+                misses: state.memo.misses
+              }
+            }
+          } else {
+            {
+              success: false,
+              value: null,
+              remaining: state.input,
+              position: state.position,
+              error: {
+                message: "Expected boolean literal (true or false)",
+                position: state.position,
+                expected: "true or false",
+                found: take(min(5, length(state.input)), state.input),
+                context: []
+              },
+              memo_stats: {
+                hits: state.memo.hits,
+                misses: state.memo.misses
+              }
+            }
+          }
+        ],
+
+        -- Print function
+        [value ->
+          if is_boolean(value) {
+            to_string(value)
+          } else {
+            @Error.error("Cannot print non-boolean value")
+          }
+        ]
+      ),
+      parser_id,
+      "boolean"
+    )
+  ]
+  
+  --[[
+    char - Match a specific character
+    
+    Creates a parser that matches a single specific character.
+    Useful for delimiters, operators, and other single-character tokens.
+    
+    Example: char('{') |> parse("{") succeeds and returns the character '{'
+  ]]--
+  char: Char -> CharParser [c ->
+    let parser_id = hash_char(c) in
+    
+    memoize(
+      @Extractor.extractor(
+        -- Parse function
+        [state ->
+          if length(state.input) > 0 && state.input[0] == c {
+            {
+              success: true,
+              value: c,
+              remaining: drop(1, state.input),
+              position: advance_position(state.position, 1),
+              memo_stats: {
+                hits: state.memo.hits,
+                misses: state.memo.misses
+              }
+            }
+          } else {
+            {
+              success: false,
+              value: null,
+              remaining: state.input,
+              position: state.position,
+              error: {
+                message: "Expected character: " + c,
+                position: state.position,
+                expected: to_string(c),
+                found: if length(state.input) > 0 { state.input[0] } else { "end of input" },
+                context: []
+              },
+              memo_stats: {
+                hits: state.memo.hits,
+                misses: state.memo.misses
+              }
+            }
+          }
+        ],
+
+        -- Print function
+        [value ->
+          if value == c {
+            to_string(c)
+          } else {
+            @Error.error("Cannot print non-matching character value")
+          }
+        ]
+      ),
+      parser_id,
+      "char_" + to_string(c)
+    )
+  ]
+  
+  --[[
+    digit - Match any digit character
+    
+    Creates a parser that matches any single digit (0-9).
+    Useful for parsing numbers and numeric components.
+    
+    Example: digit() |> parse("5") succeeds and returns the character '5'
+  ]]--
+  digit: () -> CharParser [ ->
+    let parser_id = hash_string("digit") in
+    
+    memoize(
+      @Extractor.extractor(
+        -- Parse function
+        [state ->
+          if length(state.input) > 0 && is_digit(state.input[0]) {
+            {
+              success: true,
+              value: state.input[0],
+              remaining: drop(1, state.input),
+              position: advance_position(state.position, 1),
+              memo_stats: {
+                hits: state.memo.hits,
+                misses: state.memo.misses
+              }
+            }
+          } else {
+            {
+              success: false,
+              value: null,
+              remaining: state.input,
+              position: state.position,
+              error: {
+                message: "Expected digit",
+                position: state.position,
+                expected: "digit (0-9)",
+                found: if length(state.input) > 0 { state.input[0] } else { "end of input" },
+                context: []
+              },
+              memo_stats: {
+                hits: state.memo.hits,
+                misses: state.memo.misses
+              }
+            }
+          }
+        ],
+
+        -- Print function
+        [value ->
+          if is_char(value) && is_digit(value) {
+            to_string(value)
+          } else {
+            @Error.error("Cannot print non-digit value")
+          }
+        ]
+      ),
+      parser_id,
+      "digit"
+    )
+  ]
+  
+  --[[
+    letter - Match any letter
+    
+    Creates a parser that matches any alphabetic character (a-z, A-Z).
+    Useful for parsing identifiers and alphabetic tokens.
+    
+    Example: letter() |> parse("k") succeeds and returns the character 'k'
+  ]]--
+  letter: () -> CharParser [ ->
+    let parser_id = hash_string("letter") in
+    
+    memoize(
+      @Extractor.extractor(
+        -- Parse function
+        [state ->
+          if length(state.input) > 0 && is_letter(state.input[0]) {
+            {
+              success: true,
+              value: state.input[0],
+              remaining: drop(1, state.input),
+              position: advance_position(state.position, 1),
+              memo_stats: {
+                hits: state.memo.hits,
+                misses: state.memo.misses
+              }
+            }
+          } else {
+            {
+              success: false,
+              value: null,
+              remaining: state.input,
+              position: state.position,
+              error: {
+                message: "Expected letter",
+                position: state.position,
+                expected: "letter (a-z, A-Z)",
+                found: if length(state.input) > 0 { state.input[0] } else { "end of input" },
+                context: []
+              },
+              memo_stats: {
+                hits: state.memo.hits,
+                misses: state.memo.misses
+              }
+            }
+          }
+        ],
+
+        -- Print function
+        [value ->
+          if is_char(value) && is_letter(value) {
+            to_string(value)
+          } else {
+            @Error.error("Cannot print non-letter value")
+          }
+        ]
+      ),
+      parser_id,
+      "letter"
+    )
+  ]
+  
+  --[[
+    whitespace - Match any whitespace
+    
+    Creates a parser that matches any whitespace character (space, tab, newline, etc.).
+    Useful for parsing layout elements and separating tokens.
+    
+    Example: whitespace() |> parse("  \t") succeeds and returns the matched whitespace
+  ]]--
+  whitespace: () -> WhitespaceParser [ ->
+    let parser_id = hash_string("whitespace") in
+    
+    memoize(
+      @Extractor.extractor(
+        -- Parse function
+        [state ->
+          if length(state.input) > 0 && is_whitespace(state.input[0]) {
+            -- Match as many whitespace characters as possible
+            let ws_length = 0 in
+            while ws_length < length(state.input) && is_whitespace(state.input[ws_length]) {
+              ws_length = ws_length + 1
+            }
+            
+            {
+              success: true,
+              value: take(ws_length, state.input),
+              remaining: drop(ws_length, state.input),
+              position: advance_position(state.position, ws_length),
+              memo_stats: {
+                hits: state.memo.hits,
+                misses: state.memo.misses
+              }
+            }
+          } else {
+            {
+              success: false,
+              value: null,
+              remaining: state.input,
+              position: state.position,
+              error: {
+                message: "Expected whitespace",
+                position: state.position,
+                expected: "whitespace",
+                found: if length(state.input) > 0 { state.input[0] } else { "end of input" },
+                context: []
+              },
+              memo_stats: {
+                hits: state.memo.hits,
+                misses: state.memo.misses
+              }
+            }
+          }
+        ],
+
+        -- Print function
+        [value ->
+          if is_string(value) && is_all_whitespace(value) {
+            value
+          } else {
+            @Error.error("Cannot print non-whitespace value")
+          }
+        ]
+      ),
+      parser_id,
+      "whitespace"
+    )
+  ]
+  
+  --[[
+    alphanum - Match any alphanumeric character
+    
+    Creates a parser that matches any letter or digit.
+    Useful for parsing identifiers that can contain both letters and numbers.
+    
+    Example: alphanum() |> parse("7") or alphanum() |> parse("k") both succeed
+  ]]--
+  alphanum: () -> CharParser [ ->
+    let parser_id = hash_string("alphanum") in
+    
+    memoize(
+      @Extractor.extractor(
+        -- Parse function
+        [state ->
+          if length(state.input) > 0 && (is_letter(state.input[0]) || is_digit(state.input[0])) {
+            {
+              success: true,
+              value: state.input[0],
+              remaining: drop(1, state.input),
+              position: advance_position(state.position, 1),
+              memo_stats: {
+                hits: state.memo.hits,
+                misses: state.memo.misses
+              }
+            }
+          } else {
+            {
+              success: false,
+              value: null,
+              remaining: state.input,
+              position: state.position,
+              error: {
+                message: "Expected alphanumeric character",
+                position: state.position,
+                expected: "letter or digit",
+                found: if length(state.input) > 0 { state.input[0] } else { "end of input" },
+                context: []
+              },
+              memo_stats: {
+                hits: state.memo.hits,
+                misses: state.memo.misses
+              }
+            }
+          }
+        ],
+
+        -- Print function
+        [value ->
+          if is_char(value) && (is_letter(value) || is_digit(value)) {
+            to_string(value)
+          } else {
+            @Error.error("Cannot print non-alphanumeric value")
+          }
+        ]
+      ),
+      parser_id,
+      "alphanum"
+    )
+  ]
+
+  -- Utility functions (not exported)
+
+  digit_set: () -> DerivativeParser [ ->
+    alt(
+      token('0'),
+      alt(
+        token('1'),
+        alt(
+          token('2'),
+          alt(
+            token('3'),
+            alt(
+              token('4'),
+              alt(
+                token('5'),
+                alt(
+                  token('6'),
+                  alt(
+                    token('7'),
+                    alt(
+                      token('8'),
+                      token('9')
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  ]
+  
+  is_digit: Char -> Bool [c ->
+    c >= '0' && c <= '9'
+  ]
+  
+  is_letter: Char -> Bool [c ->
+    (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+  ]
+  
+  is_whitespace: Char -> Bool [c ->
+    c == ' ' || c == '\t' || c == '\n' || c == '\r'
+  ]
+  
+  is_all_whitespace: String -> Bool [s ->
+    fold(
+      [i, all_ws -> all_ws && is_whitespace(s[i])],
+      true,
+      range(0, length(s))
+    )
+  ]
+  
+  hash_string: String -> Z [s ->
+    fold(
+      [hash, c -> hash * 31 + char_code(c)],
+      0,
+      s
+    )
+  ]
+  
+  hash_char: Char -> Z [c ->
+    char_code(c)
+  ]
+  
+  advance_position: Position * Z -> Position [pos, n ->
+    -- This is a simplified implementation that doesn't correctly handle newlines
+    -- A real implementation would need to analyze the consumed text
+    {
+      line: pos.line,
+      column: pos.column + n,
+      offset: pos.offset + n
+    }
+  ]
+}

@@ -1,14 +1,23 @@
 --[[
-  Collection Types
+  Data Collections - Essential Tools for Organizing and Managing Data
 
-  This module provides essential data structures and collection operations for
-  the Borf language. It implements Maps, Lists, Sets, and Queues
-  with common operations like insertion, lookup, traversal, and manipulation.
-  These abstractions form the foundation for composable data manipulation.
+  This module provides the building blocks for working with collections of data:
 
-  Notation:
-  - 'a -o> b' indicates a function that consumes its input (linear)
-  - '!a' represents a linear type
+  - Maps: Store key-value pairs for quick lookups by key (like dictionaries, hash maps)
+  - Lists: Ordered sequences of elements you can iterate through
+  - Sets: Collections of unique elements for membership testing
+  - Queues: First-in-first-out data structures for processing items in order
+
+  These collections help you:
+  - Store and retrieve data efficiently
+  - Organize related items
+  - Transform groups of items with common operations
+  - Build data processing pipelines
+  - Implement algorithms that need specific data structures
+
+  Notes on resource management:
+  - Some operations consume the input collection (marked with !)
+  - Others leave the original collection unchanged
 ]]--
 
 
@@ -146,30 +155,30 @@
     laws: {
       -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
       associativity: forall [f g h ->
-        compose(compose(f, g), h) == compose(f, compose(g, h))
+        compose(compose(f, g), h) ceq compose(f, compose(g, h))
       ],
 
       -- Identity: id ∘ f = f = f ∘ id
       identity: forall [f ->
-        compose(id(dom(f)), f) == f && compose(f, id(cod(f))) == f
+        compose(id(dom(f)), f) ceq f and compose(f, id(cod(f))) ceq f
       ],
 
       -- Functorial laws
       functor_id: forall [c ->
-        fmap.List(id)(c) == id(c)
+        fmap.List(id)(c) seq id(c)
       ],
 
       functor_compose: forall [f g c ->
-        fmap.List(compose(f, g))(c) == compose(fmap.List(f), fmap.List(g))(c)
+        fmap.List(compose(f, g))(c) seq compose(fmap.List(f), fmap.List(g))(c)
       ],
 
       -- Monoidal laws
       monoid_associativity: forall [c1 c2 c3 ->
-        combine.List(combine.List(c1, c2), c3) == combine.List(c1, combine.List(c2, c3))
+        combine.List(combine.List(c1, c2), c3) seq combine.List(c1, combine.List(c2, c3))
       ],
 
       monoid_identity: forall [c ->
-        combine.List(c, empty.List) == c && combine.List(empty.List, c) == c
+        combine.List(c, empty.List) seq c and combine.List(empty.List, c) seq c
       ]
     }
   }
@@ -177,18 +186,25 @@
   --[[
     Checks if a collection is not empty (has at least one element)
   ]]--
-  ne: Any -> Bool [coll -> coll |> Prim.rho > 0]
+  ne: Any -> Bool [coll -> coll Prim.rho 0 >]
 
   --[[
     Appends a single element to a list (consuming the list)
   ]]--
-  append: ![a] * a -o> [a] [xs x -> xs [x] |> Prim.concat]
+  append: ![a] * a -o> [a] [xs, x -> xs [x] Prim.concat]
 
   --[[
-    Map Data Structure
+    Map - Fast Key-Value Storage
 
-    Implements associative key-value mappings with operations for
-    creation, insertion, lookup, and inspection.
+    Maps let you store and retrieve values by their keys (like dictionaries or hash tables).
+    They're perfect for:
+
+    - Looking up values by name, ID, or other unique identifier
+    - Building indexes for fast retrieval
+    - Counting occurrences of items
+    - Storing object properties
+    - Creating lookup tables
+    - Implementing caches
   ]]--
   Map = {
     --[[
@@ -199,17 +215,23 @@
     --[[
       Inserts or updates a key-value pair in the map (consuming the map)
     ]]--
-    insert: !(k:-> v) * k * v -o> (k:-> v) [m k v -> m k v |> Prim.insert]
+    insert: !(k:-> v) * k * v -o> (k:-> v) [m k v ->
+      m k v Prim insert
+    ]
 
     --[[
       Looks up a value by key, returning an optional result (non-consuming)
     ]]--
-    lookup: (k:-> v) * k -> ?v [m k -> m k |> Prim.lookup]
+    lookup: (k:-> v) * k -> ?v [m k ->
+      m k Prim lookup
+    ]
 
     --[[
       Checks if a key exists in the map (non-consuming)
     ]]--
-    contains_key: (k:-> v) * k -> Bool [m k -> m k |> Prim.lookup |> Prim.is_valid]
+    contains_key: (k:-> v) * k -> Bool [m k ->
+      m k Prim lookup Prim is_valid
+    ]
 
     --[[
       Checks if a map has no elements (non-consuming)
@@ -240,45 +262,55 @@
       Returns all key-value pairs in the map (non-consuming)
     ]]--
     entries: (k:-> v) -> [(k * v)] [m ->
-      m |> Prim.keys -> ks
-      ks |> Prim.map [k -> (k, m k |> Map.lookup |> Prim.unwrap_option)]
+      m Prim.keys -> ks
+      ks [k ->
+        k m k Map.lookup Prim.unwrap_option (k, _)
+      ] Prim.map
     ]
 
     --[[
       Updates a value in the map using a function (consuming the map)
     ]]--
-    update: !(k:-> v) * k * (v -o> v) -o> (k:-> v) [m k f ->
-      m k |> Map.lookup -> v_opt
-      v_opt |> Prim.is_valid -> [
-        v_opt |> Prim.unwrap_option |> f -> new_v
-        m k |> Map.remove k new_v |> Map.insert
-      ] or_else [
+    update: !(k:-> v) * k * (v -o> v) -o> (k:-> v) [m, k, f ->
+      m k Map.lookup -> v_opt
+      {
+        v_opt Prim.unwrap_option f -> new_v
+        m k Map.remove k new_v Map.insert
+      } iff v_opt Prim.is_valid or_else {
         m
-      ]
+      }
     ]
 
     --[[
       Merges two maps (consuming both maps)
     ]]--
-    merge: !(k:-> v) * !(k:-> v) -o> (k:-> v) [m1 m2 ->
-      m2 |> Map.entries |> List.fold [acc (k, v) -> acc k v |> Map.insert] m1
+    merge: !(k:-> v) * !(k:-> v) -o> (k:-> v) [m1, m2 ->
+      m2 Map.entries [acc, (k, v) -> acc k v Map.insert] m1 List.fold
     ]
 
     --[[
       Filters map entries by a predicate (consuming the map)
     ]]--
-    filter: !(k:-> v) * (k * v -> Bool) -o> (k:-> v) [m pred ->
-      m |> Map.entries |> List.filter [entry -> entry |> pred]
-        |> List.fold [acc (k, v) -> acc k v |> Map.insert] (Map.empty)
+    filter: !(k:-> v) * (k * v -> Bool) -o> (k:-> v) [m, pred ->
+      m Map.entries [entry -> entry pred] List.filter
+        [acc, (k, v) -> acc k v Map.insert] Map.empty List.fold
     ]
   }
 
   --[[
-    List Data Structure
+    List - Ordered Collections of Items
 
-    Implements a general-purpose list collection with operations for
-    construction, transformation, and traversal. Lists are eagerly
-    evaluated unlike lazy sequences.
+    Lists store sequences of items that maintain their order.
+    They're ideal for:
+
+    - Storing items in a specific sequence
+    - Processing data in order
+    - Building and manipulating collections of related items
+    - Implementing algorithms that need ordered data
+    - Transforming sets of values with map, filter, etc.
+    - Building data processing pipelines
+
+    Unlike streams, lists are fully evaluated (not lazy).
   ]]--
   List = {
     --[[
@@ -305,14 +337,22 @@
       Returns the first element of a list if non-empty (non-consuming)
     ]]--
     head: [a] -> ?a [xs ->
-      xs[0] iff xs |> Prim.ne or_else nothing
+      {
+        xs 0 get
+      } iff xs Prim.ne or_else {
+        nothing
+      }
     ]
 
     --[[
       Returns the list without its first element if non-empty (non-consuming)
     ]]--
     tail: [a] -> ?[a] [xs ->
-      xs |> Prim.slice(1, xs |> Prim.rho) iff xs |> Prim.ne or_else nothing
+      {
+        xs 1 xs Prim.rho Prim.slice
+      } iff xs Prim.ne or_else {
+        nothing
+      }
     ]
 
     --[[
@@ -368,20 +408,28 @@
     --[[
       Sorts a list according to a comparison function (consuming the list)
     ]]--
-    sort: ![a] * (a * a -> Z) -o> [a] [xs cmp ->
+    sort: ![a] * (a * a -> Z) -o> [a] [xs, cmp ->
       -- Simple insertion sort implementation
       [] -> result
-      xs |> List.fold [sorted x ->
-        -- Find insertion point
+      xs List.fold [sorted, x ->
+        -- Find insertion point using recursive function instead of while loop
+        [i, sorted_size, x, cmp, sorted, should_go_further ->
+          {
+            i 1 + -> i
+            i sorted_size x sorted i get cmp should_go_further recursive_find_i
+          } iff should_go_further or_else i
+        ] -> recursive_find_i
+
         0 -> i
-        [i < (sorted |> List.size) and (cmp(x, sorted[i]) > 0)] [
-          i + 1 -> i
-        ] |> while
+        sorted List.size -> sorted_size
+        i sorted_size x cmp sorted [i, sorted_size, x, sorted, cmp ->
+          i sorted_size < x sorted i get cmp 0 > and
+        ] recursive_find_i -> i
 
         -- Insert at position i
-        sorted |> List.take(i)
-               |> List.concat([x])
-               |> List.concat(sorted |> List.drop(i))
+        sorted i List.take
+        [x] List.concat
+        sorted i List.drop List.concat
       ] result
     ]
 

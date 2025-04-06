@@ -84,7 +84,7 @@
   ]]--
   minikanren_to_kleisli: @MiniKanren.!KleisliCategory -> !MiniKanrenToKleisliMap [
     mk_cat ->
-    
+
     -- Create a Kleisli monad for Stream
     let stream_monad = @Kleisli.make_monad({
       _type: "Monad",
@@ -93,16 +93,16 @@
         source_category: @Cat.cat_type,  -- Category of types
         target_category: @Cat.cat_type,
         map_obj: [a -> @T.type_of({_type: "Stream", kind: {Empty: ()}})],
-        map_morph: [f -> [stream -> 
+        map_morph: [f -> [stream ->
           -- Apply f to each element in the stream (simplified)
           stream
         ]]
       },
       unit: [a -> [x -> {
-        _type: "Stream", 
+        _type: "Stream",
         kind: {Single: x}
       }]],
-      bind: [a b -> [stream f -> 
+      bind: [a b -> [stream f ->
         -- For each element in stream, apply f and concatenate results
         -- This is simplified
         match stream.kind with
@@ -111,20 +111,20 @@
           | {Lazy: thunk} -> {_type: "Stream", kind: {Lazy: () -> thunk()}}
       ]]
     }) in
-    
+
     -- Create the Kleisli category based on the Stream monad
     let kleisli_cat = @Kleisli.make_kleisli_cat(stream_monad) in
-    
+
     -- Create mappings between objects and morphisms
     let obj_map = {
       [mk_cat.base_object]: kleisli_cat.base_object
     } in
-    
+
     let morph_map = {
       [mk_cat.id_morphism]: kleisli_cat.id_morphism
       -- Other morphisms would be mapped here
     } in
-    
+
     {
       _type: "MiniKanrenToKleisliMap",
       minikanren_cat: mk_cat,
@@ -140,28 +140,28 @@
   ]]--
   kleisli_to_minikanren: @Kleisli.!KleisliCategory -> !KleisliToMiniKanrenMap [
     kl_cat ->
-    
+
     -- Check if this is a valid Kleisli category for MiniKanren
     -- It should be based on a Stream-like monad
     let is_valid = true in -- Placeholder for actual validation
-    
+
     -- Create a MiniKanren category
     let mk_cat = if is_valid then
       @MiniKanren.make_kleisli_cat()
     else
       @MiniKanren.make_kleisli_cat() -- Default, but would be marked invalid
     in
-    
+
     -- Create mappings
     let obj_map = {
       [kl_cat.base_object]: mk_cat.base_object
     } in
-    
+
     let morph_map = {
       [kl_cat.id_morphism]: mk_cat.id_morphism
       -- Other morphisms would be mapped here
     } in
-    
+
     {
       _type: "KleisliToMiniKanrenMap",
       kleisli_cat: kl_cat,
@@ -178,7 +178,7 @@
   ]]--
   minikanren_to_wire: @MiniKanren.!KleisliCategory -> !MiniKanrenToWireMap [
     mk_cat ->
-    
+
     -- Use the generic category_to_wire function from WireXf as a base
     let base_diagram = @WireXf.category_to_wire(@Cat.wrap_category({
       _type: "Category",
@@ -187,28 +187,28 @@
       id_morphisms: {[mk_cat.base_object]: mk_cat.id_morphism},
       compose: [f g -> mk_cat.compose(g, f)]  -- Note order swap for composition
     })) in
-    
+
     -- Add MiniKanren-specific styling
     let styled_diagram = @Wire.add_label(base_diagram, "MiniKanren Category", {
       position: ?Some({ x: 0.0, y: -1.0 }),
       font_size: ?Some(12.0),
       color: ?Some({ name: ?Some("blue") })
     }) in
-    
+
     -- Add a node representing the State object
     let with_state = @Wire.add_node(styled_diagram, "State", {
       position: ?Some({ x: 0.0, y: 0.0 }),
       shape: ?Some("circle"),
       color: ?Some({ name: ?Some("green") })
     }) in
-    
+
     -- Add a node representing the Stream monad
     let final_diagram = @Wire.add_node(with_state, "Stream", {
       position: ?Some({ x: 2.0, y: 0.0 }),
       shape: ?Some("rectangle"),
       color: ?Some({ name: ?Some("orange") })
     }) in
-    
+
     {
       _type: "MiniKanrenToWireMap",
       minikanren_cat: mk_cat,
@@ -222,14 +222,14 @@
   ]]--
   relation_to_goal: String * @T.Type -> !RelationToGoalMap [
     name type ->
-    
+
     -- Create a simple goal that always succeeds (placeholder)
     let goal = @MiniKanren.succeed({
-      _type: "State", 
-      substitution: {}, 
+      _type: "State",
+      substitution: {},
       var_counter: 0
     }) in
-    
+
     {
       _type: "RelationToGoalMap",
       relation_name: name,
@@ -252,7 +252,7 @@
         -- These are checked in the MiniKanren module, so we just return true here
         true
       ],
-      
+
       -- Relation laws when mapping to goals
       relation_semantics_preserved: [map ->
         -- The goal should implement the semantics of the relation
@@ -274,7 +274,7 @@
       let mk_cat = @MiniKanren.make_kleisli_cat() in
       ?Some(minikanren_to_kleisli(mk_cat))
     ],
-    
+
     --[[
       Example: Visualize a MiniKanren category
     ]]--
@@ -282,7 +282,7 @@
       let mk_cat = @MiniKanren.make_kleisli_cat() in
       ?Some(minikanren_to_wire(mk_cat).wire_diagram)
     ],
-    
+
     --[[
       Example: Create a goal for the append relation
     ]]--
@@ -291,4 +291,4 @@
       ?Some(relation_to_goal("append", @T.type_of([list_type, list_type, list_type])))
     ]
   }
-} 
+}

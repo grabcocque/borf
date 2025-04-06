@@ -1,0 +1,125 @@
+--[[
+  Text Parsing Tools - Build Powerful Parsers Simply
+
+  This module provides a complete toolkit for parsing and processing text, letting you:
+  
+  - Create parsers for any text format, from CSV to JSON to custom formats
+  - Combine simple parsers into complex ones with intuitive operators
+  - Process parsed data with transformation pipelines
+  - Generate detailed error messages for invalid input
+  - Build parsers that are both easy to understand and highly performant
+  - Define recursive grammars naturally without complex setup
+  
+  The parsers built with these tools automatically optimize themselves,
+  handle error recovery, and provide detailed information about what
+  went wrong when parsing fails.
+]]--
+
+@Parser: {
+  -- Import all submodules
+  types: @Parser.Types.E,
+  memo: @Parser.Memo.E,
+  primitives: @Parser.Primitives.E,
+  combinators: @Parser.Combinators.E,
+  derivative: @Parser.Derivative.E, 
+  grammar: @Parser.Grammar.E,
+  examples: @Parser.Examples.E,
+  
+  -- Re-export all types
+  typ: {
+    -- Core types
+    Parser Thunk LazyParser ParserResult
+    ParserError ParserState Position
+
+    -- Parser types
+    BinaryGrammar
+    Opcode
+    Instruction
+    VirtualMachine
+    Derivative
+    DerivativeAutomaton
+    DerivativeState
+
+    -- Basic parser types
+    StringParser
+    NumberParser
+    BooleanParser
+    ListParser
+    RecordParser
+    OptionalParser
+
+    -- Derivative parser types
+    DerivativeParser
+    NullableResult
+    
+    -- Packrat types
+    MemoTable
+    MemoKey
+    MemoEntry
+
+    -- Predicate-based parser types
+    PredicateParser
+    CharClassParser
+
+    -- Grammar factorization types
+    FactoredGrammar
+    GrammarNode
+  }
+
+  -- Re-export all operators
+  op: {
+    -- Parser operators
+    parse print
+    map flat_map
+    or and
+    many some
+    optional
+    
+    -- Derivative operators
+    δ derive δ/δx nullable
+  }
+
+  -- Re-export all functions
+  fn: {
+    -- Core parser functions
+    string number boolean
+    list record optional
+    whitespace
+    char
+    digit
+    letter
+    alphanum
+
+    -- Packrat functions
+    memoize memo_lookup memo_store
+    
+    -- Derivative functions
+    epsilon empty seq alt star
+    
+    -- Example functions
+    calculator_example
+    json_example
+    csv_example
+  }
+
+  -- Expose everything
+  E: typ cup op cup fn
+
+  -- Depend on modules we need
+  deps: {
+    (@Parser, @Parser.Types, true),
+    (@Parser, @Parser.Memo, true),
+    (@Parser, @Parser.Primitives, true),
+    (@Parser, @Parser.Combinators, true),
+    (@Parser, @Parser.Derivative, true),
+    (@Parser, @Parser.Grammar, true),
+    (@Parser, @Parser.Examples, true),
+    
+    -- External dependencies
+    (@Parser, @T, true),          -- Type system
+    (@Parser, @Extractor, true),  -- Extractor framework
+    (@Parser, @Error, true),      -- Error handling
+    (@Parser, @List, true),       -- List operations
+    (@Parser, @Record, true)      -- Record operations
+  }
+}

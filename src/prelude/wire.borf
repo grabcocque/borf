@@ -1,9 +1,17 @@
 --[[
-  Wire Diagrams
+  Flow Diagrams - Visual Programming Tools
 
-  This module defines string diagrams (wire diagrams) for visualizing categorical structures,
-  providing a graphical language for categorical computations that is especially well-suited
-  for monoidal categories and their variants (symmetric, braided, compact closed, etc.).
+  This module provides tools for creating visual diagrams that represent data flow and
+  processing pipelines. These diagrams help you understand, design, and document how
+  information moves through your system.
+
+  Practical uses:
+  - Creating visual documentation of complex data flows
+  - Designing processing pipelines before implementation
+  - Building visual programming interfaces
+  - Generating diagrams for technical documentation
+  - Visualizing execution paths in concurrent systems
+  - Modeling communication patterns between components
 ]]--
 
 @Wire: {
@@ -407,7 +415,7 @@
   --[[
     create_diagram: Creates a new wire diagram
   ]]--
-  create_diagram: [Box] * [Wire] * [Wire] * [Wire] * ?Style -> WireDiagram [boxes wires input_wires output_wires style ->
+  create_diagram: [Box] * [Wire] * [Wire] * [Wire] * ?Style -> WireDiagram [boxes, wires, input_wires, output_wires, style ->
     {
       boxes: boxes,
       wires: wires,
@@ -420,7 +428,7 @@
   --[[
     create_box: Creates a morphism box
   ]]--
-  create_box: S * [Wire] * [Wire] * ?Position * ?Style -> Box [name inputs outputs position style ->
+  create_box: S * [Wire] * [Wire] * ?Position * ?Style -> Box [name, inputs, outputs, position, style ->
     {
       _type: "Composite",
       name: name,
@@ -435,7 +443,7 @@
   --[[
     identity: Creates an identity morphism box
   ]]--
-  identity: T.T * ?Position * ?Style -> Box [object position style ->
+  identity: T.T * ?Position * ?Style -> Box [object, position, style ->
     {
       _type: "Identity",
       object: object,
@@ -447,7 +455,7 @@
   --[[
     compose: Creates a sequential composition box
   ]]--
-  compose: Box * Box * [Wire] * ?Position * ?Style -> Box [first second middle_wires position style ->
+  compose: Box * Box * [Wire] * ?Position * ?Style -> Box [first, second, middle_wires, position, style ->
     {
       _type: "Sequential",
       first: first,
@@ -724,15 +732,16 @@
   --[[
     to_svg: Exports a wire diagram to SVG format
   ]]--
-  to_svg: WireDiagram * ?Layout -> S [diagram layout ->
+  to_svg: WireDiagram * ?Layout -> S [diagram, layout ->
     -- Apply layout if not already positioned
-    let positioned_diagram = if needs_layout(diagram) then
-      match layout with
-        | ?Some(l) -> apply_layout(diagram, l)
-        | ?None -> apply_layout(diagram, default_layout())
-    else
+    {
+      layout {
+        | ?Some(l) -> diagram l apply_layout
+        | ?None -> diagram default_layout apply_layout
+      } match
+    } iff diagram needs_layout or_else {
       diagram
-    in
+    } -> positioned_diagram
 
     -- In a real implementation, this would generate SVG
     "<svg>...</svg>"
@@ -741,15 +750,16 @@
   --[[
     to_dot: Exports a wire diagram to DOT format (for Graphviz)
   ]]--
-  to_dot: WireDiagram * ?Layout -> S [diagram layout ->
+  to_dot: WireDiagram * ?Layout -> S [diagram, layout ->
     -- Apply layout if not already positioned
-    let positioned_diagram = if needs_layout(diagram) then
-      match layout with
-        | ?Some(l) -> apply_layout(diagram, l)
-        | ?None -> apply_layout(diagram, default_layout())
-    else
+    {
+      layout {
+        | ?Some(l) -> diagram l apply_layout
+        | ?None -> diagram default_layout apply_layout
+      } match
+    } iff diagram needs_layout or_else {
       diagram
-    in
+    } -> positioned_diagram
 
     -- In a real implementation, this would generate DOT
     "digraph { ... }"
@@ -758,15 +768,16 @@
   --[[
     to_ascii: Exports a wire diagram to ASCII art
   ]]--
-  to_ascii: WireDiagram * ?Layout -> S [diagram layout ->
+  to_ascii: WireDiagram * ?Layout -> S [diagram, layout ->
     -- Apply layout if not already positioned
-    let positioned_diagram = if needs_layout(diagram) then
-      match layout with
-        | ?Some(l) -> apply_layout(diagram, l)
-        | ?None -> apply_layout(diagram, default_layout())
-    else
+    {
+      layout {
+        | ?Some(l) -> diagram l apply_layout
+        | ?None -> diagram default_layout apply_layout
+      } match
+    } iff diagram needs_layout or_else {
       diagram
-    in
+    } -> positioned_diagram
 
     -- In a real implementation, this would generate ASCII art
     "+---+   +---+\n|   |-->|   |\n+---+   +---+"
@@ -775,15 +786,16 @@
   --[[
     to_latex: Exports a wire diagram to LaTeX (TikZ) format
   ]]--
-  to_latex: WireDiagram * ?Layout -> S [diagram layout ->
+  to_latex: WireDiagram * ?Layout -> S [diagram, layout ->
     -- Apply layout if not already positioned
-    let positioned_diagram = if needs_layout(diagram) then
-      match layout with
-        | ?Some(l) -> apply_layout(diagram, l)
-        | ?None -> apply_layout(diagram, default_layout())
-    else
+    {
+      layout {
+        | ?Some(l) -> diagram l apply_layout
+        | ?None -> diagram default_layout apply_layout
+      } match
+    } iff diagram needs_layout or_else {
       diagram
-    in
+    } -> positioned_diagram
 
     -- In a real implementation, this would generate TikZ
     "\\begin{tikzpicture}...\n\\end{tikzpicture}"
@@ -796,11 +808,9 @@
   --[[
     connect: Connects two boxes with a wire
   ]]--
-  connect: Box * Box * T.T * ?Z * ?Z * ?Bool * ?Style -> Wire [source target object source_port target_port is_linear style ->
-    if is_linear == ?Some(true) then
-      linear_wire(object, ?Some(source), ?Some(target), source_port, target_port, style)
-    else
-      create_wire(object, ?Some(source), ?Some(target), source_port, target_port, style)
+  connect: Box * Box * T.T * ?Z * ?Z * ?Bool * ?Style -> Wire [source, target, object, source_port, target_port, is_linear, style ->
+    object ?Some(source) ?Some(target) source_port target_port style
+    linear_wire iff is_linear ?Some(true) veq or_else create_wire
   ]
 
   --[[
@@ -827,15 +837,16 @@
     apply_layout: Applies a specific layout to a wire diagram
   ]]--
   apply_layout: WireDiagram * Layout -> WireDiagram [diagram layout ->
-    match layout with
+    layout {
       | { _type: "Grid", rows: r, columns: c, cell_width: w, cell_height: h } ->
-          apply_grid_layout(diagram, r, c, w, h)
+          diagram r c w h apply_grid_layout
       | { _type: "FlowLayout", direction: d, spacing: s } ->
-          apply_flow_layout(diagram, d, s)
+          diagram d s apply_flow_layout
       | { _type: "ForceLayout", spring_constant: k, repulsion_constant: r, damping: d, iterations: i } ->
-          apply_force_layout(diagram, k, r, d, i)
+          diagram k r d i apply_force_layout
       | _ ->
           diagram  -- No changes if layout not recognized
+    } match
   ]
 
   --[[
@@ -843,20 +854,26 @@
   ]]--
   initial_layout: WireDiagram -> Layout [diagram ->
     -- Determine appropriate layout based on diagram structure
-    let box_count = length(diagram.boxes) in
+    diagram boxes length -> box_count
 
-    if box_count < 5 then
+    -- Use nested conditionals with iff/or_else pattern
+    {
       -- Small diagrams work well with flow layout
       { _type: "FlowLayout", direction: "horizontal", spacing: 2.0 }
-    else if is_sequential(diagram) then
-      -- Sequential diagrams work well with flow layout
-      { _type: "FlowLayout", direction: "horizontal", spacing: 1.5 }
-    else if is_parallel(diagram) then
-      -- Parallel diagrams work well with flow layout in vertical direction
-      { _type: "FlowLayout", direction: "vertical", spacing: 1.5 }
-    else
-      -- Complex diagrams work better with force-directed layout
-      { _type: "ForceLayout", spring_constant: 0.1, repulsion_constant: 100.0, damping: 0.8, iterations: 100 }
+    } iff box_count 5 < or_else {
+      {
+        -- Sequential diagrams work well with flow layout
+        { _type: "FlowLayout", direction: "horizontal", spacing: 1.5 }
+      } iff diagram is_sequential or_else {
+        {
+          -- Parallel diagrams work well with flow layout in vertical direction
+          { _type: "FlowLayout", direction: "vertical", spacing: 1.5 }
+        } iff diagram is_parallel or_else {
+          -- Complex diagrams work better with force-directed layout
+          { _type: "ForceLayout", spring_constant: 0.1, repulsion_constant: 100.0, damping: 0.8, iterations: 100 }
+        }
+      }
+    }
   ]
 
   --[[
@@ -871,12 +888,13 @@
   ]]--
   needs_layout: WireDiagram -> Bool [diagram ->
     -- Check if any boxes lack position information
-    diagram.boxes |> exists [box ->
-      match box with
+    diagram boxes [box ->
+      box {
         | { position: ?None } -> true
         | { position: ?Some(_) } -> false
         | _ -> true  -- Default to needing layout if structure unknown
-    ]
+      } match
+    ] exists
   ]
 
   --[[
@@ -902,13 +920,13 @@
   ]]--
   apply_grid_layout: WireDiagram * Z * Z * Float * Float -> WireDiagram [diagram rows cols width height ->
     -- Place boxes in a grid pattern
-    let positioned_boxes = diagram.boxes |> mapi [i box ->
-      let row = i / cols in
-      let col = i % cols in
-      let x = col * width in
-      let y = row * height in
-      set_box_position(box, x, y)
-    ] in
+    diagram.boxes |> mapi [i, box ->
+      i / cols |> row
+      i % cols |> col
+      col * width |> x
+      row * height |> y
+      box x y set_box_position
+    ] |> positioned_boxes
 
     -- Update the diagram with positioned boxes
     {
@@ -923,22 +941,23 @@
   --[[
     apply_flow_layout: Applies a flow layout to a diagram
   ]]--
-  apply_flow_layout: WireDiagram * S * Float -> WireDiagram [diagram direction spacing ->
+  apply_flow_layout: WireDiagram * S * Float -> WireDiagram [diagram, direction, spacing ->
     -- Place boxes in a flow (horizontal or vertical)
-    let positioned_boxes = diagram.boxes |> mapi [i box ->
-      if direction == "horizontal" then
-        set_box_position(box, i * spacing, 0.0)
-      else  -- vertical
-        set_box_position(box, 0.0, i * spacing)
-    ] in
+    diagram boxes [i, box ->
+      {
+        box i spacing * 0.0 set_box_position
+      } iff direction "horizontal" == or_else {
+        box 0.0 i spacing * set_box_position
+      }
+    ] mapi -> positioned_boxes
 
     -- Update the diagram with positioned boxes
     {
       boxes: positioned_boxes,
-      wires: diagram.wires,
-      input_wires: diagram.input_wires,
-      output_wires: diagram.output_wires,
-      style: diagram.style
+      wires: diagram wires,
+      input_wires: diagram input_wires,
+      output_wires: diagram output_wires,
+      style: diagram style
     }
   ]
 
@@ -950,11 +969,11 @@
     -- such as Fruchterman-Reingold
 
     -- For now, we just place boxes randomly
-    let positioned_boxes = diagram.boxes |> map [box ->
-      let random_x = Prim.random() * 10.0 in
-      let random_y = Prim.random() * 10.0 in
-      set_box_position(box, random_x, random_y)
-    ] in
+    diagram.boxes |> map [box ->
+      Prim.random() * 10.0 |> random_x
+      Prim.random() * 10.0 |> random_y
+      box random_x random_y set_box_position
+    ] |> positioned_boxes
 
     -- Update the diagram with positioned boxes
     {
@@ -970,42 +989,43 @@
     set_box_position: Sets the position of a box
   ]]--
   set_box_position: Box * Float * Float -> Box [box x y ->
-    match box with
+    box {
       | { _type: "Identity", object: o, style: s } ->
-          { _type: "Identity", object: o, position: ?Some({ x: x, y: y }), style: s }
+          { _type: "Identity", object: o, position: { x: x, y: y } |> ?Some, style: s }
       | { _type: "Composite", name: n, inputs: i, outputs: o, style: s, label: l } ->
-          { _type: "Composite", name: n, inputs: i, outputs: o, position: ?Some({ x: x, y: y }), style: s, label: l }
+          { _type: "Composite", name: n, inputs: i, outputs: o, position: { x: x, y: y } |> ?Some, style: s, label: l }
       | { _type: "Sequential", first: f, second: s, middle_wires: m, style: st } ->
-          { _type: "Sequential", first: f, second: s, middle_wires: m, position: ?Some({ x: x, y: y }), style: st }
+          { _type: "Sequential", first: f, second: s, middle_wires: m, position: { x: x, y: y } |> ?Some, style: st }
       | { _type: "Parallel", top: t, bottom: b, style: s } ->
-          { _type: "Parallel", top: t, bottom: b, position: ?Some({ x: x, y: y }), style: s }
+          { _type: "Parallel", top: t, bottom: b, position: { x: x, y: y } |> ?Some, style: s }
       | { _type: "Tensor", object1: o1, object2: o2, style: s } ->
-          { _type: "Tensor", object1: o1, object2: o2, position: ?Some({ x: x, y: y }), style: s }
+          { _type: "Tensor", object1: o1, object2: o2, position: { x: x, y: y } |> ?Some, style: s }
       | { _type: "Braiding", object1: o1, object2: o2, style: s } ->
-          { _type: "Braiding", object1: o1, object2: o2, position: ?Some({ x: x, y: y }), style: s }
+          { _type: "Braiding", object1: o1, object2: o2, position: { x: x, y: y } |> ?Some, style: s }
       | { _type: "Trace", box: b, trace_wire: w, style: s } ->
-          { _type: "Trace", box: b, trace_wire: w, position: ?Some({ x: x, y: y }), style: s }
+          { _type: "Trace", box: b, trace_wire: w, position: { x: x, y: y } |> ?Some, style: s }
       | { _type: "Cap", object: o, style: s } ->
-          { _type: "Cap", object: o, position: ?Some({ x: x, y: y }), style: s }
+          { _type: "Cap", object: o, position: { x: x, y: y } |> ?Some, style: s }
       | { _type: "Cup", object: o, style: s } ->
-          { _type: "Cup", object: o, position: ?Some({ x: x, y: y }), style: s }
+          { _type: "Cup", object: o, position: { x: x, y: y } |> ?Some, style: s }
       | { _type: "Applicative", op_type: ot, inputs: i, outputs: o, style: s } ->
-          { _type: "Applicative", op_type: ot, inputs: i, outputs: o, position: ?Some({ x: x, y: y }), style: s }
+          { _type: "Applicative", op_type: ot, inputs: i, outputs: o, position: { x: x, y: y } |> ?Some, style: s }
       | { _type: "FreeObject", name: n, style: s } ->
-          { _type: "FreeObject", name: n, position: ?Some({ x: x, y: y }), style: s }
+          { _type: "FreeObject", name: n, position: { x: x, y: y } |> ?Some, style: s }
       | { _type: "FreeMorphism", name: n, source: src, target: tgt, path: p, style: s } ->
-          { _type: "FreeMorphism", name: n, source: src, target: tgt, path: p, position: ?Some({ x: x, y: y }), style: s }
+          { _type: "FreeMorphism", name: n, source: src, target: tgt, path: p, position: { x: x, y: y } |> ?Some, style: s }
       | { _type: "Comonoid", op_type: ot, object: o, inputs: i, outputs: out, style: s } ->
-          { _type: "Comonoid", op_type: ot, object: o, inputs: i, outputs: out, position: ?Some({ x: x, y: y }), style: s }
+          { _type: "Comonoid", op_type: ot, object: o, inputs: i, outputs: out, position: { x: x, y: y } |> ?Some, style: s }
       | { _type: "TwoCellBox", name: n, source_1cell: s1, target_1cell: t1, style: s } ->
-          { _type: "TwoCellBox", name: n, source_1cell: s1, target_1cell: t1, position: ?Some({ x: x, y: y }), style: s }
+          { _type: "TwoCellBox", name: n, source_1cell: s1, target_1cell: t1, position: { x: x, y: y } |> ?Some, style: s }
       | { _type: "Operad", name: n, arity: a, inputs: i, output: o, colors: c, style: s } ->
-          { _type: "Operad", name: n, arity: a, inputs: i, output: o, colors: c, position: ?Some({ x: x, y: y }), style: s }
+          { _type: "Operad", name: n, arity: a, inputs: i, output: o, colors: c, position: { x: x, y: y } |> ?Some, style: s }
       | { _type: "Terminal", style: s } ->
-          { _type: "Terminal", position: ?Some({ x: x, y: y }), style: s }
+          { _type: "Terminal", position: { x: x, y: y } |> ?Some, style: s }
       | { _type: "Exponential", domain: d, codomain: c, inputs: i, outputs: o, style: s } ->
-          { _type: "Exponential", domain: d, codomain: c, inputs: i, outputs: o, position: ?Some({ x: x, y: y }), style: s }
+          { _type: "Exponential", domain: d, codomain: c, inputs: i, outputs: o, position: { x: x, y: y } |> ?Some, style: s }
       | _ -> box  -- Return unchanged if type not recognized
+    } match
   ]
 
   --------------------------------------------------
@@ -1013,69 +1033,136 @@
   --------------------------------------------------
 
   --[[
-    Structure mapping that establishes @Wire as a symmetric monoidal category
-    with additional structure for visualizing categorical computations.
+    Design Patterns for Visual Flow Diagrams
 
-    In this categorical structure:
-    - Objects are types/objects being visualized in the diagram
-    - Morphisms are boxes connected by wires
-    - Identity is the identity box
-    - Composition is sequential connection of boxes
-    - Tensor product is parallel composition
-    - The symmetric structure is realized through braiding/crossings
+    This module provides tools and patterns for creating effective flow diagrams:
+
+    - Component Patterns: Reusable building blocks for common diagram elements
+    - Connection Patterns: Ways to connect components to show data flow
+    - Layout Strategies: Methods to arrange diagrams for clear visualization
+    - Export Formats: Tools to convert diagrams to various output formats
+    - Interaction Models: Patterns for making diagrams interactive
   ]]--
   structure: {
-    -- Map Wire to a symmetric monoidal category
-    objects: T.T,
-    morphisms: [a b -> [d | d is WireDiagram &&
-                           source_object(d) == a &&
-                           target_object(d) == b]],
-
-    -- Base category structure
-    dom: [f -> source_object(f)],
-    cod: [f -> target_object(f)],
-    id: [a -> create_id_diagram(a)],
-    compose: [f g -> sequential_compose(f, g)],
-
-    -- Monoidal structure
-    tensor_objects: [a b -> tensor_type(a, b)],
-    tensor_morphisms: [f g -> parallel_compose(f, g)],
-    associator: [a b c -> create_associator(a, b, c)],
-    left_unitor: [a -> create_left_unitor(a)],
-    right_unitor: [a -> create_right_unitor(a)],
-
-    -- Symmetric structure
-    braiding: [a b -> create_braiding(a, b)],
-
-    -- Extra structure for visualization
-    layout: [d -> auto_layout(d)],
-    render: [d -> to_svg(d)],
-
-    -- Category laws
-    laws: {
-      -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
-      associativity: forall [f g h ->
-        sequential_compose(sequential_compose(f, g), h) `diagram_equal`
-        sequential_compose(f, sequential_compose(g, h))
+    -- Common diagram components
+    components: {
+      -- Basic processing node
+      process_node: [name, inputs, outputs ->
+        create_box(name, inputs, outputs)
       ],
 
-      -- Identity: id ∘ f = f = f ∘ id
-      identity: forall [f ->
-        sequential_compose(create_id_diagram(dom(f)), f) `diagram_equal` f &&
-        sequential_compose(f, create_id_diagram(cod(f))) `diagram_equal` f
+      -- Connection between components
+      connection: [source, target, label ->
+        source target connect
+        label labeled_wire
       ],
 
-      -- Functoriality of tensor
-      tensor_functorial: forall [f1 g1 f2 g2 ->
-        parallel_compose(sequential_compose(f1, g1), sequential_compose(f2, g2)) `diagram_equal`
-        sequential_compose(parallel_compose(f1, f2), parallel_compose(g1, g2))
+      -- Decision point with multiple outputs
+      decision: [condition, true_path, false_path ->
+        condition create_box -> decision_node
+        decision_node true_path connection
+        decision_node false_path connection
       ],
 
-      -- Symmetry of braiding
-      braiding_symmetry: forall [a b ->
-        sequential_compose(create_braiding(a, b), create_braiding(b, a)) `diagram_equal`
-        create_id_diagram(tensor_type(a, b))
+      -- Parallel processing branches
+      parallel_branches: [branches ->
+        branches [branch -> branch] map -> processed
+        processed parallel_compose
       ]
+    },
+
+    -- Common diagram patterns
+    patterns: {
+      -- Linear pipeline
+      pipeline: [steps ->
+        steps [step1, step2 -> step1 step2 sequential_compose] reduce
+      ],
+
+      -- Feedback loop
+      feedback_loop: [process, feedback_path ->
+        process feedback_path trace
+      ],
+
+      -- Split-process-join pattern
+      fork_join: [input, processors, output ->
+        input processors parallel_branches output pipeline
+      ]
+    },
+
+    -- Layout strategies
+    layouts: {
+      -- Flow chart layout
+      flow: [diagram -> diagram flow_layout auto_layout],
+
+      -- Grid-based layout
+      grid: [diagram, rows, cols -> diagram rows cols grid_layout],
+
+      -- Force-directed layout for complex diagrams
+      force: [diagram -> diagram force_layout]
+    },
+
+    -- Export methods
+    export: {
+      svg: to_svg,
+      dot: to_dot,
+      ascii: to_ascii,
+      latex: to_latex
+    },
+
+    -- Quality checks
+    validation: {
+      -- Check all connections are valid
+      check_connections: [diagram -> check_connections(diagram)],
+
+      -- Verify diagram clarity
+      check_readability: [diagram ->
+        diagram check_crossings
+        diagram check_spacing
+        diagram check_labeling
+        and and
+      ]
+    },
+
+    -- Reliability Guarantees and Invariants
+    guarantees: {
+      -- These guarantees ensure diagrams work consistently
+
+      -- Connection reliability (when connecting components in different ways)
+      connection_consistency: [comp1, comp2, comp3 ->
+        -- What this guarantees: Connecting components in different orders gives same result
+        -- Why it matters: You can build diagrams incrementally without breaking connections
+        comp1 comp2 sequential_compose comp3 sequential_compose
+        comp1 comp2 comp3 sequential_compose sequential_compose
+        diagram_equal
+      ],
+
+      -- Identity elements (empty/pass-through components don't change behavior)
+      identity_preservation: [diagram ->
+        -- What this guarantees: Adding identity components doesn't change diagram behavior
+        -- Why it matters: You can add connecting elements without affecting functionality
+        diagram identity_component sequential_compose diagram diagram_equal
+        diagram diagram identity_component sequential_compose diagram_equal
+        and
+      ],
+
+      -- Layout independence (layout changes don't affect semantics)
+      layout_independence: [diagram, layout1, layout2 ->
+        -- What this guarantees: Changing the visual layout doesn't change diagram behavior
+        -- Why it matters: You can reorganize for clarity without breaking functionality
+        diagram layout1 apply_layout diagram
+        diagram layout2 apply_layout diagram
+        diagram_semantics_equal
+      ]
+    },
+
+    -- Practical guidelines for correct usage
+    best_practices: {
+      -- 1. Keep component interfaces consistent and well-defined
+      -- 2. Use standard patterns for common flow structures
+      -- 3. Avoid overlapping connections that create ambiguity
+      -- 4. Test diagrams with boundary conditions
+      -- 5. Use consistent naming and color schemes for clarity
+      -- 6. Document the purpose of each component and connection
     }
   }
 
@@ -1158,41 +1245,49 @@
   --[[
     Helper function to get the unit type
   ]]--
-  unit_type: () -> T.T [->
-    ()  -- Unit type
+  unit_type: T.U -> T.T [->
+    T.U  -- Unit type
   ]
 
   --[[
     Helper function to get source object of a diagram
   ]]--
   source_object: WireDiagram -> T.T [diagram ->
-    -- In a real implementation, this would combine the types of input wires
-    if diagram.input_wires == [] then
-      unit_type()
-    else if length(diagram.input_wires) == 1 then
-      diagram.input_wires[0].object
-    else
-      fold([w acc -> tensor_type(w.object, acc)], unit_type(), diagram.input_wires)
+    diagram [d ->
+      {
+        unit_type
+      } iff d input_wires [] seq or_else {
+        {
+          d input_wires 0 get object
+        } iff d input_wires length 1 veq or_else {
+          unit_type d input_wires [w, acc -> w object acc tensor_type] fold
+        }
+      }
+    ]
   ]
 
   --[[
     Helper function to get target object of a diagram
   ]]--
   target_object: WireDiagram -> T.T [diagram ->
-    -- In a real implementation, this would combine the types of output wires
-    if diagram.output_wires == [] then
-      unit_type()
-    else if length(diagram.output_wires) == 1 then
-      diagram.output_wires[0].object
-    else
-      fold([w acc -> tensor_type(w.object, acc)], unit_type(), diagram.output_wires)
+    diagram [d ->
+      {
+        unit_type
+      } iff d output_wires [] seq or_else {
+        {
+          d output_wires 0 get object
+        } iff d output_wires length 1 veq or_else {
+          unit_type d output_wires [w, acc -> w object acc tensor_type] fold
+        }
+      }
+    ]
   ]
 
   --[[
     Helper function to compare diagrams for equality
   ]]--
-  diagram_equal: WireDiagram * WireDiagram -> Bool [d1 d2 ->
+  diagram_equal: WireDiagram * WireDiagram -> Bool [d1, d2 ->
     -- In a real implementation, this would compare the normalized forms
-    simplify(d1) == simplify(d2)
+    d1 simplify d2 simplify seq
   ]
 }

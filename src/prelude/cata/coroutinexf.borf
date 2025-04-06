@@ -1,6 +1,6 @@
 --[[
   Coroutine Transformations
-  
+
   This module defines transformations between coroutine categories
   and other categorical structures, enabling the representation of
   suspendable computations in different mathematical frameworks.
@@ -12,7 +12,7 @@
     CoroutineFunctor
     CoroutineNatTransformation
     CoroutineAdjunction
-    
+
     -- Special functors
     LinearCoroutineFunctor
     GeneratorCoroutineFunctor
@@ -22,7 +22,7 @@
   op: {
     -- Functor composition
     ∘
-    
+
     -- Coroutine operators
     >> || **
   }
@@ -32,36 +32,36 @@
     coroutine_functor
     coroutine_nat_transformation
     coroutine_adjunction
-    
+
     -- Functor constructors
     linear_coroutine_functor
     generator_coroutine_functor
     parallel_coroutine_functor
-    
+
     -- Natural transformation constructors
     coroutine_to_linear_nt
     linear_to_coroutine_nt
     coroutine_to_generator_nt
     generator_to_coroutine_nt
-    
+
     -- Adjunction constructors
     coroutine_linear_adjunction
-    
+
     -- Functor operations
     apply_functor
     compose_functors
-    
+
     -- Natural transformation operations
     apply_nat_transformation
     vertical_composition
     horizontal_composition
-    
+
     -- Coroutine transformations
     coroutine_to_linear
     linear_to_coroutine
     coroutine_to_generator
     generator_to_coroutine
-    
+
     -- Product transformations
     coroutine_product
     coroutine_zip
@@ -85,7 +85,7 @@
 
   --[[
     CoroutineFunctor represents a functor between coroutine categories.
-    
+
     This structure captures transformations that preserve the coroutine
     structure while changing the underlying representation.
   ]]--
@@ -127,8 +127,8 @@
   --[[
     coroutine_functor creates a functor between coroutine categories
   ]]--
-  coroutine_functor: S * @Cat.Category * @Cat.Category * (a -> b) * 
-                (@Coroutine.!Coroutine -> @Coroutine.!Coroutine) -> 
+  coroutine_functor: S * @Cat.Category * @Cat.Category * (a -> b) *
+                (@Coroutine.!Coroutine -> @Coroutine.!Coroutine) ->
                 CoroutineFunctor [
     name source target obj_map coroutine_map ->
     {
@@ -144,8 +144,8 @@
   --[[
     coroutine_nat_transformation creates a natural transformation between coroutine functors
   ]]--
-  coroutine_nat_transformation: S * CoroutineFunctor * CoroutineFunctor * 
-                            (a -> @Coroutine.!Coroutine) -> 
+  coroutine_nat_transformation: S * CoroutineFunctor * CoroutineFunctor *
+                            (a -> @Coroutine.!Coroutine) ->
                             CoroutineNatTransformation [
     name source_functor target_functor components ->
     {
@@ -159,8 +159,8 @@
   --[[
     coroutine_adjunction creates an adjunction between coroutine categories
   ]]--
-  coroutine_adjunction: S * CoroutineFunctor * CoroutineFunctor * 
-                     CoroutineNatTransformation * CoroutineNatTransformation -> 
+  coroutine_adjunction: S * CoroutineFunctor * CoroutineFunctor *
+                     CoroutineNatTransformation * CoroutineNatTransformation ->
                      CoroutineAdjunction [
     name left right unit counit ->
     {
@@ -186,7 +186,7 @@
       @Linear.structure,
       [a -> a],
       [coro -> @Coroutine.transform(
-        coro, 
+        coro,
         [value -o> value]  -- Identity transformation via linear function
       )]
     )
@@ -201,28 +201,28 @@
       @Coroutine.structure,
       @Generator.structure,
       [a -> a],
-      [coro -> 
+      [coro ->
         -- Convert coroutine to generator by running it step by step
         let gen_state = { coroutine: coro, done: false } in
         @Generator.generator(
-          [state -> 
+          [state ->
             if state.done {
               { _type: "completed", value: null, next_state: null }
             } else {
               let (susp, next_coro) = @Coroutine.run(state.coroutine) in
-              
+
               match susp with
                 | @Coroutine.!Suspension.Yield { value } ->
-                    { 
-                      _type: "yielded", 
-                      value: value, 
-                      next_state: { coroutine: next_coro, done: false } 
+                    {
+                      _type: "yielded",
+                      value: value,
+                      next_state: { coroutine: next_coro, done: false }
                     }
                 | @Coroutine.!Suspension.Completed { value } ->
-                    { 
-                      _type: "yielded", 
-                      value: value, 
-                      next_state: { coroutine: next_coro, done: true } 
+                    {
+                      _type: "yielded",
+                      value: value,
+                      next_state: { coroutine: next_coro, done: true }
                     }
             }
           ],
@@ -241,12 +241,12 @@
       @Coroutine.structure,
       @Coroutine.structure,
       [a -> a],
-      [coro -> 
+      [coro ->
         -- Create a parallel version of the coroutine
         @Coroutine.coroutine(
           [state ->
             let (susp, next_coro) = @Coroutine.run(state.coroutine) in
-            
+
             match susp with
               | @Coroutine.!Suspension.Yield { value, next } ->
                   @Coroutine.yield(
@@ -255,7 +255,7 @@
                       @Coroutine.coroutine(
                         [inner_state ->
                           let (inner_susp, inner_next) = @Coroutine.run(inner_state.coroutine) in
-                          
+
                           match inner_susp with
                             | @Coroutine.!Suspension.Yield { value, next } ->
                                 @Coroutine.yield(
@@ -337,7 +337,7 @@
   --[[
     apply_functor applies a coroutine functor to a coroutine
   ]]--
-  apply_functor: CoroutineFunctor * @Coroutine.!Coroutine -> 
+  apply_functor: CoroutineFunctor * @Coroutine.!Coroutine ->
                @Coroutine.!Coroutine [
     functor coroutine ->
     functor.map_coroutine(coroutine)
@@ -375,13 +375,13 @@
   --[[
     vertical_composition composes two natural transformations vertically
   ]]--
-  vertical_composition: CoroutineNatTransformation * CoroutineNatTransformation -> 
+  vertical_composition: CoroutineNatTransformation * CoroutineNatTransformation ->
                       CoroutineNatTransformation [
     alpha beta ->
     {
       source_functor: beta.source_functor,
       target_functor: alpha.target_functor,
-      components: [a -> 
+      components: [a ->
         let beta_component = beta.components(a) in
         let alpha_component = alpha.components(a) in
         @Coroutine.sequence(beta_component, alpha_component)
@@ -393,13 +393,13 @@
   --[[
     horizontal_composition composes two natural transformations horizontally
   ]]--
-  horizontal_composition: CoroutineNatTransformation * CoroutineNatTransformation -> 
+  horizontal_composition: CoroutineNatTransformation * CoroutineNatTransformation ->
                         CoroutineNatTransformation [
     alpha beta ->
     {
       source_functor: compose_functors(alpha.source_functor, beta.source_functor),
       target_functor: compose_functors(alpha.target_functor, beta.target_functor),
-      components: [a -> 
+      components: [a ->
         let beta_component = beta.components(a) in
         let mapped_beta = apply_functor(alpha.target_functor, beta_component) in
         let alpha_component = alpha.components(beta.source_functor.map_obj(a)) in
@@ -440,24 +440,24 @@
   coroutine_to_generator: @Coroutine.!Coroutine -> @Generator.Generator [coro ->
     let gen_state = { coroutine: coro, done: false } in
     @Generator.generator(
-      [state -> 
+      [state ->
         if state.done {
           { _type: "completed", value: null, next_state: null }
         } else {
           let (susp, next_coro) = @Coroutine.run(state.coroutine) in
-          
+
           match susp with
             | @Coroutine.!Suspension.Yield { value } ->
-                { 
-                  _type: "yielded", 
-                  value: value, 
-                  next_state: { coroutine: next_coro, done: false } 
+                {
+                  _type: "yielded",
+                  value: value,
+                  next_state: { coroutine: next_coro, done: false }
                 }
             | @Coroutine.!Suspension.Completed { value } ->
-                { 
-                  _type: "yielded", 
-                  value: value, 
-                  next_state: { coroutine: next_coro, done: true } 
+                {
+                  _type: "yielded",
+                  value: value,
+                  next_state: { coroutine: next_coro, done: true }
                 }
         }
       ],
@@ -479,7 +479,7 @@
   --[[
     coroutine_product creates a product of two coroutines
   ]]--
-  coroutine_product: @Coroutine.!Coroutine * @Coroutine.!Coroutine -> 
+  coroutine_product: @Coroutine.!Coroutine * @Coroutine.!Coroutine ->
                   @Coroutine.!Coroutine [coro1 coro2 ->
     @Coroutine.zip(coro1, coro2)
   ]
@@ -487,7 +487,7 @@
   --[[
     coroutine_zip combines two coroutines into one that yields pairs of values
   ]]--
-  coroutine_zip: @Coroutine.!Coroutine * @Coroutine.!Coroutine -> 
+  coroutine_zip: @Coroutine.!Coroutine * @Coroutine.!Coroutine ->
                @Coroutine.!Coroutine [coro1 coro2 ->
     @Coroutine.zip(coro1, coro2)
   ]
@@ -514,15 +514,15 @@
   --------------------------------------------------
 
   --[[
-    Structure mapping that establishes @CoroutineXf as a category of 
+    Structure mapping that establishes @CoroutineXf as a category of
     transformations between coroutine categories.
-    
+
     In this categorical structure:
     - Objects are coroutine functors
     - Morphisms are natural transformations between coroutine functors
     - Identity is the identity natural transformation
     - Composition is vertical composition of natural transformations
-    
+
     This structure enables rigorous transformation of coroutine operations
     between different categorical representations.
   ]]--
@@ -530,7 +530,7 @@
     -- Map CoroutineXf to a category
     objects: CoroutineFunctor,
     morphisms: CoroutineNatTransformation,
-    
+
     -- Base category structure
     dom: [nt -> nt.source_functor],
     cod: [nt -> nt.target_functor],
@@ -541,34 +541,34 @@
       [a -> @Coroutine.from_function([x -o> x])]
     )],
     compose: [alpha beta -> vertical_composition(alpha, beta)],
-    
+
     -- Functor constructors
     linear_coroutine_functor: linear_coroutine_functor,
     generator_coroutine_functor: generator_coroutine_functor,
     parallel_coroutine_functor: parallel_coroutine_functor,
-    
+
     -- Natural transformation constructors
     coroutine_to_linear_nt: coroutine_to_linear_nt,
     linear_to_coroutine_nt: linear_to_coroutine_nt,
     coroutine_to_generator_nt: coroutine_to_generator_nt,
     generator_to_coroutine_nt: generator_to_coroutine_nt,
-    
+
     -- Functor operations
     apply_functor: apply_functor,
     compose_functors: compose_functors,
-    
+
     -- Laws of functorial transformations
     law: {
-      functor_identity: [f coro -> 
-        apply_functor(f, @Coroutine.from_function([x -o> x])) == 
+      functor_identity: [f coro ->
+        apply_functor(f, @Coroutine.from_function([x -o> x])) ==
         @Coroutine.from_function([x -o> x])
       ],
-      
+
       functor_composition: [f coro1 coro2 ->
         apply_functor(f, @Coroutine.sequence(coro1, coro2)) ==
         @Coroutine.sequence(apply_functor(f, coro1), apply_functor(f, coro2))
       ],
-      
+
       naturality: [nt f g a ->
         let left_path = @Coroutine.sequence(
           nt.components(a),
@@ -580,13 +580,13 @@
         ) in
         left_path == right_path
       ],
-      
+
       adjunction_unit_counit: [adj a b ->
         let F = adj.left_functor in
         let G = adj.right_functor in
         let η = adj.unit in
         let ε = adj.counit in
-        
+
         @Coroutine.sequence(
           η.components(a),
           apply_functor(G, ε.components(a))
@@ -612,7 +612,7 @@
       let linear = coroutine_to_linear(coro) in
       linear_to_coroutine(linear)
     ],
-    
+
     --[[
       Example 2: Transforming a coroutine to a generator and back
     ]]--
@@ -620,7 +620,7 @@
       let generator = coroutine_to_generator(coro) in
       generator_to_coroutine(generator)
     ],
-    
+
     --[[
       Example 3: Using a functor to transform a coroutine
     ]]--
@@ -628,13 +628,13 @@
       let functor = parallel_coroutine_functor("Parallel") in
       apply_functor(functor, coro)
     ],
-    
+
     --[[
       Example 4: Creating parallel coroutines
     ]]--
-    parallel_coroutines: @Coroutine.!Coroutine * @Coroutine.!Coroutine -> 
+    parallel_coroutines: @Coroutine.!Coroutine * @Coroutine.!Coroutine ->
                        @Coroutine.!Coroutine [coro1 coro2 ->
       coroutine_zip(coro1, coro2)
     ]
   }
-} 
+}

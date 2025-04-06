@@ -1,14 +1,14 @@
 --[[
   Cartesian Closed Categories (CCC)
-  
+
   This module defines cartesian closed categories, which are categories with
   products (cartesian structure) and exponentials (function objects).
-  
+
   A cartesian closed category provides a foundation for:
   - Function types
-  - Lambda calculus 
+  - Lambda calculus
   - Functional programming
-  
+
   This implementation uses linear types instead of monadic structures.
 ]]--
 
@@ -18,14 +18,14 @@
     !CartesianClosedCategory
     !Product
     !Exponential
-    
+
     -- Morphism types
     !ProductMorphism
     !ExponentialMorphism
     !EvaluationMorphism
     !CurryingMorphism
     !UncurryingMorphism
-    
+
     -- Transformation types
     !CCCFunctor
     !CCCNaturalTransformation
@@ -45,23 +45,23 @@
     cartesian_closed_category
     product
     exponential
-    
+
     -- Product operations
     terminal
     proj1
     proj2
     pair
-    
+
     -- Exponential operations
     evaluation
     curry
     uncurry
-    
+
     -- Derived operations
     compose
     id
     apply
-    
+
     -- Standard instances
     standard_ccc
     type_ccc
@@ -84,7 +84,7 @@
 
   --[[
     !CartesianClosedCategory represents a cartesian closed category.
-    
+
     A CCC has products, a terminal object, and exponentials.
   ]]--
   !CartesianClosedCategory: {
@@ -126,14 +126,14 @@
       target: a,                        -- Target (left component)
       category: !CartesianClosedCategory -- The CCC this morphism belongs to
     },
-    
+
     -- Projection morphisms
     Proj2: {
       source: (a × b),                  -- Source product
       target: b,                        -- Target (right component)
       category: !CartesianClosedCategory -- The CCC this morphism belongs to
     },
-    
+
     -- Pairing morphism ⟨f,g⟩
     Pair: {
       left_morphism: (c -o> a),         -- First morphism
@@ -230,7 +230,7 @@
   --[[
     cartesian_closed_category creates a new CCC from its components
   ]]--
-  cartesian_closed_category: S * @Cat.Category * (a * b -> (a × b)) * 
+  cartesian_closed_category: S * @Cat.Category * (a * b -> (a × b)) *
                           Any * (a * b -> (b ⇒ a)) -> !CartesianClosedCategory [
     name base product terminal exponential ->
     {
@@ -334,7 +334,7 @@
     category domain codomain ->
     let exp = category.exponential(domain, codomain) in
     let prod = category.product(exp, domain) in
-    
+
     {
       _type: "EvaluationMorphism",
       domain: domain,
@@ -470,7 +470,7 @@
   --[[
     Standard cartesian closed category
   ]]--
-  standard_ccc: !CartesianClosedCategory = 
+  standard_ccc: !CartesianClosedCategory =
     cartesian_closed_category(
       "StandardCCC",
       @Cat.structure,
@@ -482,7 +482,7 @@
   --[[
     Type-based cartesian closed category
   ]]--
-  type_ccc: !CartesianClosedCategory = 
+  type_ccc: !CartesianClosedCategory =
     cartesian_closed_category(
       "TypeCCC",
       @T.structure,
@@ -497,13 +497,13 @@
 
   --[[
     Structure mapping that establishes @CCC as a categorical structure.
-    
+
     In this categorical structure:
     - Objects are types
     - Morphisms are linear functions between types
     - Products provide pairing of objects
     - Exponentials provide function objects
-    
+
     This forms a rigorous foundation for functional programming with
     proper resource tracking using linear types.
   ]]--
@@ -511,23 +511,23 @@
     -- Base category
     objects: a,
     morphisms: (a -o> b),
-    
+
     -- Core category operations
     dom: [f -> typeof(a) given f: (a -o> b)],
     cod: [f -> typeof(b) given f: (a -o> b)],
     id: [a -> [x -o> x]],
     compose: [f g -> [a -o> g(f(a))]],
-    
+
     -- Cartesian structure
     cartesian: {
       terminal: (),
       product: [a b -> a × b],
-      
+
       -- Product operations
       proj1: [a b -> proj1(standard_ccc, a, b)],
       proj2: [a b -> proj2(standard_ccc, a, b)],
       pair: [f g -> pair(standard_ccc, f, g)],
-      
+
       -- Universal property of products
       universal_product: [h a b f g ->
         -- For any morphism h: C → A×B, we have h = ⟨π₁∘h, π₂∘h⟩
@@ -537,7 +537,7 @@
           compose(standard_ccc, h, proj2(standard_ccc, a, b))
         )
       ],
-      
+
       -- Universal property of terminal object
       universal_terminal: [a f g ->
         -- For any object A, there is a unique morphism A → 1
@@ -545,16 +545,16 @@
         f == g where f, g: (a -o> ())
       ]
     },
-    
+
     -- Closed structure
     closed: {
       exponential: [a b -> a ⇒ b],
-      
+
       -- Exponential operations
       evaluation: [a b -> evaluation(standard_ccc, a, b)],
       curry: [f -> curry(standard_ccc, f)],
       uncurry: [g -> uncurry(standard_ccc, g)],
-      
+
       -- Adjunction between product and exponential
       curry_uncurry: [f ->
         -- curry and uncurry are inverse operations
@@ -562,7 +562,7 @@
           curry(standard_ccc, f).curry_fn(f)
         ) == f
       ],
-      
+
       uncurry_curry: [g ->
         -- curry and uncurry are inverse operations
         curry(standard_ccc, uncurry(standard_ccc, g)).curry_fn(
@@ -570,40 +570,40 @@
         ) == g
       ]
     },
-    
+
     -- Laws
     law: {
       -- Core category laws
-      identity: [f -> 
-        compose(standard_ccc, id(standard_ccc, dom(f)), f) == f && 
+      identity: [f ->
+        compose(standard_ccc, id(standard_ccc, dom(f)), f) == f &&
         compose(standard_ccc, f, id(standard_ccc, cod(f))) == f
       ],
-      
-      associativity: [f g h -> 
-        compose(standard_ccc, compose(standard_ccc, f, g), h) == 
+
+      associativity: [f g h ->
+        compose(standard_ccc, compose(standard_ccc, f, g), h) ==
         compose(standard_ccc, f, compose(standard_ccc, g, h))
       ],
-      
+
       -- Cartesian laws
       product_functor: [f g h i ->
         -- Product respects composition
-        pair(standard_ccc, 
+        pair(standard_ccc,
           compose(standard_ccc, f, h),
           compose(standard_ccc, g, i)
-        ) == 
+        ) ==
         compose(standard_ccc,
           pair(standard_ccc, f, g),
           pair(standard_ccc, h, i)
         )
       ],
-      
+
       -- Closed laws
       exponential_functor: [f g ->
         -- Exponential is contravariant in first argument, covariant in second
         -- Too complex to fully represent here
         true
       ],
-      
+
       -- Coherence laws between cartesian and closed structures
       curry_composition: [f g h ->
         -- curry respects composition
@@ -624,42 +624,42 @@
     product_example: S * Z -> (S × Z) [s i ->
       s × i
     ],
-    
+
     --[[
       Example 2: Function type (exponential)
     ]]--
     exponential_example: Z * S -> (Z ⇒ S) [i s ->
       i ⇒ s
     ],
-    
+
     --[[
       Example 3: Projection from product
     ]]--
     projection_example: (S × Z) -> S [(s, i) ->
       proj1(standard_ccc, S, Z)((s, i))
     ],
-    
+
     --[[
       Example 4: Currying a function
     ]]--
     curry_example: ((S × Z) -o> B) -> (S -o> (Z ⇒ B)) [f ->
       curry(standard_ccc, f).curry_fn(f)
     ],
-    
+
     --[[
       Example 5: Evaluation of a function
     ]]--
     evaluation_example: ((Z ⇒ S) × Z) -> S [(f, i) ->
       evaluation(standard_ccc, Z, S).eval((f, i))
     ],
-    
+
     --[[
       Example 6: Pairing of morphisms
     ]]--
     pair_example: (T -o> S) * (T -o> Z) -> (T -o> (S × Z)) [f g ->
       pair(standard_ccc, f, g)
     ],
-    
+
     --[[
       Example 7: Composition with currying
     ]]--
@@ -668,4 +668,4 @@
       curry(standard_ccc, composed).curry_fn(composed)
     ]
   }
-} 
+}

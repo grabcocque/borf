@@ -358,177 +358,171 @@
     evaluate: Evaluates a lambda expression to normal form
   ]]--
   evaluate: Expr -> Expr [expr ->
-    beta_normalize(expr)
+    expr beta_normalize
   ]
 
   --[[
     beta_normalize: Applies beta reduction until reaching normal form
   ]]--
   beta_normalize: Expr -> Expr [expr ->
-    let result = beta_reduce(expr) in
-    if result == expr then
-      expr
-    else
-      beta_normalize(result)
+    expr beta_reduce |> result
+    expr iff result expr == or_else result beta_normalize
   ]
 
   --[[
     beta_reduce: Performs one step of beta reduction
   ]]--
   beta_reduce: Expr -> Expr [expr ->
-    match expr with
+    expr {
       -- Beta reduction: (\x.e) v -> e[v/x]
       | { _type: "App", fn: { _type: "Abs", param: x, body: e }, arg: v } ->
-          substitute(e, x, v)
+          e x v substitute
 
       -- Linear beta reduction: (!x.e) v -o> e[v/x] (consumes v)
       | { _type: "LinearApp", fn: { _type: "LinearAbs", param: x, body: e }, arg: v } ->
           -- Verify v is used exactly once in e
-          if uses_exactly_once(e, x) then
-            substitute(e, x, v)
-          else
-            error("Linear resource violation: parameter not used exactly once")
+          e x v substitute iff e x uses_exactly_once or_else
+            "Linear resource violation: parameter not used exactly once" error
 
       -- Recurse into subexpressions
       | { _type: "App", fn: f, arg: a } ->
-          let f' = beta_reduce(f) in
-          let a' = beta_reduce(a) in
-          if f' != f || a' != a then
-            { _type: "App", fn: f', arg: a' }
-          else
-            expr
+          f beta_reduce |> f'
+          a beta_reduce |> a'
+
+          { _type: "App", fn: f', arg: a' } iff f' f != a' a != or or_else expr
 
       -- Handle conditionals
       | { _type: "Cond", cond: c, then_branch: t, else_branch: e } ->
-          let c' = beta_reduce(c) in
-          if is_true_value(c') then
-            t
-          else if is_false_value(c') then
-            e
-          else
-            { _type: "Cond", cond: c', then_branch: t, else_branch: e }
+          c beta_reduce |> c'
+
+          t iff c' is_true_value or_else
+          e iff c' is_false_value or_else
+          { _type: "Cond", cond: c', then_branch: t, else_branch: e }
 
       -- Handle let bindings
       | { _type: "Let", name: n, value: v, body: b } ->
-          let v' = beta_reduce(v) in
-          substitute(b, n, v')
+          v beta_reduce |> v'
+          b n v' substitute
 
       -- No reducible expression found
       | _ -> expr
+    } match
   ]
 
   --[[
     substitute: Substitutes a value for a variable in an expression
   ]]--
-  substitute: Expr * S * Expr -> Expr [expr var value ->
-    match expr with
+  substitute: Expr * S * Expr -> Expr [expr, var, value ->
+    expr {
       | { _type: "Var", name: n } ->
-          if n == var then
-            value
-          else
-            expr
+          value iff n var == or_else expr
 
       | { _type: "Abs", param: p, body: b, param_type: t } ->
-          if p == var then
-            -- Variable shadowed, don't substitute
-            expr
-          else
-            { _type: "Abs", param: p, body: substitute(b, var, value), param_type: t }
+          -- Variable shadowed, don't substitute if same name
+          expr iff p var == or_else
+            { _type: "Abs", param: p, body: b var value substitute, param_type: t }
 
       | { _type: "App", fn: f, arg: a } ->
-          { _type: "App", fn: substitute(f, var, value), arg: substitute(a, var, value) }
+          {
+            _type: "App",
+            fn: f var value substitute,
+            arg: a var value substitute
+          }
 
       | { _type: "Cond", cond: c, then_branch: t, else_branch: e } ->
           {
             _type: "Cond",
-            cond: substitute(c, var, value),
-            then_branch: substitute(t, var, value),
-            else_branch: substitute(e, var, value)
+            cond: c var value substitute,
+            then_branch: t var value substitute,
+            else_branch: e var value substitute
           }
 
       | { _type: "Let", name: n, value: v, body: b } ->
-          if n == var then
-            -- Variable shadowed, substitute only in value
-            { _type: "Let", name: n, value: substitute(v, var, value), body: b }
-          else
-            {
-              _type: "Let",
-              name: n,
-              value: substitute(v, var, value),
-              body: substitute(b, var, value)
-            }
+          -- If variable is shadowed, substitute only in value part
+          {
+            _type: "Let",
+            name: n,
+            value: v var value substitute,
+            body: b var value substitute iff n var != or_else b
+          }
 
       | { _type: "LinearAbs", param: p, body: b, param_type: t } ->
-          if p == var then
-            -- Variable shadowed, don't substitute
-            expr
-          else
-            { _type: "LinearAbs", param: p, body: substitute(b, var, value), param_type: t }
+          -- Variable shadowed, don't substitute if same name
+          expr iff p var == or_else
+            { _type: "LinearAbs", param: p, body: b var value substitute, param_type: t }
 
       | { _type: "LinearApp", fn: f, arg: a } ->
-          { _type: "LinearApp", fn: substitute(f, var, value), arg: substitute(a, var, value) }
+          {
+            _type: "LinearApp",
+            fn: f var value substitute,
+            arg: a var value substitute
+          }
 
       | _ -> expr
+    } match
   ]
 
   --[[
     uses_exactly_once: Checks if a variable is used exactly once in an expression
   ]]--
-  uses_exactly_once: Expr * S -> Bool [expr var ->
+  uses_exactly_once: Expr * S -> Bool [expr, var ->
     -- Count variable occurrences in the expression
-    let count = count_var_occurrences(expr, var) in
-    count == 1
+    expr var count_var_occurrences |> count
+    count 1 ==
   ]
 
   --[[
     count_var_occurrences: Counts the number of times a variable appears in an expression
   ]]--
-  count_var_occurrences: Expr * S -> Z [expr var ->
-    match expr with
+  count_var_occurrences: Expr * S -> Z [expr, var ->
+    expr {
       | { _type: "Var", name: n } ->
-          if n == var then 1 else 0
+          1 iff n var == or_else 0
 
       | { _type: "Abs", param: p, body: b } ->
-          if p == var then 0 else count_var_occurrences(b, var)
+          0 iff p var == or_else b var count_var_occurrences
 
       | { _type: "App", fn: f, arg: a } ->
-          count_var_occurrences(f, var) + count_var_occurrences(a, var)
+          f var count_var_occurrences a var count_var_occurrences +
 
       | { _type: "LinearAbs", param: p, body: b } ->
-          if p == var then 0 else count_var_occurrences(b, var)
+          0 iff p var == or_else b var count_var_occurrences
 
       | { _type: "LinearApp", fn: f, arg: a } ->
-          count_var_occurrences(f, var) + count_var_occurrences(a, var)
+          f var count_var_occurrences a var count_var_occurrences +
 
       | { _type: "Cond", cond: c, then_branch: t, else_branch: e } ->
-          count_var_occurrences(c, var) + count_var_occurrences(t, var) + count_var_occurrences(e, var)
+          c var count_var_occurrences
+          t var count_var_occurrences +
+          e var count_var_occurrences +
 
       | { _type: "Let", name: n, value: v, body: b } ->
-          let value_count = count_var_occurrences(v, var) in
-          if n == var then
-            value_count
-          else
-            value_count + count_var_occurrences(b, var)
+          v var count_var_occurrences |> value_count
+          value_count iff n var == or_else
+            value_count b var count_var_occurrences +
 
       | _ -> 0
+    } match
   ]
 
   --[[
     is_true_value: Checks if an expression represents a true value
   ]]--
   is_true_value: Expr -> Bool [expr ->
-    match expr with
+    expr {
       | { _type: "Primitive", op: @Prim.true } -> true
       | _ -> false
+    } match
   ]
 
   --[[
     is_false_value: Checks if an expression represents a false value
   ]]--
   is_false_value: Expr -> Bool [expr ->
-    match expr with
+    expr {
       | { _type: "Primitive", op: @Prim.false } -> true
       | _ -> false
+    } match
   ]
 
   --------------------------------------------------
@@ -672,15 +666,23 @@
       ],
 
       -- Exponential laws
-      curry_uncurry: forall [a b c f ->
-        let curried = curry(a, b, c, f) in
-        let uncurried = abs("p", app(app(curried, app(proj1(a, b), var("p"))), app(proj2(a, b), var("p")))) in
-        beta_normalize(uncurried) == beta_normalize(f)
+      curry_uncurry: forall [a, b, c, f ->
+        a b c f curry |> curried
+        "p"
+          curried
+          a b proj1 "p" var app
+          app
+          a b proj2 "p" var app
+          app
+        abs |> uncurried
+
+        uncurried beta_normalize f beta_normalize ==
       ],
 
       -- Linear laws
-      linear_resource: forall [f x ->
-        f is { _type: "LinearAbs" } implies uses_exactly_once(f.body, f.param)
+      linear_resource: forall [f, x ->
+        true iff f { _type: "LinearAbs" } is not or_else
+          f body f param uses_exactly_once
       ]
     }
   }

@@ -1,9 +1,16 @@
 --[[
-  MiniKanren Category (MiniKanren)
+  Logic Programming - Solve Problems by Describing Solutions
 
-  This module defines the categorical structure of MiniKanren logic programming.
-  MiniKanren goals naturally form a Kleisli category for the Stream "monad" 
-  over the type of States.
+  This module provides tools for logic programming, where you describe what
+  makes a valid solution rather than the exact steps to find it.
+
+  Practical applications:
+  - Constraint solving: Find values that satisfy multiple conditions
+  - Schedule planning: Generate valid schedules meeting many constraints
+  - Puzzle solving: Define rules and find all possible solutions
+  - Type inference: Determine types based on usage constraints
+  - Data generation: Create test data matching specific requirements
+  - Rule systems: Build and query systems with complex relationships
 ]]--
 
 @MiniKanren: {
@@ -25,10 +32,10 @@
     run                -- Execute a goal with an empty state
     fresh              -- Create a fresh variable
     unify              -- Unification of terms
-    
+
     -- Category structure
     make_kleisli_cat   -- Construct the Kleisli category for MiniKanren
-    
+
     -- Derived relations
     -- List operations
     nullo              -- Empty list relation
@@ -44,30 +51,30 @@
     appendo            -- List append relation
     reverseo           -- List reverse relation
     membero            -- List membership relation
-    
+
     -- List transformations
     sorto              -- List sorting relation
     permuteo           -- List permutation relation
     mapo               -- Map a relation over a list
     filtero            -- Filter a list with a relation
     zipwitho           -- Combine elements of two lists
-    
+
     -- List subsequences
     subseqo            -- Subsequence relation
     prefixo            -- Prefix relation
     suffixo            -- Suffix relation
-    
+
     -- List operations
     splito             -- Split a list relation
     inserto            -- Insert element relation
     removeo            -- Remove element relation
-    
+
     -- Logic operations
     ando               -- Logical AND relation
     oro                -- Logical OR relation
     noto               -- Logical NOT relation
     iff                -- If and only if relation
-    
+
     -- Arithmetic relations
     eqo                -- Equality relation
     neqo               -- Inequality relation
@@ -83,7 +90,7 @@
 
   E: typ cup op cup fn
 
-  vis: E |> [e -> true]
+  vis: E |> [e -> e true]
 
   deps: {
     (@MiniKanren, @Kleisli, true),    -- Depends on Kleisli category
@@ -105,12 +112,12 @@
   !Stream: {
     _type: "Stream",
     kind: StreamKind,        -- Either empty, single state, or lazy stream
-    
+
     -- Defined as a variant type
     StreamKind: {
-      Empty: Unit,
+      Empty: T.U,
       Single: !State,
-      Lazy: () -> !Stream    -- Thunk producing more of the stream
+      Lazy: T.U -> !Stream    -- Thunk producing more of the stream
     }
   }
 
@@ -132,8 +139,7 @@
   --------------------------------------------------
 
   -- Identity morphism (succeed goal)
-  succeed: !State -> !Goal [
-    s ->
+  succeed: !State -> !Goal [s ->
     {
       _type: "Goal",
       run: [state -> {
@@ -144,43 +150,40 @@
   ]
 
   -- Conjunction (Kleisli composition)
-  conj: !Goal * !Goal -> !Goal [
-    g1 g2 ->
+  conj: !Goal * !Goal -> !Goal [g1, g2 ->
     {
       _type: "Goal",
       run: [s ->
-        let s1_stream = g1.run(s) in
-        match s1_stream.kind with
-          | {Empty: _} -> {_type: "Stream", kind: {Empty: ()}}
-          | {Single: s1} -> g2.run(s1)
-          | {Lazy: thunk} -> 
+        s g1 run -> s1_stream
+        s1_stream kind {
+          | {Empty: _} -> {_type: "Stream", kind: {Empty: T.U}}
+          | {Single: s1} -> s1 g2 run
+          | {Lazy: thunk} ->
               -- Interleave streams (simplified)
               {
                 _type: "Stream",
-                kind: {Lazy: () -> 
-                  -- Implementation would interleave results
-                  -- This is simplified
-                  thunk()
-                }
+                kind: {Lazy: [_ ->
+                  T.U thunk
+                ]}
               }
+        } match
       ]
     }
   ]
 
   -- Disjunction (logical OR)
-  disj: !Goal * !Goal -> !Goal [
-    g1 g2 ->
+  disj: !Goal * !Goal -> !Goal [g1, g2 ->
     {
       _type: "Goal",
       run: [s ->
-        let s1_stream = g1.run(s) in
-        let s2_stream = g2.run(s) in
+        s g1 run -> s1_stream
+        s g2 run -> s2_stream
         -- Merge the two streams
         -- Simplified implementation
-        {_type: "Stream", kind: {Lazy: () -> 
+        {_type: "Stream", kind: {Lazy: [_ ->
           -- Would properly merge streams
           s1_stream
-        }}
+        ]}}
       ]
     }
   ]
@@ -190,55 +193,55 @@
   --------------------------------------------------
 
   -- Create a new Kleisli category for MiniKanren
-  make_kleisli_cat: () -> !KleisliCategory [
-    () ->
-    let state_type = @T.type_of({_type: "State", substitution: {}, var_counter: 0}) in
-    let empty_goals = Set.empty() in
-    
+  make_kleisli_cat: T.U -> !KleisliCategory [_ ->
+    {_type: "State", substitution: {}, var_counter: 0} -> state_type
+    @T state_type type_of -> state_type
+    Set.empty -> empty_goals
+
     {
       _type: "KleisliCategory",
       base_object: state_type,
       morphisms: empty_goals,
-      id_morphism: succeed({_type: "State", substitution: {}, var_counter: 0}),
-      compose: [g1 g2 -> conj(g1, g2)]
+      id_morphism: state_type succeed,
+      compose: [g1, g2 -> g1 g2 conj]
     }
   ]
 
   -- Run a goal with empty initial state
-  run: !Goal -> !Stream [
-    g ->
-    g.run({_type: "State", substitution: {}, var_counter: 0})
+  run: !Goal -> !Stream [g ->
+    {_type: "State", substitution: {}, var_counter: 0} g run
   ]
 
   -- Create a fresh variable
-  fresh: (Var -> !Goal) -> !Goal [
-    f ->
+  fresh: (Var -> !Goal) -> !Goal [f ->
     {
       _type: "Goal",
       run: [s ->
-        let new_var = {_type: "Var", id: s.var_counter} in
-        let new_state = {_type: "State", 
-                        substitution: s.substitution, 
-                        var_counter: s.var_counter + 1} in
-        let goal = f(new_var) in
-        goal.run(new_state)
+        {_type: "Var", id: s var_counter} -> new_var
+        {
+          _type: "State",
+          substitution: s substitution,
+          var_counter: s var_counter 1 +
+        } -> new_state
+        new_var f -> goal
+        new_state goal run
       ]
     }
   ]
 
   -- Unification
-  unify: Term * Term -> !Goal [
-    t1 t2 ->
+  unify: Term * Term -> !Goal [t1, t2 ->
     {
       _type: "Goal",
       run: [s ->
         -- Simplified implementation
         -- Should handle variable lookup, occurs check, etc.
         -- For now, just check if terms are equal
-        if t1 == t2 then
+        {
           {_type: "Stream", kind: {Single: s}}
-        else
-          {_type: "Stream", kind: {Empty: ()}}
+        } iff t1 t2 veq or_else {
+          {_type: "Stream", kind: {Empty: T.U}}
+        }
       ]
     }
   ]
@@ -250,186 +253,165 @@
   --------------------------------------------------
   -- List Operation Relations
   --------------------------------------------------
-  
+
   -- Empty list relation
-  nullo: List -> !Goal [
-    xs ->
+  nullo: List -> !Goal [xs ->
     {
       _type: "Goal",
       run: [s ->
-        if xs == [] then
-          {_type: "Stream", kind: {Single: s}}
-        else
-          {_type: "Stream", kind: {Empty: ()}}
+        {
+          s -> s
+          {Single: s}
+        } iff xs [] veq or_else {
+          T.U
+          {Empty: T.U}
+        } -> kind
+
+        {_type: "Stream", kind: kind}
       ]
     }
   ]
-  
+
   -- Alias for nullo
-  emptyo: List -> !Goal [
-    xs -> nullo(xs)
-  ]
-  
+  emptyo: List -> !Goal [xs -> xs nullo]
+
   -- First element relation (car)
-  caro: List * a -> !Goal [
-    xs x ->
+  caro: List * a -> !Goal [xs, x ->
     {
       _type: "Goal",
       run: [s ->
-        match xs with
-          | h :: _ -> unify(h, x).run(s)
-          | [] -> {_type: "Stream", kind: {Empty: ()}}
+        xs {
+          | h :: _ -> h x unify s run
+          | [] -> {_type: "Stream", kind: {Empty: T.U}}
+        } match
       ]
     }
   ]
-  
+
   -- Alias for caro
-  firsto: List * a -> !Goal [
-    xs x -> caro(xs, x)
-  ]
-  
+  firsto: List * a -> !Goal [xs, x -> xs x caro]
+
   -- Rest of list relation (cdr)
-  cdro: List * List -> !Goal [
-    xs ys ->
+  cdro: List * List -> !Goal [xs, ys ->
     {
       _type: "Goal",
       run: [s ->
-        match xs with
-          | _ :: rest -> unify(rest, ys).run(s)
-          | [] -> {_type: "Stream", kind: {Empty: ()}}
+        xs {
+          | _ :: rest -> rest ys unify s run
+          | [] -> {_type: "Stream", kind: {Empty: T.U}}
+        } match
       ]
     }
   ]
-  
+
   -- Alias for cdro
-  resto: List * List -> !Goal [
-    xs ys -> cdro(xs, ys)
-  ]
-  
+  resto: List * List -> !Goal [xs, ys -> xs ys cdro]
+
   -- Construct list relation (cons)
-  conso: a * List * List -> !Goal [
-    x xs zs ->
+  conso: a * List * List -> !Goal [x, xs, zs ->
     {
       _type: "Goal",
       run: [s ->
-        unify(x :: xs, zs).run(s)
+        x xs :: zs unify s run
       ]
     }
   ]
-  
+
   -- Pair/cons check relation
-  pairo: a -> !Goal [
-    x ->
+  pairo: a -> !Goal [x ->
     {
       _type: "Goal",
       run: [s ->
-        fresh([h t -> 
-          unify(x, h :: t)
-        ]).run(s)
+        [h, t -> x h t :: unify] fresh s run
       ]
     }
   ]
-  
+
   -- List check relation
-  listo: a -> !Goal [
-    x ->
+  listo: a -> !Goal [x ->
     {
       _type: "Goal",
       run: [s ->
-        disj(
-          nullo(x),
-          fresh([h t -> 
-            conj(
-              conso(h, t, x),
-              listo(t)
-            )
-          ])
-        ).run(s)
+        x nullo
+        [h, t ->
+          x h t conso
+          t listo
+          conj
+        ] fresh
+        disj
+        s run
       ]
     }
   ]
-  
+
   -- List length relation
-  lengtho: List * Int -> !Goal [
-    xs n ->
+  lengtho: List * Int -> !Goal [xs, n ->
     {
       _type: "Goal",
       run: [s ->
-        disj(
-          conj(nullo(xs), unify(n, 0)),
-          fresh([h t n1 -> 
-            conj(
-              conso(h, t, xs),
-              conj(
-                lengtho(t, n1),
-                pluso(1, n1, n)
-              )
-            )
-          ])
-        ).run(s)
+        xs nullo n 0 unify conj
+        [hx, tx, n1 ->
+          xs hx tx conso
+          tx n1 lengtho
+          1 n1 n pluso
+          conj conj
+        ] fresh
+        disj
+        s run
       ]
     }
   ]
-  
+
   -- List append relation
-  appendo: List * List * List -> !Goal [
-    xs ys zs ->
+  appendo: List * List * List -> !Goal [xs, ys, zs ->
     {
       _type: "Goal",
       run: [s ->
-        disj(
-          conj(nullo(xs), unify(ys, zs)),
-          fresh([h t zs1 -> 
-            conj(
-              conso(h, t, xs),
-              conj(
-                conso(h, zs1, zs),
-                appendo(t, ys, zs1)
-              )
-            )
-          ])
-        ).run(s)
+        xs nullo ys zs unify conj
+        [h, t, zs1 ->
+          xs h t conso
+          zs h zs1 conso
+          t ys zs1 appendo
+          conj conj
+        ] fresh
+        disj
+        s run
       ]
     }
   ]
-  
+
   -- List reverse relation
-  reverseo: List * List -> !Goal [
-    xs ys ->
+  reverseo: List * List -> !Goal [xs, ys ->
     {
       _type: "Goal",
       run: [s ->
-        let reverse_helper = [xs acc res ->
-          disj(
-            conj(nullo(xs), unify(acc, res)),
-            fresh([h t ->
-              conj(
-                conso(h, t, xs),
-                reverse_helper(t, h :: acc, res)
-              )
-            ])
-          )
-        ] in
-        reverse_helper(xs, [], ys).run(s)
+        [xs, acc, res ->
+          xs nullo acc res unify conj
+          [h, t ->
+            xs h t conso
+            h acc :: t acc res reverse_helper
+            conj
+          ] fresh
+          disj
+        ] |> reverse_helper
+
+        xs [] ys reverse_helper s run
       ]
     }
   ]
-  
+
   -- List membership relation
-  membero: a * List -> !Goal [
-    x xs ->
+  membero: a * List -> !Goal [x, xs ->
     {
       _type: "Goal",
       run: [s ->
-        disj(
-          caro(xs, x),
-          fresh([t ->
-            conj(
-              cdro(xs, t),
-              membero(x, t)
-            )
-          ])
-        ).run(s)
+        xs x caro
+        [t ->
+          xs t cdro
+          x t membero
+        ] fresh
+        disj
+        s run
       ]
     }
   ]
@@ -437,160 +419,123 @@
   --------------------------------------------------
   -- List Transformation Relations
   --------------------------------------------------
-  
+
   -- List sorting relation (using insertion sort)
-  sorto: List * List -> !Goal [
-    xs ys ->
+  sorto: List * List -> !Goal [xs, ys ->
     {
       _type: "Goal",
       run: [s ->
-        let insert_sorted = [x sorted res ->
-          disj(
-            conj(nullo(sorted), unify(res, [x])),
-            fresh([h t res1 ->
-              conj(
-                conso(h, t, sorted),
-                disj(
-                  conj(lto(x, h), unify(res, x :: sorted)),
-                  conj(
-                    geqo(x, h),
-                    conj(
-                      insert_sorted(x, t, res1),
-                      conso(h, res1, res)
-                    )
-                  )
-                )
-              )
-            ])
-          )
-        ] in
-        
-        let insertion_sort = [unsorted sorted ->
-          disj(
-            conj(nullo(unsorted), nullo(sorted)),
-            fresh([h t res ->
-              conj(
-                conso(h, t, unsorted),
-                conj(
-                  insertion_sort(t, res),
-                  insert_sorted(h, res, sorted)
-                )
-              )
-            ])
-          )
-        ] in
-        
-        insertion_sort(xs, ys).run(s)
+        [x, sorted, res ->
+          sorted nullo [x] res unify conj
+          [h, t, res1 ->
+            sorted h t conso
+            x h lto x sorted :: res unify conj
+            x h geqo
+            x t res1 insert_sorted
+            res h res1 conso
+            conj
+            conj
+            disj
+          ] fresh
+          disj
+        ] |> insert_sorted
+
+        [unsorted, sorted ->
+          unsorted nullo sorted nullo conj
+          [h, t, res ->
+            unsorted h t conso
+            t res insertion_sort
+            h res sorted insert_sorted
+            conj conj
+          ] fresh
+          disj
+        ] |> insertion_sort
+
+        xs ys insertion_sort s run
       ]
     }
   ]
-  
+
   -- List permutation relation
-  permuteo: List * List -> !Goal [
-    xs ys ->
+  permuteo: List * List -> !Goal [xs, ys ->
     {
       _type: "Goal",
       run: [s ->
-        disj(
-          conj(nullo(xs), nullo(ys)),
-          fresh([h t ->
-            conj(
-              conso(h, t, xs),
-              fresh([ys1 ->
-                conj(
-                  removeo(h, ys, ys1),
-                  permuteo(t, ys1)
-                )
-              ])
-            )
-          ])
-        ).run(s)
+        xs nullo ys nullo conj
+        [h, t ->
+          xs h t conso
+          [ys1 ->
+            ys h ys1 removeo
+            t ys1 permuteo
+          ] fresh
+          conj
+        ] fresh
+        disj
+        s run
       ]
     }
   ]
-  
+
   -- Map a relation over a list
-  mapo: (a * b -> !Goal) * List(a) * List(b) -> !Goal [
-    rel xs ys ->
+  mapo: (a * b -> !Goal) * List(a) * List(b) -> !Goal [rel, xs, ys ->
     {
       _type: "Goal",
       run: [s ->
-        disj(
-          conj(nullo(xs), nullo(ys)),
-          fresh([hx tx hy ty ->
-            conj(
-              conso(hx, tx, xs),
-              conj(
-                conso(hy, ty, ys),
-                conj(
-                  rel(hx, hy),
-                  mapo(rel, tx, ty)
-                )
-              )
-            )
-          ])
-        ).run(s)
+        xs nullo ys nullo conj
+        [hx, tx, hy, ty ->
+          xs hx tx conso
+          ys hy ty conso
+          hx hy rel
+          rel tx ty mapo
+          conj conj conj
+        ] fresh
+        disj
+        s run
       ]
     }
   ]
-  
+
   -- Filter a list with a relation
-  filtero: (a -> !Goal) * List(a) * List(a) -> !Goal [
-    pred xs ys ->
+  filtero: (a -> !Goal) * List(a) * List(a) -> !Goal [pred, xs, ys ->
     {
       _type: "Goal",
       run: [s ->
-        disj(
-          conj(nullo(xs), nullo(ys)),
-          fresh([hx tx ->
-            conj(
-              conso(hx, tx, xs),
-              disj(
-                fresh([ty ->
-                  conj(
-                    pred(hx),
-                    conj(
-                      filtero(pred, tx, ty),
-                      conso(hx, ty, ys)
-                    )
-                  )
-                ]),
-                conj(
-                  noto(pred(hx)),
-                  filtero(pred, tx, ys)
-                )
-              )
-            )
-          ])
-        ).run(s)
+        xs nullo ys nullo conj
+        [hx, tx ->
+          xs hx tx conso
+          [ty ->
+            hx pred
+            pred tx ty filtero
+            ys hx ty conso
+            conj conj
+          ] fresh
+          hx pred noto
+          pred tx ys filtero
+          conj
+          disj
+        ] fresh
+        disj
+        s run
       ]
     }
   ]
-  
+
   -- Combine elements of two lists
-  zipwitho: (a * b * c -> !Goal) * List(a) * List(b) * List(c) -> !Goal [
-    rel xs ys zs ->
+  zipwitho: (a * b * c -> !Goal) * List(a) * List(b) * List(c) -> !Goal [rel, xs, ys, zs ->
     {
       _type: "Goal",
       run: [s ->
-        disj(
-          conj(nullo(xs), conj(nullo(ys), nullo(zs))),
-          fresh([hx tx hy ty hz tz ->
-            conj(
-              conso(hx, tx, xs),
-              conj(
-                conso(hy, ty, ys),
-                conj(
-                  conso(hz, tz, zs),
-                  conj(
-                    rel(hx, hy, hz),
-                    zipwitho(rel, tx, ty, tz)
-                  )
-                )
-              )
-            )
-          ])
-        ).run(s)
+        xs nullo ys nullo zs nullo conj conj
+        [hx, tx, hy, ty, hz, tz ->
+          xs hx tx conso
+          ys hy ty conso
+          zs hz tz conso
+          hx hy hz rel
+          rel tx ty tz zipwitho
+          conj conj conj conj
+        ] fresh
+        disj
+        s run
       ]
     }
   ]
@@ -598,77 +543,62 @@
   --------------------------------------------------
   -- List Subsequence Relations
   --------------------------------------------------
-  
+
   -- Subsequence relation
-  subseqo: List * List -> !Goal [
-    xs ys ->
+  subseqo: List * List -> !Goal [xs, ys ->
     {
       _type: "Goal",
       run: [s ->
-        disj(
-          nullo(xs),
-          fresh([hx tx ->
-            conj(
-              conso(hx, tx, xs),
-              fresh([hy ty ->
-                conj(
-                  conso(hy, ty, ys),
-                  disj(
-                    conj(
-                      unify(hx, hy),
-                      subseqo(tx, ty)
-                    ),
-                    subseqo(xs, ty)
-                  )
-                )
-              ])
-            )
-          ])
-        ).run(s)
+        xs nullo
+        [hx, tx ->
+          xs hx tx conso
+          [hy, ty ->
+            ys hy ty conso
+            hx hy unify
+            tx ty subseqo
+            conj
+            xs ty subseqo
+            disj
+          ] fresh
+          conj
+        ] fresh
+        disj
+        s run
       ]
     }
   ]
-  
+
   -- Prefix relation
-  prefixo: List * List -> !Goal [
-    xs ys ->
+  prefixo: List * List -> !Goal [xs, ys ->
     {
       _type: "Goal",
       run: [s ->
-        disj(
-          nullo(xs),
-          fresh([hx tx hy ty ->
-            conj(
-              conso(hx, tx, xs),
-              conj(
-                conso(hy, ty, ys),
-                conj(
-                  unify(hx, hy),
-                  prefixo(tx, ty)
-                )
-              )
-            )
-          ])
-        ).run(s)
+        xs nullo
+        [hx, tx, hy, ty ->
+          xs hx tx conso
+          ys hy ty conso
+          hx hy unify
+          tx ty prefixo
+          conj conj
+        ] fresh
+        disj
+        s run
       ]
     }
   ]
-  
+
   -- Suffix relation
-  suffixo: List * List -> !Goal [
-    xs ys ->
+  suffixo: List * List -> !Goal [xs, ys ->
     {
       _type: "Goal",
       run: [s ->
-        disj(
-          unify(xs, ys),
-          fresh([h t ->
-            conj(
-              conso(h, t, ys),
-              suffixo(xs, t)
-            )
-          ])
-        ).run(s)
+        xs ys unify
+        [h, t ->
+          ys h t conso
+          xs t suffixo
+        ] fresh
+        disj
+        s run
       ]
     }
   ]
@@ -676,68 +606,56 @@
   --------------------------------------------------
   -- List Operation Relations
   --------------------------------------------------
-  
+
   -- Split a list relation
-  splito: List * List * List -> !Goal [
-    xs ys zs ->
+  splito: List * List * List -> !Goal [xs, ys, zs ->
     {
       _type: "Goal",
       run: [s ->
-        fresh([ws ->
-          conj(
-            appendo(ys, zs, ws),
-            unify(xs, ws)
-          )
-        ]).run(s)
+        [ws ->
+          ys zs ws appendo
+          xs ws unify
+        ] fresh
+        s run
       ]
     }
   ]
-  
+
   -- Insert element relation
-  inserto: a * List * List -> !Goal [
-    x xs ys ->
+  inserto: a * List * List -> !Goal [x, xs, ys ->
     {
       _type: "Goal",
       run: [s ->
-        disj(
-          unify(ys, x :: xs),
-          fresh([h t r ->
-            conj(
-              conso(h, t, xs),
-              conj(
-                conso(h, r, ys),
-                inserto(x, t, r)
-              )
-            )
-          ])
-        ).run(s)
+        ys x xs :: unify
+        [h, t, r ->
+          xs h t conso
+          ys h r conso
+          x t r inserto
+          conj conj
+        ] fresh
+        disj
+        s run
       ]
     }
   ]
-  
+
   -- Remove element relation
-  removeo: a * List * List -> !Goal [
-    x xs ys ->
+  removeo: a * List * List -> !Goal [x, xs, ys ->
     {
       _type: "Goal",
       run: [s ->
-        disj(
-          fresh([t ->
-            conj(
-              conso(x, t, xs),
-              unify(ys, t)
-            )
-          ]),
-          fresh([h t r ->
-            conj(
-              conso(h, t, xs),
-              conj(
-                conso(h, r, ys),
-                removeo(x, t, r)
-              )
-            )
-          ])
-        ).run(s)
+        [t ->
+          xs x t conso
+          ys t unify
+        ] fresh
+        [h, t, r ->
+          xs h t conso
+          ys h r conso
+          x t r removeo
+          conj conj
+        ] fresh
+        disj
+        s run
       ]
     }
   ]
@@ -745,61 +663,58 @@
   --------------------------------------------------
   -- Logic Relations
   --------------------------------------------------
-  
+
   -- Logical AND relation
-  ando: Bool * Bool * Bool -> !Goal [
-    x y z ->
+  ando: Bool * Bool * Bool -> !Goal [x, y, z ->
     {
       _type: "Goal",
       run: [s ->
-        disj(
-          conj(unify(x, true), conj(unify(y, true), unify(z, true))),
-          conj(unify(x, false), unify(z, false)),
-          conj(unify(y, false), unify(z, false))
-        ).run(s)
+        x true unify y true unify conj z true unify conj
+        x false unify z false unify conj
+        y false unify z false unify conj
+        disj disj
+        s run
       ]
     }
   ]
-  
+
   -- Logical OR relation
-  oro: Bool * Bool * Bool -> !Goal [
-    x y z ->
+  oro: Bool * Bool * Bool -> !Goal [x, y, z ->
     {
       _type: "Goal",
       run: [s ->
-        disj(
-          conj(unify(x, true), unify(z, true)),
-          conj(unify(y, true), unify(z, true)),
-          conj(unify(x, false), conj(unify(y, false), unify(z, false)))
-        ).run(s)
+        x true unify z true unify conj
+        y true unify z true unify conj
+        x false unify y false unify conj z false unify conj
+        disj disj
+        s run
       ]
     }
   ]
-  
+
   -- Logical NOT relation
-  noto: !Goal -> !Goal [
-    g ->
+  noto: !Goal -> !Goal [g ->
     {
       _type: "Goal",
       run: [s ->
-        let result = g.run(s) in
-        match result.kind with
+        s g run -> result
+        result kind {
           | {Empty: _} -> {_type: "Stream", kind: {Single: s}}
-          | _ -> {_type: "Stream", kind: {Empty: ()}}
+          | _ -> {_type: "Stream", kind: {Empty: T.U}}
+        } match
       ]
     }
   ]
-  
+
   -- If and only if relation
-  iff: Bool * Bool * Bool -> !Goal [
-    x y z ->
+  iff: Bool * Bool * Bool -> !Goal [x, y, z ->
     {
       _type: "Goal",
       run: [s ->
-        disj(
-          conj(unify(x, y), unify(z, true)),
-          conj(unify(x, not y), unify(z, false))
-        ).run(s)
+        x y veq z true unify conj
+        x y veq not z false unify conj
+        disj
+        s run
       ]
     }
   ]
@@ -807,175 +722,178 @@
   --------------------------------------------------
   -- Arithmetic Relations
   --------------------------------------------------
-  
+
   -- Equality relation
-  eqo: a * a * Bool -> !Goal [
-    x y z ->
+  eqo: a * a * Bool -> !Goal [x, y, z ->
     {
       _type: "Goal",
       run: [s ->
-        if x == y then
-          unify(z, true).run(s)
-        else
-          unify(z, false).run(s)
+        x y veq [true, false, _] [else_val, then_val, cond ->
+          {then_val} iff cond or_else {else_val}
+        ] -> res
+        z res unify s run
       ]
     }
   ]
-  
+
   -- Inequality relation
-  neqo: a * a * Bool -> !Goal [
-    x y z ->
+  neqo: a * a * Bool -> !Goal [x, y, z ->
     {
       _type: "Goal",
       run: [s ->
-        if x != y then
-          unify(z, true).run(s)
-        else
-          unify(z, false).run(s)
+        x y veq not [true, false, _] [else_val, then_val, cond ->
+          {then_val} iff cond or_else {else_val}
+        ] -> res
+        z res unify s run
       ]
     }
   ]
-  
+
   -- Less than relation
-  lto: Int * Int * Bool -> !Goal [
-    x y z ->
+  lto: Int * Int * Bool -> !Goal [x, y, z ->
     {
       _type: "Goal",
       run: [s ->
-        if x < y then
-          unify(z, true).run(s)
-        else
-          unify(z, false).run(s)
+        x y < [true, false, _] [else_val, then_val, cond ->
+          {then_val} iff cond or_else {else_val}
+        ] -> res
+        z res unify s run
       ]
     }
   ]
-  
+
   -- Greater than relation
-  gto: Int * Int * Bool -> !Goal [
-    x y z ->
+  gto: Int * Int * Bool -> !Goal [x, y, z ->
     {
       _type: "Goal",
       run: [s ->
-        if x > y then
-          unify(z, true).run(s)
-        else
-          unify(z, false).run(s)
+        x y > [true, false, _] [else_val, then_val, cond ->
+          {then_val} iff cond or_else {else_val}
+        ] -> res
+        z res unify s run
       ]
     }
   ]
-  
+
   -- Less than or equal relation
-  leqo: Int * Int * Bool -> !Goal [
-    x y z ->
+  leqo: Int * Int * Bool -> !Goal [x, y, z ->
     {
       _type: "Goal",
       run: [s ->
-        if x <= y then
-          unify(z, true).run(s)
-        else
-          unify(z, false).run(s)
+        x y <= [true, false, _] [else_val, then_val, cond ->
+          {then_val} iff cond or_else {else_val}
+        ] -> res
+        z res unify s run
       ]
     }
   ]
-  
+
   -- Greater than or equal relation
-  geqo: Int * Int * Bool -> !Goal [
-    x y z ->
+  geqo: Int * Int * Bool -> !Goal [x, y, z ->
     {
       _type: "Goal",
       run: [s ->
-        if x >= y then
-          unify(z, true).run(s)
-        else
-          unify(z, false).run(s)
+        x y >= [true, false, _] [else_val, then_val, cond ->
+          {then_val} iff cond or_else {else_val}
+        ] -> res
+        z res unify s run
       ]
     }
   ]
-  
+
   -- Addition relation
-  pluso: Int * Int * Int -> !Goal [
-    x y z ->
+  pluso: Int * Int * Int -> !Goal [x, y, z ->
     {
       _type: "Goal",
       run: [s ->
-        disj(
-          unify(z, x + y),
-          unify(x, z - y),
-          unify(y, z - x)
-        ).run(s)
+        z x y + unify
+        x z y - unify
+        y z x - unify
+        disj disj
+        s run
       ]
     }
   ]
-  
+
   -- Subtraction relation
-  minuso: Int * Int * Int -> !Goal [
-    x y z ->
+  minuso: Int * Int * Int -> !Goal [x, y, z ->
     {
       _type: "Goal",
       run: [s ->
-        disj(
-          unify(z, x - y),
-          unify(x, z + y),
-          unify(y, x - z)
-        ).run(s)
+        z x y - unify
+        x z y + unify
+        y x z - unify
+        disj disj
+        s run
       ]
     }
   ]
-  
+
   -- Multiplication relation
-  timeso: Int * Int * Int -> !Goal [
-    x y z ->
+  timeso: Int * Int * Int -> !Goal [x, y, z ->
     {
       _type: "Goal",
       run: [s ->
-        disj(
-          unify(z, x * y),
-          conj(neqo(y, 0, true), unify(x, z / y)),
-          conj(neqo(x, 0, true), unify(y, z / x))
-        ).run(s)
+        z x y * unify
+        y 0 0 neqo x z y / unify conj
+        x 0 0 neqo y z x / unify conj
+        disj disj
+        s run
       ]
     }
   ]
-  
+
   -- Division relation
-  divo: Int * Int * Int -> !Goal [
-    x y z ->
+  divo: Int * Int * Int -> !Goal [x, y, z ->
     {
       _type: "Goal",
       run: [s ->
-        conj(
-          neqo(y, 0, true),
-          disj(
-            unify(z, x / y),
-            unify(x, z * y)
-          )
-        ).run(s)
+        y 0 0 neqo
+        z x y / unify
+        x z y * unify
+        disj
+        conj
+        s run
       ]
     }
   ]
 
   --------------------------------------------------
-  -- Structure Mapping (Categorical Laws)
+  -- Reliability Guarantees and Best Practices
   --------------------------------------------------
 
   structure: {
-    law: {
-      -- Identity laws
-      left_identity: [g ->
-        -- For all goals g, succeed >=> g = g
-        conj(succeed({_type: "State", substitution: {}, var_counter: 0}), g) == g
+    -- These guarantees ensure logic programming behaves consistently
+    guarantees: {
+      -- Predictable behavior with empty constraints
+      empty_constraint: [g ->
+        -- What this guarantees: Adding an empty constraint (succeed) to a goal doesn't change behavior
+        -- Why it matters: You can add or remove unnecessary constraints without breaking your logic
+        {_type: "State", substitution: {}, var_counter: 0} succeed g conj g veq
       ],
-      
-      right_identity: [g ->
-        -- For all goals g, g >=> succeed = g
-        conj(g, succeed({_type: "State", substitution: {}, var_counter: 0})) == g
+
+      -- Constraint order guarantees
+      constraint_order: [g ->
+        -- What this guarantees: Adding an empty constraint at the end doesn't change behavior
+        -- Why it matters: The order of constraints doesn't affect the outcome (when they're independent)
+        g {_type: "State", substitution: {}, var_counter: 0} succeed conj g veq
       ],
-      
-      -- Associativity of composition
-      associativity: [g1 g2 g3 ->
-        -- (g1 >=> g2) >=> g3 = g1 >=> (g2 >=> g3)
-        conj(conj(g1, g2), g3) == conj(g1, conj(g2, g3))
+
+      -- Consistent nested constraints
+      nested_constraints: [g1, g2, g3 ->
+        -- What this guarantees: Grouping of constraint combinations doesn't matter
+        -- Why it matters: You can refactor and reorganize complex logic without changing behavior
+        g1 g2 conj g3 conj g1 g2 g3 conj conj veq
       ]
+    },
+
+    -- Practical requirements for using logic programming correctly
+    best_practices: {
+      -- 1. Keep constraints as simple and focused as possible
+      -- 2. Test logic with boundary cases to ensure constraints handle all scenarios
+      -- 3. Prefer composing simple constraints over complex monolithic ones
+      -- 4. Consider constraint ordering for performance (even though it doesn't affect correctness)
+      -- 5. Use the most specific constraint type for your problem
     }
   }
 
@@ -984,45 +902,49 @@
   --------------------------------------------------
 
   example: {
-    -- Simple equality goal using unify
-    eq_example: () -> !Goal [
-      () ->
-      let x = {_type: "Var", id: 0} in
-      let y = {_type: "Var", id: 1} in
-      unify(x, y)
+    -- Find values that are equal to another value
+    find_matching_value: () -> !Goal [_ ->
+      {_type: "Var", id: 0} -> x   -- Create a logic variable x
+      {_type: "Var", id: 1} -> y   -- Create a logic variable y
+      x y unify               -- Constrain x and y to be equal
     ],
-    
-    -- Conjunction of goals
-    conj_example: () -> !Goal [
-      () ->
-      let g1 = fresh([x -> unify(x, 5)]) in
-      let g2 = fresh([y -> unify(y, 10)]) in
-      conj(g1, g2)
+
+    -- Find values that satisfy multiple constraints
+    find_with_constraints: () -> !Goal [_ ->
+      [x -> x 5 unify] fresh -> g1   -- Create constraint: x must be 5
+      [y -> y 10 unify] fresh -> g2  -- Create constraint: y must be 10
+      g1 g2 conj                     -- Combine both constraints
     ],
-    
-    -- Run a simple goal
-    run_example: () -> !Stream [
-      () ->
-      let goal = fresh([x -> unify(x, 42)]) in
-      run(goal)
+
+    -- Solve a constraint and get results
+    solve_constraint: () -> !Stream [_ ->
+      [x -> x 42 unify] fresh -> goal  -- Find values of x where x = 42
+      goal run                         -- Execute the search
     ],
-    
-    -- Create and use the Kleisli category
-    cat_example: () -> !KleisliCategory [
-      () ->
-      make_kleisli_cat()
+
+    -- Find lists that append to make a specific result
+    list_decomposition: () -> !Goal [_ ->
+      -- Find all ways to split [1,2,3,4] into two lists
+      [1, 2] [3, 4] [1, 2, 3, 4] appendo
     ],
-    
-    -- List operations examples
-    append_example: () -> !Goal [
-      () ->
-      appendo([1, 2], [3, 4], [1, 2, 3, 4])
+
+    -- Find values that add up to a specific result
+    arithmetic_solver: () -> !Goal [_ ->
+      [x ->
+        -- Find x where 5 + 3 = x
+        5 3 x pluso
+      ] fresh
     ],
-    
-    -- Arithmetic example
-    arithmetic_example: () -> !Goal [
-      () ->
-      fresh([x -> pluso(5, 3, x)])
+
+    -- Find factors of a number
+    factor_finder: () -> !Goal [_ ->
+      [a, b ->
+        -- Find values where a * b = 12
+        a b 12 timeso
+        -- Ensure we only get positive factors
+        a 0 gto
+        b 0 gto
+      ] fresh
     ]
   }
-} 
+}

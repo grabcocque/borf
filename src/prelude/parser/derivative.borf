@@ -1,0 +1,477 @@
+--[[
+  Derivative Parsing - Efficient Parser Implementation
+  
+  This module provides the core implementation of derivative-based parsing,
+  which enables highly efficient parsing of complex grammars.
+]]--
+
+@Parser.Derivative: {
+  typ: {
+    DerivativeParser
+    NullableResult
+    Derivative
+    DerivativeAutomaton
+    DerivativeState
+  }
+  
+  op: {
+    δ
+    δ/δx
+    nullable
+  }
+  
+  fn: {
+    epsilon
+    empty
+    token
+    seq
+    alt
+    star
+    derive
+    is_nullable
+    get_nullable_value
+  }
+  
+  E: typ cup op cup fn
+  
+  deps: {
+    (@Parser.Derivative, @Parser.Types, true),
+    (@Parser.Derivative, @T, true)
+  }
+  
+  --[[
+    PARSER BUILDING BLOCKS
+    
+    These components work together to create powerful parsers that:
+    
+    1. Automatically handle recursive and complex grammars
+    2. Efficiently process input by skipping unnecessary computation
+    3. Generate high-quality error messages for debugging
+    4. Allow you to combine simple parsers into complex ones
+  ]]--
+  
+  --[[
+    DerivativeParser - Smart incremental parser
+    
+    Creates parsers that efficiently process input one character at a time.
+    This is the engine that powers the simple parsers you'll use to build your grammar.
+  ]]--
+  DerivativeParser: {
+    parse: ParserState -> ParserResult,
+    derive: Char -> DerivativeParser,
+    nullable: () -> NullableResult,
+    compact: () -> DerivativeParser
+  }
+  
+  --[[
+    NullableResult - Empty string acceptance info
+    
+    Contains information about whether a parser can accept the empty string,
+    and what value it would produce if it did. Used for optimization and
+    composition of parsers.
+  ]]--
+  NullableResult: {
+    accepts_empty: Bool,
+    value: a
+  }
+  
+  --[[
+    Derivative - Parser transformation
+    
+    Represents the Brzozowski derivative of a parser with respect to a character.
+    This is the core concept that enables efficient incremental parsing.
+  ]]--
+  Derivative: {
+    parser: DerivativeParser,
+    char: Char
+  }
+  
+  --[[
+    DerivativeAutomaton - Optimized parser state machine
+    
+    An efficient automaton constructed from parser derivatives.
+    Used for high-performance parsing of complex grammars.
+  ]]--
+  DerivativeAutomaton: {
+    states: [DerivativeState],
+    transitions: {Z: {Char: Z}},
+    start_state: Z,
+    accept_states: [Z]
+  }
+  
+  --[[
+    DerivativeState - Automaton state
+    
+    Represents a state in the derivative automaton, containing
+    the derivative parser and information about whether it's an accept state.
+  ]]--
+  DerivativeState: {
+    parser: DerivativeParser,
+    is_accept: Bool,
+    value_if_accept: a
+  }
+  
+  --[[
+    δ - Derive parser with respect to character
+    
+    Computes the derivative of a parser with respect to a character.
+    This is the core operation that drives derivative parsing.
+  ]]--
+  δ: DerivativeParser * Char -> DerivativeParser [parser, char ->
+    derive(parser, char)
+  ]
+  
+  --[[
+    δ/δx - Derive parser with respect to string
+    
+    Derives a parser with respect to a string by iteratively
+    deriving it with respect to each character.
+  ]]--
+  δ/δx: DerivativeParser * String -> DerivativeParser [parser, str ->
+    fold(
+      [p, c -> derive(p, c)],
+      parser,
+      str
+    )
+  ]
+  
+  --[[
+    nullable - Check if parser accepts empty string
+    
+    Tests whether a parser can accept the empty string,
+    and returns the value it would produce in that case.
+  ]]--
+  nullable: DerivativeParser -> NullableResult [parser ->
+    parser.nullable()
+  ]
+  
+  --[[
+    epsilon - Parser that matches the empty string
+    
+    Creates a parser that matches the empty string and returns a value.
+    This is a fundamental building block for constructing parsers.
+    
+    Example: epsilon(42) matches the empty string and returns 42
+  ]]--
+  epsilon: a -> DerivativeParser [value ->
+    {
+      parse: [state -> 
+        {
+          success: true,
+          value: value,
+          remaining: state.input,
+          position: state.position
+        }
+      ],
+      
+      derive: [char -> empty()],
+      
+      nullable: [-> {
+        accepts_empty: true,
+        value: value
+      }],
+      
+      compact: [-> epsilon(value)]
+    }
+  ]
+  
+  --[[
+    empty - Parser that matches nothing
+    
+    Creates a parser that never succeeds - the "fail" parser.
+    Used for representing parsing failures and building other parsers.
+    
+    Example: empty() always fails, regardless of input
+  ]]--
+  empty: () -> DerivativeParser [ ->
+    {
+      parse: [state -> 
+        {
+          success: false,
+          value: null,
+          remaining: state.input,
+          position: state.position,
+          error: {
+            message: "Empty parser",
+            position: state.position,
+            expected: "nothing",
+            found: if length(state.input) > 0 { state.input[0] } else { "end of input" }
+          }
+        }
+      ],
+      
+      derive: [char -> empty()],
+      
+      nullable: [-> {
+        accepts_empty: false,
+        value: null
+      }],
+      
+      compact: [-> empty()]
+    }
+  ]
+  
+  --[[
+    token - Parser for single character
+    
+    Creates a parser that matches a specific character.
+    The basic building block for constructing string parsers.
+    
+    Example: token('a') matches the character 'a'
+  ]]--
+  token: Char -> DerivativeParser [c ->
+    {
+      parse: [state -> 
+        {
+          success: true,
+          value: c,
+          remaining: state.input |> drop(1),
+          position: state.position |> advance_position(1)
+        } iff state.input |> length > 0 && state.input[0] == c or_else {
+          success: false,
+          value: null,
+          remaining: state.input,
+          position: state.position,
+          error: {
+            message: "Expected character: " + c,
+            position: state.position,
+            expected: c,
+            found: state.input |> length > 0 ? state.input[0] : "end of input"
+          }
+        }
+      ],
+      
+      derive: [char -> 
+        epsilon(c) iff char == c or_else empty()
+      ],
+      
+      nullable: [-> {
+        accepts_empty: false,
+        value: null
+      }],
+      
+      compact: [-> token(c)]
+    }
+  ]
+  
+  --[[
+    seq - Concatenate two parsers
+    
+    Creates a parser that matches one parser followed by another.
+    A fundamental combinator for building sequence patterns.
+    
+    Example: seq(token('a'), token('b')) matches the string "ab"
+  ]]--
+  seq: DerivativeParser * DerivativeParser -> DerivativeParser [p1, p2 ->
+    {
+      parse: [state -> 
+        let result1 = p1.parse(state) in
+        
+        if !result1.success {
+          result1
+        } else {
+          let state2 = {
+            input: result1.remaining,
+            position: result1.position,
+            memo: state.memo
+          } in
+          
+          let result2 = p2.parse(state2) in
+          
+          if !result2.success {
+            result2
+          } else {
+            {
+              success: true,
+              value: [result1.value, result2.value],
+              remaining: result2.remaining,
+              position: result2.position
+            }
+          }
+        }
+      ],
+      
+      derive: [char -> 
+        let nullable_p1 = p1.nullable() in
+        
+        if nullable_p1.accepts_empty {
+          alt(
+            seq(p1.derive(char), p2),
+            seq(epsilon(nullable_p1.value), p2.derive(char))
+          )
+        } else {
+          seq(p1.derive(char), p2)
+        }
+      ],
+      
+      nullable: [-> 
+        let nullable_p1 = p1.nullable() in
+        let nullable_p2 = p2.nullable() in
+        
+        {
+          accepts_empty: nullable_p1.accepts_empty && nullable_p2.accepts_empty,
+          value: nullable_p1.accepts_empty && nullable_p2.accepts_empty ?
+                 [nullable_p1.value, nullable_p2.value] :
+                 null
+        }
+      ],
+      
+      compact: [-> 
+        if p1.nullable().accepts_empty {
+          p2
+        } else if p2.nullable().accepts_empty {
+          p1
+        } else if p1 == empty() || p2 == empty() {
+          empty()
+        } else {
+          seq(p1, p2)
+        }
+      ]
+    }
+  ]
+  
+  --[[
+    alt - Alternative between parsers
+    
+    Creates a parser that tries both parsers and succeeds if either succeeds.
+    Essential for representing choice in grammars.
+    
+    Example: alt(token('a'), token('b')) matches either 'a' or 'b'
+  ]]--
+  alt: DerivativeParser * DerivativeParser -> DerivativeParser [p1, p2 ->
+    {
+      parse: [state -> 
+        let result = p1.parse(state) in
+        result iff result.success or_else p2.parse(state)
+      ],
+      
+      derive: [char -> 
+        alt(p1.derive(char), p2.derive(char))
+      ],
+      
+      nullable: [-> 
+        let nullable_p1 = p1.nullable() in
+        let nullable_p2 = p2.nullable() in
+        
+        {
+          accepts_empty: nullable_p1.accepts_empty || nullable_p2.accepts_empty,
+          value: nullable_p1.accepts_empty ? 
+                 nullable_p1.value : 
+                 nullable_p2.accepts_empty ? 
+                 nullable_p2.value : 
+                 null
+        }
+      ],
+      
+      compact: [-> 
+        if p1 == empty() {
+          p2
+        } else if p2 == empty() {
+          p1
+        } else {
+          alt(p1, p2)
+        }
+      ]
+    }
+  ]
+  
+  --[[
+    star - Kleene star (zero or more)
+    
+    Creates a parser that matches zero or more repetitions of another parser.
+    A fundamental combinator for expressing repetition.
+    
+    Example: star(token('a')) matches "", "a", "aa", "aaa", etc.
+  ]]--
+  star: DerivativeParser -> DerivativeParser [p ->
+    {
+      parse: [state -> 
+        -- Use a recursive parsing function instead of a while loop
+        let parse_star = [curr_state, values ->
+          let result = p.parse(curr_state) in
+          
+          if result.success {
+            -- If successful, continue parsing with updated state
+            parse_star(
+              {
+                input: result.remaining,
+                position: result.position,
+                memo: curr_state.memo
+              },
+              values |> append(result.value)
+            )
+          } else {
+            -- Return accumulated result
+            {
+              success: true,
+              value: values,
+              remaining: curr_state.input,
+              position: curr_state.position
+            }
+          }
+        ] in
+        
+        -- Call with initial state and empty values
+        parse_star(state, [])
+      ],
+      
+      derive: [char -> 
+        seq(p.derive(char), star(p))
+      ],
+      
+      nullable: [-> {
+        accepts_empty: true,
+        value: []
+      }],
+      
+      compact: [-> star(p.compact())]
+    }
+  ]
+  
+  --[[
+    derive - Compute parser derivative
+    
+    Computes the derivative of a parser with respect to a character
+    and compacts the result for efficiency.
+    
+    Example: derive(parser, 'a') returns a parser for what comes after 'a'
+  ]]--
+  derive: DerivativeParser * Char -> DerivativeParser [parser, char ->
+    parser.derive(char).compact()
+  ]
+  
+  --[[
+    is_nullable - Check for empty string acceptance
+    
+    Tests whether a parser can accept the empty string.
+    Used for optimization and parser composition.
+    
+    Example: is_nullable(epsilon(42)) returns true
+  ]]--
+  is_nullable: DerivativeParser -> Bool [parser ->
+    parser.nullable().accepts_empty
+  ]
+  
+  --[[
+    get_nullable_value - Get value for empty string
+    
+    Returns the value a parser would produce when parsing the empty string,
+    assuming it accepts the empty string.
+    
+    Example: get_nullable_value(epsilon(42)) returns 42
+  ]]--
+  get_nullable_value: DerivativeParser -> a [parser ->
+    parser.nullable().value
+  ]
+  
+  -- Utility functions (not exported)
+  
+  advance_position: Position * Z -> Position [pos, n ->
+    -- This is a simplified implementation
+    {
+      line: pos.line,
+      column: pos.column + n,
+      offset: pos.offset + n
+    }
+  ]
+}

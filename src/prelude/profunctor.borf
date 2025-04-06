@@ -1,10 +1,14 @@
 --[[
-  Profunctor Module - Bidirectional Programming Abstractions
+  Bidirectional Transformations - Practical Tools for Two-Way Data Flow
 
-  This module defines profunctors, which provide a categorical framework for
-  bidirectional data transformations. Profunctors are "bidirectional functors"
-  that can map both forwards and backwards, making them ideal for implementing
-  parsers/printers, form editors, database access, and bidirectional UIs.
+  This module provides tools for handling data that needs to flow in both directions.
+
+  Common practical uses:
+  - Parser/printer pairs: Parse text into data and format data back to text
+  - Form handling: Load data into forms and save user edits back to storage
+  - UI components: Sync UI elements with application state automatically
+  - Data conversion: Transform between different formats while preserving information
+  - API clients: Map between your app's data model and external API formats
 ]]--
 
 @Profunctor: {
@@ -51,7 +55,7 @@
 
   tau: T.tau
 
-  vis: E |> [e -> true]
+  vis: E |> [e -> e true]
 
   deps: {
     (@Profunctor, @T, true),        -- Type system
@@ -62,67 +66,104 @@
   }
 
   --------------------------------------------------
-  -- Structure Mapping to Profunctor Category
+  -- Design Patterns and Common Transformations
   --------------------------------------------------
 
   --[[
-    Profunctor Category Structure
+    Bidirectional Transformation Patterns
 
-    This mapping establishes @Profunctor as a category where:
-    - Objects are pairs of types (a,b) representing contravariant and covariant parameters
-    - Morphisms are profunctors from a to b
-    - Composition is profunctor composition via dimap
-    - Identity is the identity profunctor
+    This module provides several useful patterns for handling data that moves in both directions:
 
-    Profunctors form a proper category with additional structure including:
-    - Strength for handling products (first, second)
-    - Choice for handling coproducts (left, right)
-    - Closed structure for higher-order transformations
+    - Type Converters: Move between different representations while keeping information intact
+    - Form Handlers: Load data into forms and update data when the form changes
+    - Data Pipelines: Transform information while maintaining the ability to trace back
+    - Parser-Printer Pairs: Parse input formats and regenerate the original format
+    - UI Synchronizers: Keep UI state and application data in sync
   ]]--
   structure: {
-    -- Map Profunctor to a category
-    objects: T.Type * T.Type,        -- Objects are type pairs
-    morphisms: !Profunctor,          -- Morphisms are profunctors
+    -- Base transformations
+    type_converter: [from_a_to_b, from_b_to_a -> {
+      convert: from_a_to_b,
+      restore: from_b_to_a,
 
-    -- Base category structure
-    dom: [p -> (p.a, p.b)],          -- Domain is the input type pair
-    cod: [p -> (p.c, p.d)],          -- Codomain is the output type pair
-    id: [(a, b) -> {                 -- Identity profunctor
-      a: a,
-      b: b,
-      c: a,
-      d: b,
-      dimap: [pre post f -> post(f(pre(x)))]
+      -- Test that converting and restoring gives the original
+      round_trip: [a -> a from_a_to_b from_b_to_a]
     }],
-    compose: [p q -> {               -- Profunctor composition
-      a: q.a,
-      b: q.b,
-      c: p.c,
-      d: p.d,
-      dimap: [pre post f ->
-        p.dimap([x -> q.dimap(pre, [y -> y], x)],
-                post,
-                f)
+
+    -- Form data patterns
+    form_handler: [load_to_form, save_from_form -> {
+      load: load_to_form,
+      save: save_from_form,
+
+      -- Update existing data with form changes
+      update: [data, form -> data save_from_form [form]]
+    }],
+
+    -- Data flow transformations
+    pipeline: [forward, backward -> {
+      process: forward,
+      reverse: backward,
+
+      -- Compose multiple transformations
+      then: [next_forward, next_backward ->
+        [data -> data forward next_forward]
+        [result -> result next_backward backward]
+        pipeline
       ]
     }],
 
-    -- Category laws
-    law.identity: [p ->
-      compose(id(dom(p)), p) == p && compose(p, id(cod(p))) == p
-    ],
-    law.associativity: [p q r ->
-      compose(compose(p, q), r) == compose(p, compose(q, r))
-    ],
+    -- Examples of common operations
+    example: {
+      -- Convert between different formats
+      json_to_object: [json, obj ->
+        parse_json: [j -> j parse_json],
+        to_json: [o -> o stringify_json],
+        pipeline
+      ],
 
-    -- Profunctor-specific laws
-    law.dimap_id: law.dimap_id,
-    law.dimap_compose: law.dimap_compose,
+      -- Form handling with validation
+      validated_form: [data, form ->
+        load_form: [d -> d to_form_values validate_inputs],
+        save_form: [f -> f validate_outputs from_form_values],
+        form_handler
+      ]
+    },
 
-    -- Strong profunctor structure
-    law.first_second: law.first_second,
+    -- Reliability Guarantees
+    guarantees: {
+      -- These laws ensure bidirectional transformations work consistently
 
-    -- Choice profunctor structure
-    law.left_right: law.left_right
+      -- Round-trip consistency (convert back and forth should give the original)
+      round_trip: [forward, backward ->
+        -- What this guarantees: Converting A→B→A gives back the original A
+        [a -> a forward backward a ==]
+      ],
+
+      -- Format consistency (both directions should handle the same data)
+      format_compatibility: [forward, backward ->
+        -- What this guarantees: If data goes one way, it can come back
+        [a -> a forward backward a ==]
+        [b -> b backward forward b ==]
+        and
+      ],
+
+      -- Transformation consistency (order of operations should be predictable)
+      transformation_composition: [f1, f2, g1, g2 ->
+        -- What this guarantees: You can build pipelines in a predictable way
+        [x -> x f1 f2]
+        [x -> x f1 |> f2]
+        ==
+      ],
+
+      -- For users: How to maintain these guarantees in your code
+      user_guide: {
+        -- When creating bidirectional transforms:
+        -- 1. Always test the round trip (A→B→A should equal original A)
+        -- 2. Handle all possible input values in both directions
+        -- 3. Don't lose information in either direction
+        -- 4. Make transformations composable when possible
+      }
+    }
   }
 
   --------------------------------------------------
@@ -130,21 +171,21 @@
   --------------------------------------------------
 
   --[[
-    !Profunctor is a bidirectional functor that can map both forwards and backwards.
-    It allows transforming both input and output types.
+    !Profunctor is a two-way data transformation tool.
+    It lets you convert data between formats while preserving the connection between them.
   ]]--
   !Profunctor: {
-    -- Transform a function from (a -> b) to (c -> d) given transformations
-    -- from c -> a and b -> d
+    -- Transform data between types while keeping their relationship
+    -- Think of it as "adapt input type, then process, then adapt output type"
     dimap: ((c -> a), (b -> d), (a -> b)) -> (c -> d)
   }
 
   --[[
-    !Strong is a profunctor that can operate on tuples, allowing part of the
-    input to pass through unchanged.
+    !Strong provides tools for working with paired data, where you want to transform
+    one part while keeping the other part unchanged (like transforming one field in a record).
   ]]--
   !Strong: {
-    -- Enhance a function from (a -> b) to ((a, c) -> (b, c))
+    -- Process just the first part of a pair, leaving the second part unchanged
     first: (a -> b) -> ((a, c) -> (b, c)),
 
     -- Enhance a function from (a -> b) to ((c, a) -> (c, b))
@@ -203,22 +244,22 @@
   --[[
     dimap transforms both input and output types of a function
   ]]--
-  dimap: (c -> a) * (b -> d) * (a -> b) -> (c -> d) [pre post f ->
-    [c -> post(f(pre(c)))]
+  dimap: (c -> a) * (b -> d) * (a -> b) -> (c -> d) [pre, post, f ->
+    [c -> c pre f post]
   ]
 
   --[[
     lmap transforms only the input type of a function
   ]]--
-  lmap: (c -> a) * (a -> b) -> (c -> b) [pre f ->
-    [c -> f(pre(c))]
+  lmap: (c -> a) * (a -> b) -> (c -> b) [pre, f ->
+    [c -> c pre f]
   ]
 
   --[[
     rmap transforms only the output type of a function
   ]]--
-  rmap: (b -> c) * (a -> b) -> (a -> c) [post f ->
-    [a -> post(f(a))]
+  rmap: (b -> c) * (a -> b) -> (a -> c) [post, f ->
+    [a -> a f post]
   ]
 
   --------------------------------------------------
@@ -231,13 +272,15 @@
   strong: !Profunctor -> !Strong [p ->
     {
       first: [f -> [ac ->
-        let (a, c) = ac in
-        (f(a), c)
+        ac -> (a, c)
+        a f -> b
+        (b, c)
       ]],
 
       second: [f -> [ca ->
-        let (c, a) = ca in
-        (c, f(a))
+        ca -> (c, a)
+        a f -> b
+        (c, b)
       ]]
     }
   ]
@@ -246,42 +289,60 @@
     first lifts a function to operate on the first element of a tuple
   ]]--
   first: (a -> b) -> ((a, c) -> (b, c)) [f ->
-    [(a, c) -> (f(a), c)]
+    [(a, c) ->
+      a f -> b
+      (b, c)
+    ]
   ]
 
   --[[
     second lifts a function to operate on the second element of a tuple
   ]]--
   second: (a -> b) -> ((c, a) -> (c, b)) [f ->
-    [(c, a) -> (c, f(a))]
+    [(c, a) ->
+      a f -> b
+      (c, b)
+    ]
   ]
 
   --[[
     par applies two functions in parallel to a tuple
   ]]--
-  par: (a -> b) * (c -> d) -> ((a, c) -> (b, d)) [f g ->
-    [(a, c) -> (f(a), g(c))]
+  par: (a -> b) * (c -> d) -> ((a, c) -> (b, d)) [f, g ->
+    [(a, c) ->
+      a f -> b
+      c g -> d
+      (b, d)
+    ]
   ]
 
   --[[
     both applies the same function to both elements of a tuple
   ]]--
   both: (a -> b) -> ((a, a) -> (b, b)) [f ->
-    [(a1, a2) -> (f(a1), f(a2))]
+    [(a1, a2) ->
+      a1 f -> b1
+      a2 f -> b2
+      (b1, b2)
+    ]
   ]
 
   --[[
     *** is a parallel application operator
   ]]--
-  ***: (a -> b) * (c -> d) -> ((a, c) -> (b, d)) [f g ->
-    par(f, g)
+  ***: (a -> b) * (c -> d) -> ((a, c) -> (b, d)) [f, g ->
+    f g par
   ]
 
   --[[
     &&& is a fanout operator
   ]]--
-  &&&: (a -> b) * (a -> c) -> (a -> (b, c)) [f g ->
-    [a -> (f(a), g(a))]
+  &&&: (a -> b) * (a -> c) -> (a -> (b, c)) [f, g ->
+    [a ->
+      a f -> b
+      a g -> c
+      (b, c)
+    ]
   ]
 
   --------------------------------------------------
@@ -294,15 +355,17 @@
   choice: !Profunctor -> !Choice [p ->
     {
       left: [f -> [either ->
-        match either with
-          | Left(a) -> Left(f(a))
-          | Right(c) -> Right(c)
+        either {
+          | Left(a) -> a f Left
+          | Right(c) -> c Right
+        } match
       ]],
 
       right: [f -> [either ->
-        match either with
-          | Left(c) -> Left(c)
-          | Right(a) -> Right(f(a))
+        either {
+          | Left(c) -> c Left
+          | Right(a) -> a f Right
+        } match
       ]]
     }
   ]
@@ -312,9 +375,10 @@
   ]]--
   left: (a -> b) -> (Either a c -> Either b c) [f ->
     [either ->
-      match either with
-        | Left(a) -> Left(f(a))
-        | Right(c) -> Right(c)
+      either {
+        | Left(a) -> a f Left
+        | Right(c) -> c Right
+      } match
     ]
   ]
 
@@ -323,46 +387,49 @@
   ]]--
   right: (a -> b) -> (Either c a -> Either c b) [f ->
     [either ->
-      match either with
-        | Left(c) -> Left(c)
-        | Right(a) -> Right(f(a))
+      either {
+        | Left(c) -> c Left
+        | Right(a) -> a f Right
+      } match
     ]
   ]
 
   --[[
     plus applies two functions to different cases of an Either
   ]]--
-  plus: (a -> c) * (b -> d) -> (Either a b -> Either c d) [f g ->
+  plus: (a -> c) * (b -> d) -> (Either a b -> Either c d) [f, g ->
     [either ->
-      match either with
-        | Left(a) -> Left(f(a))
-        | Right(b) -> Right(g(b))
+      either {
+        | Left(a) -> a f Left
+        | Right(b) -> b g Right
+      } match
     ]
   ]
 
   --[[
     fanin combines two functions on an Either into one
   ]]--
-  fanin: (a -> c) * (b -> c) -> (Either a b -> c) [f g ->
+  fanin: (a -> c) * (b -> c) -> (Either a b -> c) [f, g ->
     [either ->
-      match either with
-        | Left(a) -> f(a)
-        | Right(b) -> g(b)
+      either {
+        | Left(a) -> a f
+        | Right(b) -> b g
+      } match
     ]
   ]
 
   --[[
     +++ is a sum application operator
   ]]--
-  +++: (a -> c) * (b -> d) -> (Either a b -> Either c d) [f g ->
-    plus(f, g)
+  +++: (a -> c) * (b -> d) -> (Either a b -> Either c d) [f, g ->
+    f g plus
   ]
 
   --[[
     ||| is a fanin operator
   ]]--
-  |||>: (a -> c) * (b -> c) -> (Either a b -> c) [f g ->
-    fanin(f, g)
+  |||>: (a -> c) * (b -> c) -> (Either a b -> c) [f, g ->
+    f g fanin
   ]
 
   --------------------------------------------------
@@ -374,7 +441,7 @@
   ]]--
   closed: !Profunctor -> !Closed [p ->
     {
-      closed: [f -> [g -> [c -> f(g(c))]]]
+      closed: [f -> [g -> [c -> c g f]]]
     }
   ]
 
@@ -382,21 +449,21 @@
     closed_fn lifts a function to operate on function types
   ]]--
   closed_fn: (a -> b) -> ((c -> a) -> (c -> b)) [f ->
-    [g -> [c -> f(g(c))]]
+    [g -> [c -> c g f]]
   ]
 
   --[[
     curry converts a function on tuples to a curried function
   ]]--
   curry: ((a, b) -> c) -> (a -> (b -> c)) [f ->
-    [a -> [b -> f((a, b))]]
+    [a -> [b -> (a, b) f]]
   ]
 
   --[[
     uncurry converts a curried function to a function on tuples
   ]]--
   uncurry: (a -> (b -> c)) -> ((a, b) -> c) [f ->
-    [(a, b) -> f(a)(b)]
+    [(a, b) -> a f b]
   ]
 
   --------------------------------------------------
@@ -407,81 +474,85 @@
     function creates a profunctor from a regular function
   ]]--
   function: (a -> b) -> !Profunctor [f ->
-    profunctor([pre post g -> [c -> post(g(pre(c)))]])
+    [pre, post, g -> [c -> c pre g post]] profunctor
   ]
 
   --[[
     codec creates a bidirectional codec for serialization/deserialization
   ]]--
-  codec: (a -> b) * (b -> a) -> !Profunctor [encode decode ->
-    profunctor([pre post f -> [c -> post(f(pre(c)))]])
+  codec: (a -> b) * (b -> a) -> !Profunctor [encode, decode ->
+    [pre, post, f -> [c -> c pre f post]] profunctor
   ]
 
   --[[
     lens creates a profunctor from a lens
   ]]--
   lens: @Optics.!Lens -> !Profunctor [l ->
-    profunctor([pre post f -> [s ->
-      let a = pre(s) in
-      let b = f(a) in
-      post(s |> @Optics.set(l, b))
-    ]])
+    [pre, post, f -> [s ->
+      s pre -> a
+      a f -> b
+      s l @Optics.set b post
+    ]] profunctor
   ]
 
   --[[
     prism creates a profunctor from a prism
   ]]--
   prism: @Optics.!Prism -> !Profunctor [p ->
-    profunctor([pre post f -> [s ->
-      match pre(s) with
-        | ?Some(a) -> post(f(a))
-        | ?None -> post(s)
-    ]])
+    [pre, post, f -> [s ->
+      s pre
+      {
+        | ?Some(a) -> a f post
+        | ?None -> s post
+      } match
+    ]] profunctor
   ]
 
   --[[
     adapter creates a profunctor from an isomorphism
   ]]--
   adapter: @Optics.!Iso -> !Profunctor [iso ->
-    profunctor([pre post f -> [s ->
-      let a = pre(s) in
-      let b = f(a) in
-      post(b)
-    ]])
+    [pre, post, f -> [s ->
+      s pre -> a
+      a f -> b
+      b post
+    ]] profunctor
   ]
 
   --[[
     biparser creates a bidirectional parser/printer pair
   ]]--
-  biparser: (S -> ?a) * (a -> S) -> !Profunctor [parse print ->
-    profunctor([pre post f -> [s ->
-      match parse(pre(s)) with
-        | ?Some(a) -> post(print(f(a)))
-        | ?None -> post(pre(s))
-    ]])
+  biparser: (S -> ?a) * (a -> S) -> !Profunctor [parse, print ->
+    [pre, post, f -> [s ->
+      s pre parse
+      {
+        | ?Some(a) -> a f print post
+        | ?None -> s pre post
+      } match
+    ]] profunctor
   ]
 
   --[[
     formlet creates a bidirectional form component
   ]]--
-  formlet: (formValue -> a) * (a -> formValue) -> !Profunctor [get set ->
-    profunctor([pre post f -> [form ->
-      let a = get(pre(form)) in
-      let b = f(a) in
-      post(set(b))
-    ]])
+  formlet: (formValue -> a) * (a -> formValue) -> !Profunctor [get, set ->
+    [pre, post, f -> [form ->
+      form pre get -> a
+      a f -> b
+      b set post
+    ]] profunctor
   ]
 
   --[[
     ui_component creates a bidirectional UI component
   ]]--
-  ui_component: (model -> view) * (view -> action) * (model, action -> model) -> !Profunctor [view_fn action_fn update_fn ->
-    profunctor([pre post f -> [model ->
-      let view = view_fn(pre(model)) in
-      let action = action_fn(view) in
-      let new_model = update_fn(model, action) in
-      post(new_model)
-    ]])
+  ui_component: (model -> view) * (view -> action) * (model, action -> model) -> !Profunctor [view_fn, action_fn, update_fn ->
+    [pre, post, f -> [model ->
+      model pre view_fn -> view
+      view action_fn -> action
+      model action update_fn -> new_model
+      new_model post
+    ]] profunctor
   ]
 
   --------------------------------------------------
@@ -491,43 +562,49 @@
   --[[
     beside combines two profunctors to work alongside each other
   ]]--
-  beside: !Profunctor * !Profunctor -> !Profunctor [p1 p2 ->
-    profunctor([pre post f -> [c ->
-      let (a1, a2) = pre(c) in
-      let b1 = p1.dimap([x -> x], [x -> x], f)([a1]) in
-      let b2 = p2.dimap([x -> x], [x -> x], f)([a2]) in
-      post((b1, b2))
-    ]])
+  beside: !Profunctor * !Profunctor -> !Profunctor [p1, p2 ->
+    [pre, post, f -> [c ->
+      c pre -> (a1, a2)
+      [x -> x] [x -> x] f p1 dimap [a1] -> b1
+      [x -> x] [x -> x] f p2 dimap [a2] -> b2
+      (b1, b2) post
+    ]] profunctor
   ]
 
   --[[
     alongside is an alias for beside
   ]]--
-  alongside: !Profunctor * !Profunctor -> !Profunctor [p1 p2 ->
-    beside(p1, p2)
+  alongside: !Profunctor * !Profunctor -> !Profunctor [p1, p2 ->
+    p1 p2 beside
   ]
 
   --[[
     branch combines two profunctors with a choice
   ]]--
-  branch: !Profunctor * !Profunctor -> !Profunctor [p1 p2 ->
-    profunctor([pre post f -> [c ->
-      match pre(c) with
-        | Left(a1) -> post(Left(p1.dimap([x -> x], [x -> x], f)(a1)))
-        | Right(a2) -> post(Right(p2.dimap([x -> x], [x -> x], f)(a2)))
-    ]])
+  branch: !Profunctor * !Profunctor -> !Profunctor [p1, p2 ->
+    [pre, post, f -> [c ->
+      c pre -> result
+      result {
+        | Left(a1) ->
+          a1 [x -> x] [x -> x] f p1 dimap -> processed
+          processed Left post
+        | Right(a2) ->
+          a2 [x -> x] [x -> x] f p2 dimap -> processed
+          processed Right post
+      } match
+    ]] profunctor
   ]
 
   --[[
     merge combines two profunctors into one
   ]]--
-  merge: !Profunctor * !Profunctor -> !Profunctor [p1 p2 ->
-    profunctor([pre post f -> [c ->
-      let r1 = p1.dimap(pre, post, f)(c) in
-      let r2 = p2.dimap(pre, post, f)(c) in
+  merge: !Profunctor * !Profunctor -> !Profunctor [p1, p2 ->
+    [pre, post, f -> [c ->
+      c pre post f p1 dimap -> r1
+      c pre post f p2 dimap -> r2
       -- In a real implementation, we'd need to merge results intelligently
       r1
-    ]])
+    ]] profunctor
   ]
 
   --------------------------------------------------
@@ -537,40 +614,42 @@
   --[[
     >>> is sequential composition
   ]]--
-  >>>: (a -> b) * (b -> c) -> (a -> c) [f g ->
-    [a -> g(f(a))]
+  >>>: (a -> b) * (b -> c) -> (a -> c) [f, g ->
+    [a -> a f g]
   ]
 
   --[[
     <<< is reverse sequential composition
   ]]--
-  <<<: (b -> c) * (a -> b) -> (a -> c) [g f ->
-    [a -> g(f(a))]
+  <<<: (b -> c) * (a -> b) -> (a -> c) [g, f ->
+    [a -> a f g]
   ]
 
   --[[
     ... is profunctor composition
   ]]--
-  ...: !Profunctor * !Profunctor -> !Profunctor [p1 p2 ->
-    profunctor([pre post f ->
-      p1.dimap(pre, [x -> x], [a ->
-        p2.dimap([x -> x], post, f)(a)
-      ])
-    ])
+  ...: !Profunctor * !Profunctor -> !Profunctor [p1, p2 ->
+    [pre, post, f ->
+      [a ->
+        a [x -> x] post f p2 dimap
+      ]
+      pre
+      p1 dimap
+    ] profunctor
   ]
 
   --[[
     ^>> is a pre-mapping operator
   ]]--
-  ^>>: (c -> a) * (a -> b) -> (c -> b) [pre f ->
-    lmap(pre, f)
+  ^>>: (c -> a) * (a -> b) -> (c -> b) [pre, f ->
+    pre f lmap
   ]
 
   --[[
     >>^ is a post-mapping operator
   ]]--
-  >>^: (a -> b) * (b -> d) -> (a -> d) [f post ->
-    rmap(post, f)
+  >>^: (a -> b) * (b -> d) -> (a -> d) [f, post ->
+    post f rmap
   ]
 
   --------------------------------------------------
@@ -580,30 +659,35 @@
   --[[
     Dimap Identity Law: dimap id id f == f
   ]]--
-  law.dimap_id: !Profunctor * (a -> b) -> Bool [p f ->
-    p.dimap([x -> x], [x -> x], f) == f
+  law.dimap_id: !Profunctor * (a -> b) -> Bool [p, f ->
+    p [x -> x] [x -> x] f dimap f veq
   ]
 
   --[[
     Dimap Composition Law: dimap (f . g) (h . i) == dimap g i . dimap f h
   ]]--
-  law.dimap_compose: !Profunctor * (d -> c) * (c -> a) * (b -> e) * (e -> f) * (a -> b) -> Bool [p f g h i j ->
-    let left = p.dimap([x -> g(f(x))], [x -> i(h(x))], j) in
-    let right = p.dimap(f, i, p.dimap(g, h, j)) in
-    left == right
+  law.dimap_compose: !Profunctor * (d -> c) * (c -> a) * (b -> e) * (e -> f) * (a -> b) -> Bool [p, f, g, h, i, j ->
+    [x -> x f g]
+    [x -> x h i]
+    j p dimap -> left
+
+    j g h p dimap
+    f i p dimap -> right
+
+    left right veq
   ]
 
   --[[
     First-Second Law: first . second == second . first
   ]]--
-  law.first_second: !Strong * (a -> b) -> Bool [s f ->
-    s.first(s.second(f)) == s.second(s.first(f))
+  law.first_second: !Strong * (a -> b) -> Bool [s, f ->
+    s second f s first veq s first f s second
   ]
 
   --[[
     Left-Right Law: left . right == right . left
   ]]--
-  law.left_right: !Choice * (a -> b) -> Bool [c f ->
-    c.left(c.right(f)) == c.right(c.left(f))
+  law.left_right: !Choice * (a -> b) -> Bool [c, f ->
+    c right f c left veq c left f c right
   ]
 }
