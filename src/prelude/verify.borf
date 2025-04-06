@@ -316,7 +316,7 @@
 
   --[[
     Structure mapping that establishes @Verify as a category.
-    
+
     In this categorical structure:
     - Objects are verification functions with different implementations
     - Morphisms are transformations between verification functions (refinements, optimizations)
@@ -327,36 +327,36 @@
     -- Map Verify to a category
     objects: [v | v is (a -> VerificationResult) for some a],
     morphisms: [f g -> (f -> g)],
-    
+
     -- Base category structure
     dom: [t -> t.source],
     cod: [t -> t.target],
     id: [v -> [v' -> v']],  -- Identity transformation
     compose: [t1 t2 -> [v -> t2(t1(v))]],  -- Composition of transformations
-    
+
     -- Functor to transformation category
     to_transform: [v -> @Cata.VerifyXf.verification_identity(v)],
     from_transform: [t -> t.target],
-    
+
     -- Properties of transformations
-    preserves_correctness: [t v -> 
+    preserves_correctness: [t v ->
       let original_result = v(input) in
       let transformed_result = t(v)(input) in
       original_result.success implies transformed_result.success
     ],
-    
+
     -- Laws for the category
     laws: {
       -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
       associativity: forall [t1 t2 t3 ->
         compose(compose(t1, t2), t3) == compose(t1, compose(t2, t3))
       ],
-      
+
       -- Identity: id ∘ f = f = f ∘ id
       identity: forall [t ->
         compose(id(dom(t)), t) == t && compose(t, id(cod(t))) == t
       ],
-      
+
       -- Correctness preservation
       correctness: forall [t v ->
         preserves_correctness(t, v)

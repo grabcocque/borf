@@ -1,0 +1,541 @@
+--[[
+  Pi (Dependent Function) Type System
+
+  This module defines a dependent function type system where return types can depend
+  on the values of input parameters. Pi types are a central feature of dependent type
+  systems and enable expressing powerful invariants and specifications.
+]]--
+
+@Pi: {
+  typ: {
+    -- Core dependent types
+    PiType PiFn PiCtx
+    
+    -- Type expressions
+    TypeExpr TypeApp TypeLam TypeVar
+    
+    -- Proof terms
+    Proof Judgment Derivation
+  }
+
+  op: {
+    -- Type operators
+    Π λ →
+    
+    -- Judgment operators
+    ⊢ ⊣ ⊨
+    
+    -- Equality operators
+    ≡ ≢ ≤
+  }
+
+  fn: {
+    -- Core type functions
+    pi_type pi_fn pi_app
+    type_eval type_check type_infer
+    
+    -- Context operations
+    ctx_empty ctx_extend ctx_merge
+    
+    -- Proof operations
+    derive check infer
+    prove subst
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Pi, @T, true),           -- Add dependency on Type system
+    (@Pi, @Unrestricted, true), -- Add dependency on Unrestricted type system
+    (@Pi, @Cat, true),          -- Add dependency on Category theory
+    (@Pi, @Context, true)       -- Add dependency on Context category
+  }
+
+  --------------------------------------------------
+  -- Core Dependent Types
+  --------------------------------------------------
+
+  --[[
+    PiType defines a dependent function type Π(x:A).B(x)
+    where B's type depends on the value of x
+  ]]--
+  PiType: {
+    param_name: S,
+    param_type: TypeExpr,
+    return_type_fn: (a -> TypeExpr)  -- Function from values to types
+  }
+
+  --[[
+    PiFn defines a dependent function with a PiType
+  ]]--
+  PiFn: {
+    type: PiType,
+    body: (a -> b)  -- Actual implementation
+  }
+
+  --[[
+    PiCtx defines a typing context for dependent types
+  ]]--
+  PiCtx: {
+    bindings: S:-> TypeExpr,
+    assumptions: [Judgment]  -- Logical assumptions in scope
+  }
+
+  --[[
+    TypeExpr defines a type expression in the dependent type system
+  ]]--
+  TypeExpr: TypeApp | TypeLam | TypeVar | T.Type
+
+  --[[
+    TypeApp represents a type application, like T(v)
+  ]]--
+  TypeApp: {
+    fn: TypeExpr,
+    arg: a
+  }
+
+  --[[
+    TypeLam represents a type-level function
+  ]]--
+  TypeLam: {
+    param: S,
+    param_type: TypeExpr,
+    body: TypeExpr
+  }
+
+  --[[
+    TypeVar represents a type variable
+  ]]--
+  TypeVar: {
+    name: S
+  }
+
+  --[[
+    Judgment represents a typing judgment
+  ]]--
+  Judgment: {
+    ctx: PiCtx,
+    expr: a,
+    type: TypeExpr
+  }
+
+  --------------------------------------------------
+  -- Type Constructors and Functions
+  --------------------------------------------------
+
+  --[[
+    pi_type creates a dependent function type Π(x:A).B(x)
+  ]]--
+  pi_type: S * TypeExpr * (a -> TypeExpr) -> PiType [param param_type return_type_fn ->
+    {
+      param_name: param,
+      param_type: param_type,
+      return_type_fn: return_type_fn
+    }
+  ]
+
+  --[[
+    pi_fn creates a dependent function with implementation
+  ]]--
+  pi_fn: S * TypeExpr * (a -> TypeExpr) * (a -> b) -> PiFn [param param_type return_type_fn body ->
+    {
+      type: pi_type(param, param_type, return_type_fn),
+      body: body
+    }
+  ]
+
+  --[[
+    pi_app applies a dependent function to an argument
+  ]]--
+  pi_app: PiFn * a -> b [fn arg ->
+    -- Check that the argument has the correct type
+    if not type_check(arg, fn.type.param_type) {
+      error("Type mismatch: argument doesn't match parameter type")
+    }
+    
+    -- Compute the expected return type for this specific argument
+    let expected_return_type = fn.type.return_type_fn(arg) in
+    
+    -- Apply the function
+    let result = fn.body(arg) in
+    
+    -- Verify the result type
+    if not type_check(result, expected_return_type) {
+      error("Return type mismatch in dependent function application")
+    }
+    
+    result
+  ]
+
+  --[[
+    type_eval evaluates a type expression in a context
+  ]]--
+  type_eval: TypeExpr * PiCtx -> TypeExpr [expr ctx ->
+    match expr with
+      -- Evaluate type application
+      | { _type: "TypeApp", fn: f, arg: a } ->
+          let evaluated_fn = type_eval(f, ctx) in
+          let evaluated_arg = a in  -- Assume arg is already a value
+          
+          match evaluated_fn with
+            | { _type: "TypeLam", param: p, body: b } ->
+                -- Substitute arg into the body
+                type_eval(subst_type(b, p, evaluated_arg), ctx)
+            | _ ->
+                -- Cannot apply non-function type
+                error("Cannot apply non-function type")
+      
+      -- Look up type variable
+      | { _type: "TypeVar", name: n } ->
+          if n in ctx.bindings {
+            ctx.bindings[n]
+          } else {
+            error("Unbound type variable: " + n)
+          }
+      
+      -- Type lambda is already a value
+      | { _type: "TypeLam" } ->
+          expr
+      
+      -- Base type is already a value
+      | _ ->
+          expr
+  ]
+
+  --[[
+    type_check checks if a value has the expected type
+  ]]--
+  type_check: a * TypeExpr -> Bool [val type_expr ->
+    -- In a real implementation, this would perform proper type checking
+    -- with support for dependent types
+    true
+  ]
+
+  --[[
+    type_infer infers the type of a value
+  ]]--
+  type_infer: a * PiCtx -> TypeExpr [val ctx ->
+    -- In a real implementation, this would perform proper type inference
+    -- with support for dependent types
+    { _type: "TypeVar", name: "Any" }
+  ]
+
+  --[[
+    subst_type substitutes a value for a variable in a type expression
+  ]]--
+  subst_type: TypeExpr * S * a -> TypeExpr [expr var val ->
+    match expr with
+      -- Substitute in type application
+      | { _type: "TypeApp", fn: f, arg: a } ->
+          { _type: "TypeApp", fn: subst_type(f, var, val), arg: a }
+      
+      -- Substitute in type lambda, but watch for shadowing
+      | { _type: "TypeLam", param: p, param_type: pt, body: b } ->
+          if p == var {
+            -- The parameter shadows the variable we're substituting
+            expr
+          } else {
+            -- Substitute in the body
+            { _type: "TypeLam", param: p, param_type: subst_type(pt, var, val), body: subst_type(b, var, val) }
+          }
+      
+      -- Substitute type variable
+      | { _type: "TypeVar", name: n } ->
+          if n == var {
+            -- This is the variable we're substituting
+            val
+          } else {
+            -- Different variable, leave unchanged
+            expr
+          }
+      
+      -- Base type, leave unchanged
+      | _ ->
+          expr
+  ]
+
+  --------------------------------------------------
+  -- Context Operations
+  --------------------------------------------------
+
+  --[[
+    ctx_empty creates an empty typing context
+  ]]--
+  ctx_empty: () -> PiCtx [->
+    {
+      bindings: {},
+      assumptions: []
+    }
+  ]
+
+  --[[
+    ctx_extend extends a context with a new type binding
+  ]]--
+  ctx_extend: PiCtx * S * TypeExpr -> PiCtx [ctx var type_expr ->
+    {
+      bindings: ctx.bindings cup { var: type_expr },
+      assumptions: ctx.assumptions
+    }
+  ]
+
+  --[[
+    ctx_assume extends a context with a new assumption
+  ]]--
+  ctx_assume: PiCtx * Judgment -> PiCtx [ctx assumption ->
+    {
+      bindings: ctx.bindings,
+      assumptions: ctx.assumptions + [assumption]
+    }
+  ]
+
+  --[[
+    ctx_merge merges two contexts
+  ]]--
+  ctx_merge: PiCtx * PiCtx -> PiCtx [ctx1 ctx2 ->
+    {
+      bindings: ctx1.bindings cup ctx2.bindings,
+      assumptions: ctx1.assumptions + ctx2.assumptions
+    }
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping to Categorical Semantics
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @Pi as a locally cartesian closed category.
+    
+    In this categorical structure:
+    - Objects are types in a context (contextual types)
+    - Morphisms are dependent functions between types
+    - Slices Ctx/A represent the context with a distinguished variable of type A
+    - Dependent products Π(a:A)B(a) are particular adjoints
+  ]]--
+  structure: {
+    -- Map Pi to a locally cartesian closed category
+    objects: [ctx:PiCtx, type:TypeExpr],  -- Types in contexts
+    morphisms: [a b -> [pifn | source(pifn) == a && target(pifn) == b]],
+    
+    -- Base category structure
+    dom: [f -> source(f)],
+    cod: [f -> target(f)],
+    id: [a -> identity_pi_fn(a)],
+    compose: [f g -> compose_pi_fn(f, g)],
+    
+    -- Slice category structure
+    slice: [ctx A -> create_slice(ctx, A)],
+    base: [ctx A -> ctx],
+    fiber: [ctx A -> A],
+    
+    -- Adjunction structure (dependent products)
+    dependent_product: [ctx A B -> pi_type("x", A, [x -> B])],
+    curry: [f -> curry_pi_fn(f)],
+    uncurry: [f -> uncurry_pi_fn(f)],
+    
+    -- Connection to context category
+    to_context: [ctx_type -> @Context.extend(@Context.empty(), "x", ctx_type[1])],
+    from_context: [@Context.Ctx -> [empty_ctx(), @Context.lookup(ctx, "x").type]],
+    
+    -- Pi as right adjoint to context extension
+    context_extension: [@Context.Ctx * TypeExpr -> @Context.extend(ctx, "x", type)],
+    
+    -- Laws for dependent type category
+    laws: {
+      -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
+      associativity: forall [f g h ->
+        compose(compose(f, g), h) == compose(f, compose(g, h))
+      ],
+      
+      -- Identity: id ∘ f = f = f ∘ id
+      identity: forall [f ->
+        compose(id(dom(f)), f) == f && compose(f, id(cod(f))) == f
+      ],
+      
+      -- Beck-Chevalley condition (for dependent products)
+      beck_chevalley: forall [f A B ->
+        reindex(dependent_product(cod(f), A, B), f) ==
+        dependent_product(dom(f), reindex(A, f), reindex(B, f))
+      ],
+      
+      -- Pi-Context adjunction law
+      pi_context_adjunction: true  -- Π ⊣ Context-extension
+    }
+  }
+  
+  --[[
+    Helper function to get the source of a pi function
+  ]]--
+  source: PiFn -> [PiCtx, TypeExpr] [fn ->
+    [create_ctx_from_type(fn.type.param_type), fn.type.param_type]
+  ]
+  
+  --[[
+    Helper function to get the target of a pi function
+  ]]--
+  target: PiFn -> [PiCtx, TypeExpr] [fn ->
+    let ctx = create_ctx_from_type(fn.type.param_type) in
+    let ctx_with_param = ctx_extend(ctx, fn.type.param_name, fn.type.param_type) in
+    [ctx_with_param, fn.type.return_type_fn(placeholder_value(fn.type.param_type))]
+  ]
+  
+  --[[
+    Helper function to create a context from a type
+  ]]--
+  create_ctx_from_type: TypeExpr -> PiCtx [type ->
+    -- In a real implementation, this would extract free variables
+    ctx_empty()
+  ]
+  
+  --[[
+    Helper function to create a placeholder value of a given type
+  ]]--
+  placeholder_value: TypeExpr -> a [type ->
+    -- In a real implementation, this would create a symbolic value
+    null
+  ]
+  
+  --[[
+    Helper function to create an identity pi function
+  ]]--
+  identity_pi_fn: [PiCtx, TypeExpr] -> PiFn [ctx_type ->
+    let ctx = ctx_type[0] in
+    let type = ctx_type[1] in
+    
+    pi_fn("x", type, [_ -> type], [x -> x])
+  ]
+  
+  --[[
+    Helper function to compose pi functions
+  ]]--
+  compose_pi_fn: PiFn * PiFn -> PiFn [f g ->
+    -- In a real implementation, this would handle dependent composition
+    pi_fn(
+      "x",
+      f.type.param_type,
+      [x -> g.type.return_type_fn(f.body(x))],
+      [x -> g.body(f.body(x))]
+    )
+  ]
+  
+  --[[
+    Helper function to create a slice category
+  ]]--
+  create_slice: PiCtx * TypeExpr -> [PiCtx, TypeExpr] [ctx type ->
+    [ctx_extend(ctx, "slice_var", type), type]
+  ]
+  
+  --[[
+    Helper function to reindex a type along a function
+  ]]--
+  reindex: TypeExpr * PiFn -> TypeExpr [type f ->
+    -- In a real implementation, this would substitute through the type
+    type_subst(type, f)
+  ]
+  
+  --[[
+    Helper function to substitute through a type
+  ]]--
+  type_subst: TypeExpr * PiFn -> TypeExpr [type f ->
+    -- In a real implementation, this would perform substitution
+    type
+  ]
+  
+  --[[
+    Helper function to curry a pi function
+  ]]--
+  curry_pi_fn: PiFn -> PiFn [f ->
+    -- In a real implementation, this would implement proper currying
+    f
+  ]
+  
+  --[[
+    Helper function to uncurry a pi function
+  ]]--
+  uncurry_pi_fn: PiFn -> PiFn [f ->
+    -- In a real implementation, this would implement proper uncurrying
+    f
+  ]
+  
+  --------------------------------------------------
+  -- Example Dependent Functions
+  --------------------------------------------------
+  
+  --[[
+    Example: Vector with length encoded in the type
+  ]]--
+  example.vector: TypeExpr [->
+    -- Define natural numbers type
+    let Nat = { _type: "TypeVar", name: "Nat" } in
+    
+    -- Define vector type constructor: Π(n:Nat).Vector(n)
+    -- Vector(n) is a type of vectors with exactly n elements
+    let Vector = type_lam("n", Nat, type_app({ _type: "TypeVar", name: "Vector" }, type_var("n"))) in
+    
+    -- Return the Vector type constructor
+    Vector
+  ]
+  
+  --[[
+    Example: Dependent function for safe vector access
+  ]]--
+  example.vector_nth: () -> PiFn [->
+    -- Define natural numbers type
+    let Nat = { _type: "TypeVar", name: "Nat" } in
+    
+    -- Define the vector type as above
+    let Vector = example.vector() in
+    
+    -- Define the index type: Π(n:Nat).Fin(n)
+    -- Fin(n) is a type with exactly n elements, representing indices 0..n-1
+    let Fin = type_lam("n", Nat, type_app({ _type: "TypeVar", name: "Fin" }, type_var("n"))) in
+    
+    -- Define vector element type
+    let Elem = { _type: "TypeVar", name: "A" } in
+    
+    -- Define the dependent function type for safe vector access:
+    -- Π(n:Nat).(Π(v:Vector(n)).(Π(i:Fin(n)).A))
+    -- This guarantees the index is in bounds by making it of type Fin(n)
+    pi_fn(
+      "n",
+      Nat,
+      [n -> pi_type(
+        "v",
+        type_app(Vector, n),
+        [v -> pi_type(
+          "i",
+          type_app(Fin, n),
+          [_ -> Elem]
+        )]
+      )],
+      [n -> [v -> [i ->
+        -- In a real implementation, this would access the i-th element of v
+        v[i]
+      ]]]
+    )
+  ]
+  
+  --[[
+    Helper function to create a type lambda
+  ]]--
+  type_lam: S * TypeExpr * TypeExpr -> TypeExpr [param param_type body ->
+    { _type: "TypeLam", param: param, param_type: param_type, body: body }
+  ]
+  
+  --[[
+    Helper function to create a type application
+  ]]--
+  type_app: TypeExpr * a -> TypeExpr [fn arg ->
+    { _type: "TypeApp", fn: fn, arg: arg }
+  ]
+  
+  --[[
+    Helper function to create a type variable
+  ]]--
+  type_var: S -> TypeExpr [name ->
+    { _type: "TypeVar", name: name }
+  ]
+} 

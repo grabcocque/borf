@@ -1,0 +1,465 @@
+--[[
+  Context Category Transformations
+
+  This module defines transformations between context categories, including
+  the fibration of types over contexts. These structures form the foundation
+  for dependent type theory and establish the relationship between Pi and Sigma
+  types as adjoints in the category of contexts.
+]]--
+
+@ContextXf: {
+  typ: {
+    -- Core transformation types
+    ContextTransform
+    TypeFibration
+    TermFibration
+    
+    -- Specific transformations
+    ContextSubstitution
+    TypeReindexing
+    TermReindexing
+    
+    -- Fibration types
+    Fiber CartesianLift
+  }
+
+  op: {
+    -- Fibration operators
+    π p ⨯ △
+    
+    -- Substitution operators
+    ∘ σ τ δ
+    
+    -- Dependency operators
+    Γ.A Γ⊢A
+  }
+
+  fn: {
+    -- Core fibration functions
+    total_category fiber_over base_of
+    reindex cartesian_lift
+    
+    -- Context transformations
+    context_substitution apply_substitution
+    context_projection context_extension
+    
+    -- Type operations
+    type_reindexing dependent_product dependent_sum
+    
+    -- Structure transformations
+    ctx_to_pi ctx_to_sigma
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@ContextXf, @T, true),          -- Add dependency on Type system
+    (@ContextXf, @Context, true),    -- Add dependency on Context category
+    (@ContextXf, @Pi, true),         -- Add dependency on Pi type system
+    (@ContextXf, @Sigma, true),      -- Add dependency on Sigma type system
+    (@ContextXf, @CatXf, true)       -- Add dependency on Category transformations
+  }
+
+  --------------------------------------------------
+  -- Types in Context Fibration
+  --------------------------------------------------
+
+  --[[
+    TypeFibration defines a fibration of types over contexts
+  ]]--
+  TypeFibration: {
+    total_category: @CatXf.Category,  -- Category of types-in-context
+    base_category: @CatXf.Category,   -- Category of contexts
+    projection: @CatXf.Functor        -- Forgetful functor from types to contexts
+  }
+
+  --[[
+    Fiber represents the fiber of types over a given context
+  ]]--
+  Fiber: {
+    context: @Context.Ctx,
+    types: [@Context.TypeExpr]
+  }
+
+  --[[
+    CartesianLift represents a cartesian lifting of a substitution
+  ]]--
+  CartesianLift: {
+    substitution: @Context.Substitution,
+    morphism: @CatXf.Morphism
+  }
+
+  --[[
+    TermFibration defines a fibration of terms over types-in-context
+  ]]--
+  TermFibration: {
+    total_category: @CatXf.Category,  -- Category of terms
+    base_category: @CatXf.Category,   -- Category of types-in-context
+    projection: @CatXf.Functor        -- Forgetful functor from terms to types
+  }
+
+  --------------------------------------------------
+  -- Core Fibration Functions
+  --------------------------------------------------
+
+  --[[
+    create_type_fibration creates the fundamental fibration of types over contexts
+  ]]--
+  create_type_fibration: () -> TypeFibration [->
+    {
+      total_category: create_types_in_context_category(),
+      base_category: @Context.structure,
+      projection: create_context_projection()
+    }
+  ]
+
+  --[[
+    create_types_in_context_category creates the category of types-in-context
+  ]]--
+  create_types_in_context_category: () -> @CatXf.Category [->
+    {
+      objects: [@Context.Ctx, @Context.TypeExpr],  -- Pairs of (context, type)
+      morphisms: [tic1 tic2 -> {
+        substitution: @Context.Substitution,  -- Context substitution
+        type_map: @Context.TypeExpr          -- Additional type transformation
+      }],
+      
+      -- Basic category structure
+      dom: [morph -> morph.substitution.source],
+      cod: [morph -> morph.substitution.target],
+      
+      id: [obj -> {
+        substitution: @Context.id_subst(obj[0]),
+        type_map: obj[1]
+      }],
+      
+      compose: [f g -> {
+        substitution: @Context.compose_subst(f.substitution, g.substitution),
+        type_map: apply_type_map(g.type_map, f)
+      }]
+    }
+  ]
+
+  --[[
+    create_context_projection creates the projection functor from types-in-context to contexts
+  ]]--
+  create_context_projection: () -> @CatXf.Functor [->
+    {
+      source_category: create_types_in_context_category(),
+      target_category: @Context.structure,
+      
+      map_obj: [obj -> obj[0]],  -- Take just the context
+      map_morph: [morph -> morph.substitution],  -- Take just the substitution
+      
+      preserves_id: true,
+      preserves_composition: true
+    }
+  ]
+
+  --[[
+    fiber_over gets the fiber of types over a context
+  ]]--
+  fiber_over: TypeFibration * @Context.Ctx -> Fiber [fib ctx ->
+    {
+      context: ctx,
+      types: @Context.types_in_context(ctx)
+    }
+  ]
+
+  --[[
+    reindex performs type reindexing along a substitution
+  ]]--
+  reindex: @Context.TypeExpr * @Context.Substitution -> @Context.TypeExpr [type subst ->
+    @Context.type_subst(type, subst)
+  ]
+
+  --[[
+    cartesian_lift creates a cartesian lift of a substitution
+  ]]--
+  cartesian_lift: TypeFibration * @Context.Substitution * @Context.TypeExpr -> CartesianLift [fib subst type ->
+    let reindexed_type = reindex(type, subst) in
+    
+    {
+      substitution: subst,
+      morphism: {
+        substitution: subst,
+        type_map: reindexed_type
+      }
+    }
+  ]
+
+  --[[
+    apply_type_map applies a type transformation
+  ]]--
+  apply_type_map: @Context.TypeExpr * {substitution: @Context.Substitution} -> @Context.TypeExpr [type morph ->
+    reindex(type, morph.substitution)
+  ]
+
+  --------------------------------------------------
+  -- Context Extension and Pi/Sigma Relationship
+  --------------------------------------------------
+
+  --[[
+    context_extension extends a context with a type
+  ]]--
+  context_extension: @Context.Ctx * @Context.TypeExpr -> @Context.Ctx [ctx type ->
+    @Context.extend(ctx, "x", type)
+  ]
+
+  --[[
+    context_projection creates a projection substitution from an extended context
+  ]]--
+  context_projection: @Context.Ctx * @Context.TypeExpr -> @Context.Substitution [ctx type ->
+    -- Create a weakening substitution that forgets the last variable
+    let extended = context_extension(ctx, type) in
+    
+    {
+      source: extended,
+      target: ctx,
+      mappings: extract_all_but_last(extended.bindings)
+    }
+  ]
+
+  --[[
+    extract_all_but_last gets all but the last binding for context projection
+  ]]--
+  extract_all_but_last: [@Context.Variable] -> [@Context.Term] [vars ->
+    if length(vars) <= 1 {
+      []
+    } else {
+      let all_but_last = take(length(vars) - 1, vars) in
+      all_but_last |> map [var -> @Context.variable_term(var)]
+    }
+  ]
+
+  --[[
+    dependent_product creates a Pi type from a type in an extended context
+  ]]--
+  dependent_product: @Context.Ctx * @Context.TypeExpr * @Context.TypeExpr -> @Pi.PiType [ctx param_type return_type ->
+    @Pi.pi_type(
+      "x",
+      param_type,
+      [x -> return_type]  -- Here the dependency is explicit
+    )
+  ]
+
+  --[[
+    dependent_sum creates a Sigma type from a type in an extended context
+  ]]--
+  dependent_sum: @Context.Ctx * @Context.TypeExpr * @Context.TypeExpr -> @Sigma.SigmaType [ctx param_type return_type ->
+    @Sigma.sigma_type(
+      "x",
+      param_type,
+      [x -> return_type]  -- Here the dependency is explicit
+    )
+  ]
+
+  --------------------------------------------------
+  -- Transformations Between Contexts and Pi/Sigma
+  --------------------------------------------------
+
+  --[[
+    ctx_to_pi transforms a type in an extended context to a Pi type
+  ]]--
+  ctx_to_pi: (@Context.Ctx * @Context.TypeExpr * @Context.TypeExpr) -> @Pi.PiType [ctx_types ->
+    let (ctx, param_type, return_type) = ctx_types in
+    dependent_product(ctx, param_type, return_type)
+  ]
+
+  --[[
+    pi_to_ctx transforms a Pi type to a type in an extended context
+  ]]--
+  pi_to_ctx: @Pi.PiType -> (@Context.Ctx * @Context.TypeExpr * @Context.TypeExpr) [pi_type ->
+    let ctx = @Context.empty() in
+    let param_type = convert_type_expr(pi_type.param_type) in
+    let extended_ctx = context_extension(ctx, param_type) in
+    let return_type = convert_type_expr(pi_type.return_type_fn(create_placeholder(pi_type.param_type))) in
+    
+    (ctx, param_type, return_type)
+  ]
+
+  --[[
+    ctx_to_sigma transforms a type in an extended context to a Sigma type
+  ]]--
+  ctx_to_sigma: (@Context.Ctx * @Context.TypeExpr * @Context.TypeExpr) -> @Sigma.SigmaType [ctx_types ->
+    let (ctx, param_type, return_type) = ctx_types in
+    dependent_sum(ctx, param_type, return_type)
+  ]
+
+  --[[
+    sigma_to_ctx transforms a Sigma type to a type in an extended context
+  ]]--
+  sigma_to_ctx: @Sigma.SigmaType -> (@Context.Ctx * @Context.TypeExpr * @Context.TypeExpr) [sigma_type ->
+    let ctx = @Context.empty() in
+    let param_type = convert_type_expr(sigma_type.fst_type) in
+    let extended_ctx = context_extension(ctx, param_type) in
+    let return_type = convert_type_expr(sigma_type.snd_type_fn(create_placeholder(sigma_type.fst_type))) in
+    
+    (ctx, param_type, return_type)
+  ]
+
+  --[[
+    convert_type_expr converts between TypeExpr implementations
+  ]]--
+  convert_type_expr: @Pi.TypeExpr -> @Context.TypeExpr [type ->
+    -- In a real implementation, this would handle conversion between TypeExpr representations
+    type
+  ]
+
+  --[[
+    create_placeholder creates a placeholder value of a type
+  ]]--
+  create_placeholder: @Pi.TypeExpr -> a [type ->
+    -- In a real implementation, this would create a suitable placeholder value
+    null
+  ]
+
+  --------------------------------------------------
+  -- Categorical Structure of Context Transformations
+  --------------------------------------------------
+
+  --[[
+    Structure that captures the fibration of types over contexts and 
+    establishes the relationship between contexts and dependent types.
+    
+    Key relationships formalized here:
+    1. The context category as base of the fibration
+    2. The types-in-context category as total space of the fibration
+    3. The adjunctions between context extension and Π/Σ types
+  ]]--
+  structure: {
+    -- The fibration of types over contexts
+    type_fibration: create_type_fibration(),
+    
+    -- Category of contexts
+    context_category: @Context.structure,
+    
+    -- Dependent function adjunction (Pi types)
+    dependent_product_adjunction: {
+      left_functor: [ctx -> context_extension(ctx)],
+      right_functor: [ctx -> dependent_product(ctx)],
+      unit: [ctx -> create_unit_transformation(ctx)],
+      counit: [ctx -> create_counit_transformation(ctx)],
+      
+      -- Adjunction law: context extension ⊣ dependent product
+      is_adjunction: true
+    },
+    
+    -- Dependent pair adjunction (Sigma types)
+    dependent_sum_adjunction: {
+      left_functor: [ctx -> dependent_sum(ctx)],
+      right_functor: [ctx -> context_extension(ctx)],
+      unit: [ctx -> create_sum_unit_transformation(ctx)],
+      counit: [ctx -> create_sum_counit_transformation(ctx)],
+      
+      -- Adjunction law: dependent sum ⊣ context extension
+      is_adjunction: true
+    },
+    
+    -- Cartesian fibration property (reindexing preserves pullbacks)
+    cartesian_property: forall [subst type ->
+      is_cartesian_lift(cartesian_lift(type_fibration, subst, type))
+    ],
+    
+    -- Beck-Chevalley condition for dependent product
+    beck_chevalley_product: forall [subst type ctx ->
+      reindex(dependent_product(ctx, type), subst) ==
+      dependent_product(base_of(subst), reindex(type, apply_substitution(subst)))
+    ],
+    
+    -- Beck-Chevalley condition for dependent sum
+    beck_chevalley_sum: forall [subst type ctx ->
+      reindex(dependent_sum(ctx, type), subst) ==
+      dependent_sum(base_of(subst), reindex(type, apply_substitution(subst)))
+    ]
+  }
+  
+  --[[
+    Helper function to create unit transformation for Pi-adjunction
+  ]]--
+  create_unit_transformation: @Context.Ctx -> a [ctx ->
+    -- In a real implementation, this would create the unit natural transformation
+    null
+  ]
+  
+  --[[
+    Helper function to create counit transformation for Pi-adjunction
+  ]]--
+  create_counit_transformation: @Context.Ctx -> a [ctx ->
+    -- In a real implementation, this would create the counit natural transformation
+    null
+  ]
+  
+  --[[
+    Helper function to create unit transformation for Sigma-adjunction
+  ]]--
+  create_sum_unit_transformation: @Context.Ctx -> a [ctx ->
+    -- In a real implementation, this would create the unit natural transformation
+    null
+  ]
+  
+  --[[
+    Helper function to create counit transformation for Sigma-adjunction
+  ]]--
+  create_sum_counit_transformation: @Context.Ctx -> a [ctx ->
+    -- In a real implementation, this would create the counit natural transformation
+    null
+  ]
+  
+  --[[
+    Helper function to check if a lift is cartesian
+  ]]--
+  is_cartesian_lift: CartesianLift -> Bool [lift ->
+    -- In a real implementation, this would verify the cartesian property
+    true
+  ]
+  
+  --[[
+    Helper function to get the base of a substitution
+  ]]--
+  base_of: @Context.Substitution -> @Context.Ctx [subst ->
+    subst.source
+  ]
+  
+  --[[
+    Helper function to apply a substitution
+  ]]--
+  apply_substitution: @Context.Substitution -> @Context.Substitution [subst ->
+    subst
+  ]
+  
+  --[[
+    Helper function to get length of a list
+  ]]--
+  length: [a] -> Z [list ->
+    match list with
+      | [] -> 0
+      | [_ @ rest] -> 1 + length(rest)
+  ]
+  
+  --[[
+    Helper function to take first n elements of a list
+  ]]--
+  take: Z * [a] -> [a] [n list ->
+    if n <= 0 {
+      []
+    } else {
+      match list with
+        | [] -> []
+        | [first @ rest] -> [first] + take(n - 1, rest)
+    }
+  ]
+  
+  --[[
+    Helper function to map a function over a list
+  ]]--
+  map: [a] * (a -> b) -> [b] [list f ->
+    match list with
+      | [] -> []
+      | [first @ rest] -> [f(first)] + map(rest, f)
+  ]
+} 

@@ -1,0 +1,460 @@
+--[[
+  Context Category
+
+  This module defines the category of contexts for dependent type theory,
+  where contexts are lists of typed variables and morphisms are substitutions.
+  This category forms the foundation for both Pi (dependent function) and Sigma
+  (dependent pair) type systems.
+]]--
+
+@Context: {
+  typ: {
+    -- Core context types
+    Ctx Variable Substitution
+    
+    -- Type expressions
+    TypeExpr TypeApp TypeLam TypeVar
+    
+    -- Judgment types
+    Judgment Derivation
+  }
+
+  op: {
+    -- Context operators
+    ⋅ ,
+    
+    -- Judgment operators
+    ⊢ ⊣ ⊨
+    
+    -- Substitution operators
+    ∘ [_/_]
+  }
+
+  fn: {
+    -- Core context functions
+    empty extend lookup
+    
+    -- Substitution functions
+    id_subst compose_subst apply_subst
+    
+    -- Type operations
+    type_eval type_check type_subst
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Context, @T, true)         -- Add dependency on Type system
+  }
+
+  --------------------------------------------------
+  -- Core Context Types
+  --------------------------------------------------
+
+  --[[
+    Ctx defines a typing context for dependent types
+  ]]--
+  Ctx: {
+    bindings: [Variable],  -- Ordered list of variable bindings
+    assumptions: [Judgment]  -- Logical assumptions in scope
+  }
+
+  --[[
+    Variable defines a typed variable in a context
+  ]]--
+  Variable: {
+    name: S,
+    type: TypeExpr,
+    index: Z  -- De Bruijn index for easy substitution
+  }
+
+  --[[
+    Substitution defines a mapping from variables in one context to terms in another
+  ]]--
+  Substitution: {
+    source: Ctx,
+    target: Ctx,
+    mappings: [Term]  -- Terms to substitute for each variable in source
+  }
+
+  --[[
+    Term represents a term in the dependent type calculus
+  ]]--
+  Term: {
+    expr: Any,  -- The actual term
+    type: TypeExpr  -- The type of the term
+  }
+
+  --[[
+    TypeExpr defines a type expression in the dependent type system
+  ]]--
+  TypeExpr: TypeApp | TypeLam | TypeVar | T.Type
+
+  --[[
+    TypeApp represents a type application, like T(v)
+  ]]--
+  TypeApp: {
+    fn: TypeExpr,
+    arg: Any
+  }
+
+  --[[
+    TypeLam represents a type-level function
+  ]]--
+  TypeLam: {
+    param: S,
+    param_type: TypeExpr,
+    body: TypeExpr
+  }
+
+  --[[
+    TypeVar represents a type variable
+  ]]--
+  TypeVar: {
+    name: S,
+    index: Z  -- De Bruijn index
+  }
+
+  --[[
+    Judgment represents a typing judgment
+  ]]--
+  Judgment: {
+    ctx: Ctx,
+    expr: Any,
+    type: TypeExpr
+  }
+
+  --------------------------------------------------
+  -- Core Context Functions
+  --------------------------------------------------
+
+  --[[
+    empty creates an empty context
+  ]]--
+  empty: () -> Ctx [->
+    {
+      bindings: [],
+      assumptions: []
+    }
+  ]
+
+  --[[
+    extend extends a context with a new variable binding
+  ]]--
+  extend: Ctx * S * TypeExpr -> Ctx [ctx name type ->
+    -- Create new variable with next available index
+    let var = {
+      name: name,
+      type: type,
+      index: length(ctx.bindings)
+    } in
+    
+    {
+      bindings: ctx.bindings + [var],
+      assumptions: ctx.assumptions
+    }
+  ]
+
+  --[[
+    lookup finds a variable in the context by name
+  ]]--
+  lookup: Ctx * S -> Variable [ctx name ->
+    ctx.bindings |> find [var -> var.name == name]
+  ]
+
+  --[[
+    lookup_index finds a variable in the context by index
+  ]]--
+  lookup_index: Ctx * Z -> Variable [ctx idx ->
+    ctx.bindings |> find [var -> var.index == idx]
+  ]
+
+  --[[
+    variable_term creates a term for a variable
+  ]]--
+  variable_term: Variable -> Term [var ->
+    {
+      expr: { _type: "Var", name: var.name, index: var.index },
+      type: var.type
+    }
+  ]
+
+  --------------------------------------------------
+  -- Substitution Functions
+  --------------------------------------------------
+
+  --[[
+    id_subst creates an identity substitution for a context
+  ]]--
+  id_subst: Ctx -> Substitution [ctx ->
+    {
+      source: ctx,
+      target: ctx,
+      mappings: ctx.bindings |> map [var -> variable_term(var)]
+    }
+  ]
+
+  --[[
+    compose_subst composes two substitutions σ ∘ τ
+  ]]--
+  compose_subst: Substitution * Substitution -> Substitution [sigma tau ->
+    -- Check that compositions are compatible
+    if sigma.source != tau.target {
+      error("Incompatible substitutions: source of first must equal target of second")
+    }
+    
+    {
+      source: tau.source,
+      target: sigma.target,
+      mappings: tau.mappings |> map [term -> 
+        {
+          expr: apply_subst_to_expr(sigma, term.expr),
+          type: type_subst(term.type, sigma)
+        }
+      ]
+    }
+  ]
+
+  --[[
+    apply_subst applies a substitution to a term
+  ]]--
+  apply_subst: Substitution * Term -> Term [subst term ->
+    {
+      expr: apply_subst_to_expr(subst, term.expr),
+      type: type_subst(term.type, subst)
+    }
+  ]
+
+  --[[
+    apply_subst_to_expr applies a substitution to a term expression
+  ]]--
+  apply_subst_to_expr: Substitution * Any -> Any [subst expr ->
+    match expr with
+      -- Apply substitution to variable
+      | { _type: "Var", index: idx } ->
+          if idx < length(subst.mappings) {
+            subst.mappings[idx].expr
+          } else {
+            -- Variable not affected by substitution
+            expr
+          }
+      
+      -- Apply recursively to compound expressions
+      | { _type: "App", fn: f, arg: a } ->
+          { 
+            _type: "App", 
+            fn: apply_subst_to_expr(subst, f), 
+            arg: apply_subst_to_expr(subst, a) 
+          }
+      
+      -- Handle lambda expressions with shifting
+      | { _type: "Lam", param: p, body: b } ->
+          {
+            _type: "Lam",
+            param: p,
+            body: apply_subst_to_expr(shift_subst(subst), b)
+          }
+      
+      -- Default case
+      | _ -> expr
+  ]
+
+  --[[
+    type_subst substitutes through a type expression
+  ]]--
+  type_subst: TypeExpr * Substitution -> TypeExpr [type subst ->
+    match type with
+      -- Substitute in type application
+      | { _type: "TypeApp", fn: f, arg: a } ->
+          { 
+            _type: "TypeApp", 
+            fn: type_subst(f, subst), 
+            arg: apply_subst_to_expr(subst, a)
+          }
+      
+      -- Substitute in type lambda, but watch for variable shadowing
+      | { _type: "TypeLam", param: p, param_type: pt, body: b } ->
+          {
+            _type: "TypeLam",
+            param: p,
+            param_type: type_subst(pt, subst),
+            body: type_subst(b, shift_subst(subst))
+          }
+      
+      -- Substitute type variable
+      | { _type: "TypeVar", index: idx } ->
+          if idx < length(subst.mappings) {
+            subst.mappings[idx].type
+          } else {
+            -- Variable not affected by substitution
+            type
+          }
+      
+      -- Default case
+      | _ -> type
+  ]
+
+  --[[
+    shift_subst shifts the indices in a substitution to account for binding
+  ]]--
+  shift_subst: Substitution -> Substitution [subst ->
+    -- Create a shifted version of the substitution for use under binders
+    {
+      source: shift_context(subst.source),
+      target: shift_context(subst.target),
+      mappings: [{ expr: { _type: "Var", index: 0, name: "x" }, type: { _type: "TypeVar", name: "T", index: 0 } }] + 
+               (subst.mappings |> map [term -> 
+                 {
+                   expr: shift_expr(term.expr),
+                   type: shift_type(term.type)
+                 }
+               ])
+    }
+  ]
+
+  --[[
+    shift_context shifts the indices in a context to account for a new binding
+  ]]--
+  shift_context: Ctx -> Ctx [ctx ->
+    {
+      bindings: ctx.bindings |> map [var -> 
+        {
+          name: var.name,
+          type: shift_type(var.type),
+          index: var.index + 1
+        }
+      ],
+      assumptions: ctx.assumptions |> map [j -> 
+        {
+          ctx: shift_context(j.ctx),
+          expr: shift_expr(j.expr),
+          type: shift_type(j.type)
+        }
+      ]
+    }
+  ]
+
+  --[[
+    shift_expr shifts the indices in an expression to account for a new binding
+  ]]--
+  shift_expr: Any -> Any [expr ->
+    match expr with
+      | { _type: "Var", index: idx } ->
+          { _type: "Var", index: idx + 1, name: expr.name }
+      | _ -> expr  -- Simplified for brevity
+  ]
+
+  --[[
+    shift_type shifts the indices in a type to account for a new binding
+  ]]--
+  shift_type: TypeExpr -> TypeExpr [type ->
+    match type with
+      | { _type: "TypeVar", index: idx } ->
+          { _type: "TypeVar", index: idx + 1, name: type.name }
+      | _ -> type  -- Simplified for brevity
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping to Categorical Semantics
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @Context as a category where:
+    - Objects are contexts (lists of typed variables)
+    - Morphisms are substitutions between contexts
+    - Identity is the identity substitution
+    - Composition is substitution composition
+
+    This categorical structure forms the foundation for the semantics of
+    dependent type systems, with slices corresponding to context extensions.
+  ]]--
+  structure: {
+    -- Map Context to a category
+    objects: Ctx,
+    morphisms: Substitution,
+    
+    -- Base category structure
+    dom: [subst -> subst.source],
+    cod: [subst -> subst.target],
+    id: [ctx -> id_subst(ctx)],
+    compose: [sigma tau -> compose_subst(sigma, tau)],
+    
+    -- Context-specific structure
+    empty_ctx: empty(),
+    extend_ctx: [ctx x A -> extend(ctx, x, A)],
+    
+    -- Terminal object is the empty context
+    terminal: empty(),
+    terminal_morphism: [ctx -> {
+      source: ctx,
+      target: empty(),
+      mappings: []
+    }],
+    
+    -- Context extension as slice construction
+    slice: [ctx A -> extend(ctx, "x", A)],
+    
+    -- Presheaf structure
+    type_presheaf: [ctx -> types_in_context(ctx)],
+    term_presheaf: [ctx type -> terms_in_context(ctx, type)],
+    
+    -- Laws for context category
+    laws: {
+      -- Associativity: (σ ∘ τ) ∘ δ = σ ∘ (τ ∘ δ)
+      associativity: forall [sigma tau delta ->
+        compose_subst(compose_subst(sigma, tau), delta) ==
+        compose_subst(sigma, compose_subst(tau, delta))
+      ],
+      
+      -- Identity: id ∘ σ = σ = σ ∘ id
+      identity: forall [sigma ->
+        compose_subst(id_subst(cod(sigma)), sigma) == sigma &&
+        compose_subst(sigma, id_subst(dom(sigma))) == sigma
+      ],
+      
+      -- Substitution composition respects type substitution
+      substitution_typing: forall [sigma type ->
+        type_subst(type_subst(type, sigma), tau) ==
+        type_subst(type, compose_subst(sigma, tau))
+      ]
+    }
+  }
+  
+  --[[
+    Helper function to get all well-formed types in a context
+  ]]--
+  types_in_context: Ctx -> [TypeExpr] [ctx ->
+    -- In a real implementation, this would compute all well-formed types
+    []
+  ]
+  
+  --[[
+    Helper function to get all well-typed terms of a given type in a context
+  ]]--
+  terms_in_context: Ctx * TypeExpr -> [Term] [ctx type ->
+    -- In a real implementation, this would compute all well-typed terms
+    []
+  ]
+  
+  --[[
+    Helper function to get length of a list
+  ]]--
+  length: [a] -> Z [list ->
+    match list with
+      | [] -> 0
+      | [_ @ rest] -> 1 + length(rest)
+  ]
+  
+  --[[
+    Helper function to find an element in a list
+  ]]--
+  find: [a] * (a -> Bool) -> a [list pred ->
+    match list with
+      | [] -> error("Element not found")
+      | [first @ rest] -> if pred(first) then first else find(rest, pred)
+  ]
+} 

@@ -12,17 +12,17 @@
     CollectionTransform
     CollectionNaturalTransform
     CollectionFunctor
-    
+
     -- Specific transformations
     MapTransform
     ListTransform
     SetTransform
     QueueTransform
-    
+
     -- Collection adjunctions
     ListSetAdjunction
     MapSetAdjunction
-    
+
     -- Structural transformations
     MonoidalTransform
     TracedTransform
@@ -32,10 +32,10 @@
   op: {
     -- Transformation operators
     ==> <== <=> ~~  -- Transformation directions and equivalences
-    
+
     -- Composition operators
     >>> <<< +++ &&& -- Sequential and parallel composition
-    
+
     -- Linear type operators
     -o> ! % ×      -- Linear function, linear type, resource splitting, tensor product
   }
@@ -46,27 +46,27 @@
     to_set from_set
     to_map from_map
     to_queue from_queue
-    
+
     -- Natural transformations
     map_to_set set_to_map
     list_to_set set_to_list
     map_to_list list_to_map
     list_to_queue queue_to_list
-    
+
     -- Functorial operations
     map_functor list_functor set_functor queue_functor
-    
+
     -- Linear-focused operations (replacing monadic operations)
     linear_singleton linear_flatten linear_chain
     linear_map_values linear_set_elements
     linear_list_elements linear_queue_elements
-    
+
     -- Resource-aware transformations
     linear_transform persistent_transform
-    
+
     -- Parallel and sequential transformations
     parallel_transform sequential_transform
-    
+
     -- Advanced transformations
     memoize_collection index_collection
     observe_collection lazy_collection
@@ -104,7 +104,7 @@
 
   --[[
     List to Set transformation
-    
+
     Transforms a list into a set, removing duplicates.
     This forms a classic adjunction with set_to_list.
   ]]--
@@ -114,7 +114,7 @@
 
   --[[
     Set to List transformation
-    
+
     Transforms a set into a list. The order is not specified.
     This forms the right adjoint to list_to_set.
   ]]--
@@ -124,7 +124,7 @@
 
   --[[
     Map to Set transformation of keys
-    
+
     Extracts the keys from a map as a set.
   ]]--
   map_to_set: !(k:-> v) -o> @Coll.Set._map_type[k] [m ->
@@ -133,7 +133,7 @@
 
   --[[
     Map to List transformation
-    
+
     Transforms a map into a list of key-value pairs.
   ]]--
   map_to_list: !(k:-> v) -o> [(k * v)] [m ->
@@ -142,7 +142,7 @@
 
   --[[
     List to Map transformation
-    
+
     Transforms a list of key-value pairs into a map.
   ]]--
   list_to_map: ![(k * v)] -o> (k:-> v) [entries ->
@@ -151,7 +151,7 @@
 
   --[[
     List to Queue transformation
-    
+
     Transforms a list into a queue with the same elements.
   ]]--
   list_to_queue: ![a] -o> @Coll.Queue._list_type[a] [xs ->
@@ -161,7 +161,7 @@
 
   --[[
     Queue to List transformation
-    
+
     Transforms a queue into a list with the same elements.
   ]]--
   queue_to_list: !@Coll.Queue._list_type[a] -o> [a] [q ->
@@ -194,9 +194,9 @@
     preserving the map structure (keys and associations).
   ]]--
   map_functor: (v1 -o> v2) -o> ((k:-> v1) -o> (k:-> v2)) [f ->
-    [m -> 
-      m |> @Coll.Map.entries 
-        |> @Coll.List.map [(k, v) -> (k, f(v))] 
+    [m ->
+      m |> @Coll.Map.entries
+        |> @Coll.List.map [(k, v) -> (k, f(v))]
         |> list_to_map
     ]
   ]
@@ -295,7 +295,7 @@
     Adds indexing capabilities to a collection transformation.
   ]]--
   index_collection: (a -o> b) -o> (a -o> (Z:-> b)) [f ->
-    [x -> 
+    [x ->
       let result = f(x) in
       -- In a real implementation, would build an indexed map
       @Coll.Map.empty
@@ -371,7 +371,7 @@
     tensor_product: (a -o> b) * (c -o> d) -o> ((a * c) -o> (b * d)) [f g ->
       parallel_transform(f, g)
     ],
-    associator: [(((a * b) * c), ((a * (b * c)))) -> 
+    associator: [(((a * b) * c), ((a * (b * c)))) ->
       ((a * b) * c) |> [(x, c) -> let (a, b) = x in ((a, (b, c)))]
     ],
     left_unitor: [((Any * a) -> a) -> [(u, x) -> x]],
@@ -394,15 +394,15 @@
     Flattens a nested collection by consuming the outer collection.
     Analogous to "join" in monads but with explicit resource tracking.
   ]]--
-  linear_flatten: ![[a]] -o> ![a] [xss -> 
+  linear_flatten: ![[a]] -o> ![a] [xss ->
     xss |> @Coll.List.fold(@Coll.List.concat, @Coll.List.empty)
   ]
 
   --[[
     Chains a linear transformation through a collection, preserving linearity.
-    Each element is consumed exactly once, and the resulting collection 
+    Each element is consumed exactly once, and the resulting collection
     preserves the resource constraints of the original.
-    
+
     This replaces the monadic "bind" with explicit resource handling.
   ]]--
   linear_chain: ![a] * (a -o> ![b]) -o> ![b] [xs f ->
@@ -432,7 +432,7 @@
   --[[
     Applies a linear transformation to each element in a list.
     Each element is consumed exactly once, and a new list is produced.
-    
+
     This is similar to @Coll.List.map but with stronger guarantees
     about resource usage that align better with interaction nets.
   ]]--
@@ -460,7 +460,7 @@
     This operation partitions resources, which is a fundamental
     operation in interaction nets and linear logic.
   ]]--
-  linear_split: !a -o> (!b * !c) [x -> 
+  linear_split: !a -o> (!b * !c) [x ->
     -- In a real implementation, would split the resource
     (@Prim.linear_part1(x), @Prim.linear_part2(x))
   ]
@@ -470,8 +470,8 @@
     This operation combines resources, which is the dual of splitting
     and essential for interaction net transformations.
   ]]--
-  linear_join: (!a * !b) -o> !c [(x, y) -> 
+  linear_join: (!a * !b) -o> !c [(x, y) ->
     -- In a real implementation, would join the resources
     @Prim.linear_join(x, y)
   ]
-} 
+}

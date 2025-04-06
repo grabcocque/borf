@@ -1,0 +1,464 @@
+--[[
+  Unrestricted Type System
+
+  This module defines an unrestricted type system where resources can be used any number
+  of times (can be both duplicated and dropped). Unrestricted types represent the standard
+  notion of types in most programming languages where values can be freely copied or ignored.
+]]--
+
+@Unrestricted: {
+  typ: {
+    -- Core unrestricted types
+    UnrestrictedType UnrestrictedFn UnrestrictedCtx
+    
+    -- Type constructors
+    Product Sum Function Option List
+    
+    -- Type operations
+    TypeOp TypeEquiv TypeSub
+    
+    -- Proof terms
+    Proof Judgment Derivation
+  }
+
+  op: {
+    -- Type operators
+    * + -> ?
+    
+    -- Judgment operators
+    ⊢ ⊣ ⊨
+    
+    -- Resource tracking
+    copy drop
+  }
+
+  fn: {
+    -- Core type functions
+    unrestricted_fn unrestricted_app copy drop
+    product_intro product_elim
+    
+    -- Context operations
+    ctx_empty ctx_extend ctx_merge
+    ctx_weaken ctx_contract
+    
+    -- Proof operations
+    derive check infer
+    prove subst
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Unrestricted, @T, true),         -- Add dependency on Type system
+    (@Unrestricted, @Linear, true),    -- Add dependency on Linear type system
+    (@Unrestricted, @Affine, true),    -- Add dependency on Affine type system
+    (@Unrestricted, @Relevant, true),  -- Add dependency on Relevant type system
+    (@Unrestricted, @Cat, true)        -- Add dependency on Category theory
+  }
+
+  --------------------------------------------------
+  -- Core Unrestricted Types
+  --------------------------------------------------
+
+  --[[
+    UnrestrictedType defines a type in the unrestricted type system
+  ]]--
+  UnrestrictedType: {
+    base: T.Type,
+    weakening: Bool,  -- Can be dropped
+    contraction: Bool  -- Can be copied
+  }
+
+  --[[
+    UnrestrictedFn defines an unrestricted function type A -> B
+    where A can be used any number of times to produce B
+  ]]--
+  UnrestrictedFn: {
+    domain: UnrestrictedType,
+    codomain: UnrestrictedType
+  }
+
+  --[[
+    UnrestrictedCtx defines a typing context for unrestricted types
+  ]]--
+  UnrestrictedCtx: {
+    bindings: S:-> UnrestrictedType,
+    used: S:-> Z  -- Tracks how many times each variable is used
+  }
+
+  --------------------------------------------------
+  -- Unrestricted Type Constructors
+  --------------------------------------------------
+
+  --[[
+    Product forms the product type A * B
+  ]]--
+  Product: UnrestrictedType * UnrestrictedType -> UnrestrictedType [a b ->
+    {
+      base: a.base * b.base,
+      weakening: a.weakening && b.weakening,
+      contraction: a.contraction && b.contraction
+    }
+  ]
+
+  --[[
+    Sum forms the sum type A + B
+  ]]--
+  Sum: UnrestrictedType * UnrestrictedType -> UnrestrictedType [a b ->
+    {
+      base: a.base + b.base,
+      weakening: a.weakening && b.weakening,
+      contraction: a.contraction && b.contraction
+    }
+  ]
+
+  --[[
+    Function forms the function type A -> B
+  ]]--
+  Function: UnrestrictedType * UnrestrictedType -> UnrestrictedType [a b ->
+    {
+      base: a.base -> b.base,
+      weakening: true,  -- Functions can be dropped
+      contraction: true  -- Functions can be copied
+    }
+  ]
+
+  --[[
+    Option forms the optional type ?A
+  ]]--
+  Option: UnrestrictedType -> UnrestrictedType [a ->
+    {
+      base: ?a.base,
+      weakening: true,  -- Optional types can always be dropped
+      contraction: a.contraction  -- Can be copied if inner type can be copied
+    }
+  ]
+
+  --[[
+    List forms the list type [A]
+  ]]--
+  List: UnrestrictedType -> UnrestrictedType [a ->
+    {
+      base: [a.base],
+      weakening: true,  -- Lists can always be dropped
+      contraction: a.contraction  -- Can be copied if elements can be copied
+    }
+  ]
+
+  --------------------------------------------------
+  -- Core Function Operations
+  --------------------------------------------------
+
+  --[[
+    unrestricted_fn creates an unrestricted function
+  ]]--
+  unrestricted_fn: S * UnrestrictedType * (UnrestrictedCtx -> a) -> UnrestrictedFn [param typ body ->
+    {
+      domain: typ,
+      codomain: infer_type(body)
+    }
+  ]
+
+  --[[
+    unrestricted_app applies an unrestricted function to an argument
+  ]]--
+  unrestricted_app: UnrestrictedFn * a -> b [fn arg ->
+    -- Apply the function (no restrictions on usage)
+    fn.body(arg)
+  ]
+
+  --[[
+    copy explicitly duplicates an unrestricted resource
+  ]]--
+  copy: UnrestrictedType -> (UnrestrictedType * UnrestrictedType) [resource ->
+    -- Verify that the type supports copying
+    if not resource.contraction {
+      error("Cannot copy a resource that does not support contraction")
+    }
+    
+    -- Return two copies of the resource
+    (resource, resource)
+  ]
+
+  --[[
+    drop explicitly discards an unrestricted resource
+  ]]--
+  drop: UnrestrictedType -> () [resource ->
+    -- Verify that the type supports dropping
+    if not resource.weakening {
+      error("Cannot drop a resource that does not support weakening")
+    }
+    
+    -- Return unit to indicate resource was discarded
+    ()
+  ]
+
+  --[[
+    product_intro creates a product of two unrestricted values
+  ]]--
+  product_intro: a * b -> (a * b) [a b ->
+    -- Create product
+    (a, b)
+  ]
+
+  --[[
+    product_elim eliminates a product by pattern matching
+  ]]--
+  product_elim: (a * b) * ((a * b) -> c) -> c [product f ->
+    let (a, b) = product in
+    f(a, b)
+  ]
+
+  --------------------------------------------------
+  -- Context Operations
+  --------------------------------------------------
+
+  --[[
+    ctx_empty creates an empty unrestricted typing context
+  ]]--
+  ctx_empty: () -> UnrestrictedCtx [->
+    {
+      bindings: {},
+      used: {}
+    }
+  ]
+
+  --[[
+    ctx_extend extends a context with a new variable binding
+  ]]--
+  ctx_extend: UnrestrictedCtx * S * UnrestrictedType -> UnrestrictedCtx [ctx var typ ->
+    {
+      bindings: ctx.bindings cup { var: typ },
+      used: ctx.used cup { var: 0 }
+    }
+  ]
+
+  --[[
+    ctx_merge merges two contexts
+  ]]--
+  ctx_merge: UnrestrictedCtx * UnrestrictedCtx -> UnrestrictedCtx [ctx1 ctx2 ->
+    {
+      bindings: ctx1.bindings cup ctx2.bindings,
+      used: merge_usage_counts(ctx1.used, ctx2.used)
+    }
+  ]
+
+  --[[
+    ctx_weaken removes a variable from context without using it
+  ]]--
+  ctx_weaken: UnrestrictedCtx * S -> UnrestrictedCtx [ctx var ->
+    -- Check that the variable supports weakening
+    let typ = ctx.bindings[var] in
+    if not typ.weakening {
+      error("Cannot weaken variable of type that does not support weakening")
+    }
+    
+    -- Remove variable from context
+    {
+      bindings: ctx.bindings - var,
+      used: ctx.used - var
+    }
+  ]
+
+  --[[
+    ctx_contract adds contraction to the context, allowing variables to be used multiple times
+  ]]--
+  ctx_contract: UnrestrictedCtx * S -> UnrestrictedCtx [ctx var ->
+    -- Check that the variable supports contraction
+    let typ = ctx.bindings[var] in
+    if not typ.contraction {
+      error("Cannot contract variable of type that does not support contraction")
+    }
+    
+    -- Mark the variable as supporting multiple uses
+    ctx
+  ]
+
+  --[[
+    merge_usage_counts merges usage counts from two contexts
+  ]]--
+  merge_usage_counts: (S:-> Z) * (S:-> Z) -> (S:-> Z) [counts1 counts2 ->
+    let result = {} in
+    
+    -- Add all keys from counts1
+    keys(counts1) |> foreach [key ->
+      result = result cup { key: counts1[key] }
+    ] in
+    
+    -- Add all keys from counts2, summing if already present
+    keys(counts2) |> foreach [key ->
+      if key in result {
+        result = result cup { key: result[key] + counts2[key] }
+      } else {
+        result = result cup { key: counts2[key] }
+      }
+    ] in
+    
+    result
+  ]
+
+  --------------------------------------------------
+  -- Type Operations
+  --------------------------------------------------
+
+  --[[
+    infer_type infers the unrestricted type of an expression
+  ]]--
+  infer_type: (UnrestrictedCtx -> a) -> UnrestrictedType [expr ->
+    -- This would be implemented in a real type system
+    -- with a proper unrestricted type inference algorithm
+    { base: T.Any, weakening: true, contraction: true }
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping to Categorical Semantics
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @Unrestricted as a cartesian closed category.
+    
+    In this categorical structure:
+    - Objects are unrestricted types
+    - Morphisms are unrestricted functions between types
+    - The product is the cartesian product
+    - The coproduct is the disjoint union
+    - The internal hom is the function type
+    - The unrestricted structure allows both weakening (dropping) and contraction (copying)
+  ]]--
+  structure: {
+    -- Map Unrestricted to a cartesian closed category
+    objects: UnrestrictedType,
+    morphisms: [a b -> UnrestrictedFn],
+    
+    -- Base category structure
+    dom: [f -> f.domain],
+    cod: [f -> f.codomain],
+    id: [a -> unrestricted_fn("x", a, [x -> x])],
+    compose: [f g -> unrestricted_fn("x", f.domain, [x -> g(f(x))])],
+    
+    -- Cartesian structure
+    product: [a b -> Product(a, b)],
+    proj1: [a b -> unrestricted_fn("p", Product(a, b), [p -> let (x, _) = p in x])],
+    proj2: [a b -> unrestricted_fn("p", Product(a, b), [p -> let (_, y) = p in y])],
+    pair: [f g -> unrestricted_fn("x", f.domain, [x -> (f(x), g(x))])],
+    
+    -- Terminal object
+    terminal: { base: (), weakening: true, contraction: true },
+    terminal_map: [a -> unrestricted_fn("x", a, [_ -> ()])],
+    
+    -- Closed structure
+    internal_hom: [a b -> Function(a, b)],
+    eval: [a b -> unrestricted_fn("p", Product(Function(a, b), a), [p -> 
+      let (f, x) = p in 
+      f(x)
+    ])],
+    curry: [a b c f -> unrestricted_fn("x", a, [x -> 
+      unrestricted_fn("y", b, [y -> f((x, y))])
+    ])],
+    
+    -- Unrestricted structure (allows both weakening and contraction)
+    discard: [a -> unrestricted_fn("x", a, [x -> drop(x)])],
+    duplicate: [a -> unrestricted_fn("x", a, [x -> 
+      let (x1, x2) = copy(x) in 
+      (x1, x2)
+    ])],
+    
+    -- Laws for unrestricted category
+    laws: {
+      -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
+      associativity: forall [f g h ->
+        compose(compose(f, g), h) == compose(f, compose(g, h))
+      ],
+      
+      -- Identity: id ∘ f = f = f ∘ id
+      identity: forall [f ->
+        compose(id(dom(f)), f) == f && compose(f, id(cod(f))) == f
+      ],
+      
+      -- Cartesian laws
+      cartesian: forall [a b c f g ->
+        compose(pair(f, g), proj1(b, c)) == f &&
+        compose(pair(f, g), proj2(b, c)) == g
+      ],
+      
+      -- Closed category laws
+      closed: forall [a b c f ->
+        eval(b, c)(curry(a, b, c, f)(x), y) == f((x, y))
+      ],
+      
+      -- Unrestricted laws (weakening and contraction)
+      weakening: forall [a f ->
+        compose(f, discard(cod(f))) == discard(dom(f))
+      ],
+      
+      contraction: forall [a f ->
+        let diag = duplicate(a) in
+        let f_pair = pair(f, f) in
+        compose(diag, f_pair) == compose(f, diag)
+      ]
+    }
+  }
+  
+  --------------------------------------------------
+  -- Example Unrestricted Programs
+  --------------------------------------------------
+  
+  --[[
+    Example: Standard function that uses arguments freely
+  ]]--
+  example.standard_function: () -> (Z -> Z) [->
+    -- Create a standard unrestricted function
+    let int_type = { base: Z, weakening: true, contraction: true } in
+    
+    -- Define a function that uses its argument multiple times
+    let square = unrestricted_fn("x", int_type, [x ->
+      -- Use x twice (copying)
+      let (x1, x2) = copy(x) in
+      x1 * x2
+    ]) in
+    
+    -- Return the function
+    square
+  ]
+  
+  --[[
+    Example: Complex data processing with unrestricted types
+  ]]--
+  example.process_data: [Z] -> Z [data ->
+    -- Define types
+    let int_type = { base: Z, weakening: true, contraction: true } in
+    let list_type = { base: [Z], weakening: true, contraction: true } in
+    
+    -- Define processing functions
+    let sum = unrestricted_fn("list", list_type, [list ->
+      -- Implement sum using fold
+      fold([acc x -> acc + x], 0, list)
+    ]) in
+    
+    let avg = unrestricted_fn("list", list_type, [list ->
+      -- Make multiple uses of the list (contraction)
+      let (list1, list2) = copy(list) in
+      
+      -- Calculate sum and length
+      let s = sum(list1) in
+      let len = length(list2) in
+      
+      -- Calculate average
+      if len == 0 then 0 else s / len
+    ]) in
+    
+    -- Process the data (using it in multiple ways)
+    let (data1, data2) = copy(data) in
+    let result = avg(data1) in
+    
+    -- Optionally use data2 or discard it (weakening)
+    drop(data2)
+    
+    -- Return result
+    result
+  ]
+} 

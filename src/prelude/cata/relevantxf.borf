@@ -1,0 +1,459 @@
+--[[
+  Relevant Type System Transformations
+
+  This module defines transformations between the relevant type system and other
+  categorical frameworks, enabling rigorous mappings between different resource usage
+  models with a focus on relevant types (which must be used at least once).
+]]--
+
+@RelevantXf: {
+  typ: {
+    -- Core transformation types
+    RelevantTransform
+    ResourceTransform
+    TypeTransform
+    
+    -- Specific transformations
+    RelevantToLinear
+    RelevantToAffine
+    RelevantToPrim
+    
+    -- Context transformations
+    ContextTransform
+    ProofTransform
+  }
+
+  op: {
+    -- Transformation operators
+    ==> <== <=> ~~
+    
+    -- Composition operators
+    >>> <<< +++ &&&
+    
+    -- Resource tracking operators
+    copy contract
+  }
+
+  fn: {
+    -- Core transformation functions
+    to_linear from_linear
+    to_affine from_affine
+    to_prim from_prim
+    
+    -- Type transformations
+    relevant_to_linear_type linear_to_relevant_type
+    relevant_to_affine_type affine_to_relevant_type
+    
+    -- Function transformations
+    transform_relevant_fn transform_relevant_app
+    
+    -- Resource operations
+    insert_copies
+    ensure_usage track_usage
+    
+    -- Proof transformations
+    transform_proof transform_judgment
+    embed_relevant_proof extract_relevant_proof
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@RelevantXf, @T, true),            -- Add dependency on Type system
+    (@RelevantXf, @Relevant, true),     -- Add dependency on Relevant type system
+    (@RelevantXf, @Linear, true),       -- Add dependency on Linear type system
+    (@RelevantXf, @Affine, true),       -- Add dependency on Affine type system
+    (@RelevantXf, @CatXf, true),        -- Add dependency on Category transformations
+    (@RelevantXf, @LinearXf, true),     -- Add dependency on Linear transformations
+    (@RelevantXf, @AffineXf, true)      -- Add dependency on Affine transformations
+  }
+
+  --------------------------------------------------
+  -- Relevant to Linear Transformations
+  --------------------------------------------------
+
+  --[[
+    to_linear transforms relevant types and functions into linear types and functions,
+    ensuring exactly-once usage by preventing copying.
+  ]]--
+  to_linear: @Relevant.a -> @Linear.a [relevant_val ->
+    match relevant_val with
+      -- Transform relevant type to linear type
+      | { _type: "RelevantType" } ->
+          relevant_to_linear_type(relevant_val)
+      
+      -- Transform relevant function to linear function
+      | { domain: _, codomain: _ } ->
+          @Linear.linear_fn(
+            transform_param(relevant_val.domain),
+            transform_body(relevant_val.codomain),
+            [x -> restrict_contraction(relevant_val.body, x)]
+          )
+      
+      -- Default for values
+      | _ -> 
+          -- Wrap in linear wrapper to ensure linear usage
+          @Linear.make_linear(relevant_val)
+  ]
+
+  --[[
+    from_linear transforms linear types and functions into relevant types and functions,
+    preserving the exactly-once usage pattern while allowing multiple uses when needed.
+  ]]--
+  from_linear: @Linear.a -> @Relevant.a [linear_val ->
+    match linear_val with
+      -- Transform linear type to relevant type
+      | { _type: "LinearType" } ->
+          linear_to_relevant_type(linear_val)
+      
+      -- Transform linear function to relevant function
+      | { domain: _, codomain: _ } ->
+          @Relevant.relevant_fn(
+            transform_param(linear_val.domain),
+            transform_body(linear_val.codomain),
+            [x -> ensure_usage(linear_val.body, x)]
+          )
+      
+      -- Default for values
+      | _ -> 
+          -- Wrap in relevant wrapper requiring usage
+          @Relevant.make_relevant(linear_val)
+  ]
+
+  --[[
+    relevant_to_linear_type transforms a relevant type into a linear type
+  ]]--
+  relevant_to_linear_type: @Relevant.RelevantType -> @Linear.LinearType [relevant_type ->
+    {
+      base: relevant_type.base,
+      linear: true,
+      consumed: false
+    }
+  ]
+
+  --[[
+    linear_to_relevant_type transforms a linear type into a relevant type
+  ]]--
+  linear_to_relevant_type: @Linear.LinearType -> @Relevant.RelevantType [linear_type ->
+    {
+      base: linear_type.base,
+      relevant: true,
+      contraction: false  -- Linear types don't support contraction
+    }
+  ]
+
+  --[[
+    restrict_contraction transforms a relevant function body to ensure
+    that resources are used exactly once in a linear context
+  ]]--
+  restrict_contraction: (@Relevant.RelevantCtx -> a) -> (@Linear.LinearCtx -> a) [body ctx ->
+    -- In a real implementation, this would:
+    -- 1. Track all resources in the context
+    -- 2. Ensure each resource is used exactly once
+    -- 3. Prevent any implicit copying of resources
+    
+    body(convert_context(ctx))
+  ]
+
+  --[[
+    ensure_usage transforms a linear function body to enforce at-least-once
+    usage pattern in a relevant context
+  ]]--
+  ensure_usage: (@Linear.LinearCtx -> a) -> (@Relevant.RelevantCtx -> a) [body ctx ->
+    -- In a real implementation, this would:
+    -- 1. Convert linear usage tracking to relevant tracking
+    -- 2. Add support for contraction where appropriate
+    
+    body(convert_context(ctx))
+  ]
+
+  --[[
+    convert_context converts between linear and relevant contexts
+  ]]--
+  convert_context: @Linear.LinearCtx -> @Relevant.RelevantCtx [ctx ->
+    {
+      bindings: ctx.bindings |> map [binding ->
+        linear_to_relevant_type(binding)
+      ],
+      used: ctx.used
+    }
+  ]
+
+  --------------------------------------------------
+  -- Relevant to Affine Transformations
+  --------------------------------------------------
+
+  --[[
+    to_affine transforms relevant types and functions to affine types and functions,
+    adding support for weakening (dropping) while preserving contraction.
+  ]]--
+  to_affine: @Relevant.a -> @Affine.a [relevant_val ->
+    match relevant_val with
+      -- Transform relevant type to affine type
+      | { _type: "RelevantType" } ->
+          relevant_to_affine_type(relevant_val)
+      
+      -- Transform relevant function to affine function
+      | { domain: _, codomain: _ } ->
+          @Affine.affine_fn(
+            transform_param(relevant_val.domain),
+            transform_body(relevant_val.codomain),
+            [x -> add_weakening(relevant_val.body, x)]
+          )
+      
+      -- Default for values
+      | _ -> 
+          -- Wrap in affine wrapper allowing dropping
+          @Affine.make_affine(relevant_val)
+  ]
+
+  --[[
+    from_affine transforms affine types and functions into relevant types and functions,
+    ensuring at-least-once usage by adding runtime checks.
+  ]]--
+  from_affine: @Affine.a -> @Relevant.a [affine_val ->
+    match affine_val with
+      -- Transform affine type to relevant type
+      | { _type: "AffineType" } ->
+          affine_to_relevant_type(affine_val)
+      
+      -- Transform affine function to relevant function
+      | { domain: _, codomain: _ } ->
+          @Relevant.relevant_fn(
+            transform_param(affine_val.domain),
+            transform_body(affine_val.codomain),
+            [x -> enforce_usage(affine_val.body, x)]
+          )
+      
+      -- Default for values
+      | _ -> 
+          -- Wrap in relevant wrapper requiring usage
+          @Relevant.make_relevant(affine_val)
+  ]
+
+  --[[
+    relevant_to_affine_type transforms a relevant type into an affine type
+  ]]--
+  relevant_to_affine_type: @Relevant.RelevantType -> @Affine.AffineType [relevant_type ->
+    {
+      base: relevant_type.base,
+      affine: true,
+      weakening: true  -- Add weakening support
+    }
+  ]
+
+  --[[
+    affine_to_relevant_type transforms an affine type into a relevant type
+  ]]--
+  affine_to_relevant_type: @Affine.AffineType -> @Relevant.RelevantType [affine_type ->
+    {
+      base: affine_type.base,
+      relevant: true,
+      contraction: affine_type.weakening  -- If it can be weakened, it can often be contracted
+    }
+  ]
+
+  --[[
+    add_weakening transforms a relevant function body to allow 
+    optional dropping of resources in an affine context
+  ]]--
+  add_weakening: (@Relevant.RelevantCtx -> a) -> (@Affine.AffineCtx -> a) [body ctx ->
+    -- In a real implementation, this would:
+    -- 1. Convert relevant usage tracking to affine tracking
+    -- 2. Add support for dropping resources where needed
+    
+    body(convert_context_affine(ctx))
+  ]
+
+  --[[
+    enforce_usage transforms an affine function body to ensure
+    at-least-once usage pattern in a relevant context
+  ]]--
+  enforce_usage: (@Affine.AffineCtx -> a) -> (@Relevant.RelevantCtx -> a) [body ctx ->
+    -- In a real implementation, this would:
+    -- 1. Track all resources in the context
+    -- 2. Ensure each resource is used at least once
+    -- 3. Insert runtime checks for usage if necessary
+    
+    body(convert_context_affine(ctx))
+  ]
+
+  --[[
+    convert_context_affine converts between affine and relevant contexts
+  ]]--
+  convert_context_affine: @Affine.AffineCtx -> @Relevant.RelevantCtx [ctx ->
+    {
+      bindings: ctx.bindings |> map [binding ->
+        affine_to_relevant_type(binding)
+      ],
+      used: ctx.used
+    }
+  ]
+
+  --------------------------------------------------
+  -- Primitive Operations Transformations
+  --------------------------------------------------
+
+  --[[
+    to_prim transforms relevant operations into primitive operations,
+    bridging the gap between relevant typing and core computational primitives.
+  ]]--
+  to_prim: @Relevant.a -> @Prim.a [relevant_val ->
+    match relevant_val with
+      -- Relevant copy operation becomes Prim.clone
+      | { _op: "copy", arg: a } ->
+          @Prim.clone(to_prim(a))
+      
+      -- Other relevant-specific operations
+      | { _op: "relevant_fn" } ->
+          @Prim.fn
+      
+      -- Default - pass through the underlying value
+      | _ ->
+          extract_base_value(relevant_val)
+  ]
+
+  --[[
+    from_prim transforms primitive operations into relevant operations,
+    adding relevant typing constraints to basic computational primitives.
+  ]]--
+  from_prim: @Prim.a -> @Relevant.a [prim_op ->
+    match prim_op with
+      -- Functions with relevant constraints
+      | @Prim.fn ->
+          @Relevant.relevant_fn
+      
+      -- Handle primitive clone operation
+      | @Prim.clone ->
+          @Relevant.copy
+      
+      -- Default - wrap in relevant container
+      | _ ->
+          wrap_as_relevant(prim_op)
+  ]
+
+  --[[
+    extract_base_value extracts the underlying value from a relevant wrapper
+  ]]--
+  extract_base_value: @Relevant.a -> b [relevant_val ->
+    match relevant_val with
+      | { base: b } -> b
+      | _ -> relevant_val  -- Return as is if not wrapped
+  ]
+
+  --[[
+    wrap_as_relevant wraps a value in a relevant container
+  ]]--
+  wrap_as_relevant: a -> @Relevant.a [val ->
+    {
+      base: val,
+      relevant: true,
+      contraction: true
+    }
+  ]
+
+  --------------------------------------------------
+  -- Categorical Structure of Relevant Transformations
+  --------------------------------------------------
+
+  --[[
+    RelevantTransform defines a transformation between the relevant type system
+    and other type systems, preserving properties of relevant resource usage.
+  ]]--
+  RelevantTransform: {
+    source_type: T.T,
+    target_type: T.T,
+    transform: (a -> b),
+    inverse: ?(b -> a),
+    preserves_relevant: Bool
+  }
+
+  --[[
+    Functor that maps from the category of relevant types to linear types.
+    This represents the restriction of relevant typing to linear typing.
+  ]]--
+  relevant_linear_functor: @CatXf.Functor [
+    {
+      source_category: @Relevant.structure,
+      target_category: @Linear.structure,
+      map_obj: [t -> relevant_to_linear_type(t)],
+      map_morph: [f -> to_linear(f)],
+      preserves_id: true,
+      preserves_composition: true
+    }
+  ]
+
+  --[[
+    Functor that maps from the category of relevant types to affine types.
+    This represents the relaxation of relevant typing to affine typing.
+  ]]--
+  relevant_affine_functor: @CatXf.Functor [
+    {
+      source_category: @Relevant.structure,
+      target_category: @Affine.structure,
+      map_obj: [t -> relevant_to_affine_type(t)],
+      map_morph: [f -> to_affine(f)],
+      preserves_id: true,
+      preserves_composition: true
+    }
+  ]
+
+  --[[
+    Natural transformation between functors that witnesses the relationship
+    between relevant and linear type systems.
+  ]]--
+  relevant_linear_transform: @CatXf.NaturalTransformation [
+    {
+      source_functor: compose_functors(relevant_linear_functor, @LinearXf.linear_relevant_functor),
+      target_functor: identity_functor(@Relevant.structure),
+      components: [a -> [x -> identity_transform(x)]],
+      naturality: true
+    }
+  ]
+
+  --[[
+    Helper function to compose functors
+  ]]--
+  compose_functors: @CatXf.Functor * @CatXf.Functor -> @CatXf.Functor [F G ->
+    @CatXf.functor_composition(F, G)
+  ]
+
+  --[[
+    Helper function for identity functor on a category
+  ]]--
+  identity_functor: @CatXf.Category -> @CatXf.Functor [cat ->
+    {
+      source_category: cat,
+      target_category: cat,
+      map_obj: [t -> t],
+      map_morph: [f -> f],
+      preserves_id: true,
+      preserves_composition: true
+    }
+  ]
+
+  --[[
+    Helper function for identity transform
+  ]]--
+  identity_transform: a -> a [x -> x]
+
+  --[[
+    Helper function to get the domain type of a function
+  ]]--
+  transform_param: a -> b [param ->
+    -- In a real implementation, this would transform parameter types
+    param
+  ]
+
+  --[[
+    Helper function to get the codomain type of a function
+  ]]--
+  transform_body: a -> b [body ->
+    -- In a real implementation, this would transform return types
+    body
+  ]
+} 

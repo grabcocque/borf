@@ -1,0 +1,426 @@
+--[[
+  Affine Type System Transformations
+
+  This module defines transformations between the affine type system and other
+  categorical frameworks, enabling rigorous mappings between different resource usage
+  models with a focus on affine types (which can be used at most once).
+]]--
+
+@AffineXf: {
+  typ: {
+    -- Core transformation types
+    AffineTransform
+    ResourceTransform
+    TypeTransform
+    
+    -- Specific transformations
+    AffineToLinear
+    AffineToUnrestricted
+    AffineToPrim
+    
+    -- Context transformations
+    ContextTransform
+    ProofTransform
+  }
+
+  op: {
+    -- Transformation operators
+    ==> <== <=> ~~
+    
+    -- Composition operators
+    >>> <<< +++ &&&
+    
+    -- Resource tracking operators
+    drop weaken contract
+  }
+
+  fn: {
+    -- Core transformation functions
+    to_linear from_linear
+    to_unrestricted from_unrestricted
+    to_prim from_prim
+    
+    -- Type transformations
+    affine_to_linear_type linear_to_affine_type
+    affine_to_unrestricted_type unrestricted_to_affine_type
+    
+    -- Function transformations
+    transform_affine_fn transform_affine_app
+    
+    -- Resource operations
+    insert_drops insert_copies
+    preserve_usage track_usage
+    
+    -- Proof transformations
+    transform_proof transform_judgment
+    embed_affine_proof extract_affine_proof
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@AffineXf, @T, true),            -- Add dependency on Type system
+    (@AffineXf, @Affine, true),       -- Add dependency on Affine type system
+    (@AffineXf, @Linear, true),       -- Add dependency on Linear type system
+    (@AffineXf, @CatXf, true),        -- Add dependency on Category transformations
+    (@AffineXf, @LinearXf, true)      -- Add dependency on Linear transformations
+  }
+
+  --------------------------------------------------
+  -- Affine to Linear Transformations
+  --------------------------------------------------
+
+  --[[
+    to_linear transforms affine types and functions into linear types and functions,
+    enabling usage in linear contexts by explicitly handling dropped resources.
+  ]]--
+  to_linear: @Affine.a -> @Linear.a [affine_val ->
+    match affine_val with
+      -- Transform affine type to linear type
+      | { _type: "AffineType" } ->
+          affine_to_linear_type(affine_val)
+      
+      -- Transform affine function to linear function
+      | { domain: _, codomain: _ } ->
+          @Linear.linear_fn(
+            transform_param(affine_val.domain),
+            transform_body(affine_val.codomain),
+            [x -> transform_with_explicit_usage(affine_val.body, x)]
+          )
+      
+      -- Default for values
+      | _ -> 
+          -- Wrap in linear wrapper to ensure linear usage
+          @Linear.make_linear(affine_val)
+  ]
+
+  --[[
+    from_linear transforms linear types and functions into affine types and functions,
+    allowing more flexible usage patterns while preserving resource safety.
+  ]]--
+  from_linear: @Linear.a -> @Affine.a [linear_val ->
+    match linear_val with
+      -- Transform linear type to affine type
+      | { _type: "LinearType" } ->
+          linear_to_affine_type(linear_val)
+      
+      -- Transform linear function to affine function
+      | { domain: _, codomain: _ } ->
+          @Affine.affine_fn(
+            transform_param(linear_val.domain),
+            transform_body(linear_val.codomain),
+            [x -> relax_linear_constraints(linear_val.body, x)]
+          )
+      
+      -- Default for values
+      | _ -> 
+          -- Wrap in affine wrapper allowing potential dropping
+          @Affine.make_affine(linear_val)
+  ]
+
+  --[[
+    affine_to_linear_type transforms an affine type into a linear type
+  ]]--
+  affine_to_linear_type: @Affine.AffineType -> @Linear.LinearType [affine_type ->
+    {
+      base: affine_type.base,
+      linear: true,
+      consumed: false
+    }
+  ]
+
+  --[[
+    linear_to_affine_type transforms a linear type into an affine type
+  ]]--
+  linear_to_affine_type: @Linear.LinearType -> @Affine.AffineType [linear_type ->
+    {
+      base: linear_type.base,
+      affine: true,
+      weakening: true
+    }
+  ]
+
+  --[[
+    transform_with_explicit_usage transforms an affine function body to ensure
+    explicit handling of all resources in a linear context
+  ]]--
+  transform_with_explicit_usage: (@Affine.AffineCtx -> a) -> (@Linear.LinearCtx -> a) [body ctx ->
+    -- In a real implementation, this would:
+    -- 1. Track all resources in the context
+    -- 2. Ensure each resource is explicitly consumed or passed on
+    -- 3. Insert necessary error handling for resources that might be implicitly dropped
+    
+    body(convert_context(ctx))
+  ]
+
+  --[[
+    relax_linear_constraints transforms a linear function body to allow
+    more flexible usage patterns in an affine context
+  ]]--
+  relax_linear_constraints: (@Linear.LinearCtx -> a) -> (@Affine.AffineCtx -> a) [body ctx ->
+    -- In a real implementation, this would:
+    -- 1. Convert linear usage tracking to affine tracking
+    -- 2. Insert optional drop operations where resources might not be used
+    
+    body(convert_context(ctx))
+  ]
+
+  --[[
+    convert_context converts between linear and affine contexts
+  ]]--
+  convert_context: @Linear.LinearCtx -> @Affine.AffineCtx [ctx ->
+    {
+      bindings: ctx.bindings |> map [binding ->
+        linear_to_affine_type(binding)
+      ],
+      used: ctx.used
+    }
+  ]
+
+  --------------------------------------------------
+  -- Affine to Unrestricted Transformations
+  --------------------------------------------------
+
+  --[[
+    to_unrestricted transforms affine types and functions into unrestricted types,
+    relaxing affine constraints for contexts where resources can be freely used.
+  ]]--
+  to_unrestricted: @Affine.a -> T.a [affine_val ->
+    match affine_val with
+      -- Transform affine type to unrestricted type
+      | { _type: "AffineType" } ->
+          affine_to_unrestricted_type(affine_val)
+      
+      -- Transform affine function to unrestricted function
+      | { domain: _, codomain: _ } ->
+          [x -> transform_body_unrestricted(affine_val.body, x)]
+      
+      -- Default for values
+      | _ -> 
+          -- Simply unwrap affine container
+          affine_val.base
+  ]
+
+  --[[
+    from_unrestricted transforms unrestricted types into affine types,
+    adding affine constraints for safer resource management.
+  ]]--
+  from_unrestricted: T.a -> @Affine.a [unrestricted_val ->
+    match unrestricted_val with
+      -- Transform unrestricted function to affine function
+      | f if is_function(f) ->
+          @Affine.affine_fn(
+            "x",
+            unrestricted_to_affine_type(domain_of(f)),
+            [x -> f(x)]
+          )
+      
+      -- Default for values
+      | _ -> 
+          -- Wrap in affine container
+          {
+            base: unrestricted_val,
+            affine: false,  -- Regular values aren't inherently affine
+            weakening: true  -- Can be dropped
+          }
+  ]
+
+  --[[
+    affine_to_unrestricted_type transforms an affine type into an unrestricted type
+  ]]--
+  affine_to_unrestricted_type: @Affine.AffineType -> T.Type [affine_type ->
+    -- Simply return the underlying base type
+    affine_type.base
+  ]
+
+  --[[
+    unrestricted_to_affine_type transforms an unrestricted type into an affine type
+  ]]--
+  unrestricted_to_affine_type: T.Type -> @Affine.AffineType [type ->
+    {
+      base: type,
+      affine: false,  -- Regular type isn't inherently affine
+      weakening: true  -- Can be dropped
+    }
+  ]
+
+  --[[
+    transform_body_unrestricted transforms an affine function body to
+    operate in an unrestricted context
+  ]]--
+  transform_body_unrestricted: (@Affine.AffineCtx -> a) -> (b -> a) [body arg ->
+    -- In a real implementation, this would:
+    -- 1. Convert the unrestricted arg to an affine value
+    -- 2. Create a suitable affine context
+    -- 3. Execute the affine body in this context
+    
+    body({ bindings: { "x": from_unrestricted(arg) }, used: { "x": false } })
+  ]
+
+  --------------------------------------------------
+  -- Primitive Operations Transformations
+  --------------------------------------------------
+
+  --[[
+    to_prim transforms affine operations into primitive operations,
+    bridging the gap between affine typing and core computational primitives.
+  ]]--
+  to_prim: @Affine.a -> @Prim.a [affine_val ->
+    match affine_val with
+      -- Affine drop operation becomes Prim.drop, which is a no-op in Prim
+      | { _op: "drop", arg: a } ->
+          @Prim.drop
+      
+      -- Other affine-specific operations
+      | { _op: "affine_fn" } ->
+          @Prim.fn
+      
+      -- Default - pass through the underlying value
+      | _ ->
+          extract_base_value(affine_val)
+  ]
+
+  --[[
+    from_prim transforms primitive operations into affine operations,
+    adding affine typing constraints to basic computational primitives.
+  ]]--
+  from_prim: @Prim.a -> @Affine.a [prim_op ->
+    match prim_op with
+      -- Functions with affine constraints
+      | @Prim.fn ->
+          @Affine.affine_fn
+      
+      -- Handle primitive drop operation
+      | @Prim.drop ->
+          @Affine.drop
+      
+      -- Default - wrap in affine container
+      | _ ->
+          wrap_as_affine(prim_op)
+  ]
+
+  --[[
+    extract_base_value extracts the underlying value from an affine wrapper
+  ]]--
+  extract_base_value: @Affine.a -> b [affine_val ->
+    match affine_val with
+      | { base: b } -> b
+      | _ -> affine_val  -- Return as is if not wrapped
+  ]
+
+  --[[
+    wrap_as_affine wraps a value in an affine container
+  ]]--
+  wrap_as_affine: a -> @Affine.a [val ->
+    {
+      base: val,
+      affine: false,
+      weakening: true
+    }
+  ]
+
+  --------------------------------------------------
+  -- Categorical Structure of Affine Transformations
+  --------------------------------------------------
+
+  --[[
+    AffineTransform defines a transformation between the affine type system
+    and other type systems, preserving properties of affine resource usage.
+  ]]--
+  AffineTransform: {
+    source_type: T.T,
+    target_type: T.T,
+    transform: (a -> b),
+    inverse: ?(b -> a),
+    preserves_affine: Bool
+  }
+
+  --[[
+    Functor that maps from the category of affine types to linear types.
+    This represents the inclusion of affine typing into linear typing.
+  ]]--
+  affine_linear_functor: @CatXf.Functor [
+    {
+      source_category: @Affine.structure,
+      target_category: @Linear.structure,
+      map_obj: [t -> affine_to_linear_type(t)],
+      map_morph: [f -> to_linear(f)],
+      preserves_id: true,
+      preserves_composition: true
+    }
+  ]
+
+  --[[
+    Functor that maps from the category of linear types to affine types.
+    This represents the embedding of linear typing into affine typing.
+  ]]--
+  linear_affine_functor: @CatXf.Functor [
+    {
+      source_category: @Linear.structure,
+      target_category: @Affine.structure,
+      map_obj: [t -> linear_to_affine_type(t)],
+      map_morph: [f -> from_linear(f)],
+      preserves_id: true,
+      preserves_composition: true
+    }
+  ]
+
+  --[[
+    Natural transformation between functors that witnesses
+    the relationship between affine and linear type systems.
+  ]]--
+  affine_linear_transform: @CatXf.NaturalTransformation [
+    {
+      source_functor: compose_functors(affine_linear_functor, linear_affine_functor),
+      target_functor: identity_functor(@Affine.structure),
+      components: [a -> [x -> identity_transform(x)]],
+      naturality: true
+    }
+  ]
+
+  --[[
+    Helper function to compose functors
+  ]]--
+  compose_functors: @CatXf.Functor * @CatXf.Functor -> @CatXf.Functor [F G ->
+    @CatXf.functor_composition(F, G)
+  ]
+
+  --[[
+    Helper function for identity functor on a category
+  ]]--
+  identity_functor: @CatXf.Category -> @CatXf.Functor [cat ->
+    {
+      source_category: cat,
+      target_category: cat,
+      map_obj: [t -> t],
+      map_morph: [f -> f],
+      preserves_id: true,
+      preserves_composition: true
+    }
+  ]
+
+  --[[
+    Helper function for identity transform
+  ]]--
+  identity_transform: a -> a [x -> x]
+
+  --[[
+    Helper function to check if a value is a function
+  ]]--
+  is_function: a -> Bool [v ->
+    @T.typeOf(v) is @T.Function(_, _)
+  ]
+
+  --[[
+    Helper function to get the domain type of a function
+  ]]--
+  domain_of: (a -> b) -> T.Type [f ->
+    match @T.typeOf(f) with
+      | @T.Function(dom, _) -> dom
+      | _ -> @T.Any  -- Default if not a function type
+  ]
+} 

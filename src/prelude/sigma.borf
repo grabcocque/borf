@@ -1,0 +1,554 @@
+--[[
+  Sigma (Dependent Pair) Type System
+
+  This module defines a dependent pair type system where the type of the second component
+  can depend on the value of the first component. Sigma types are a central feature of
+  dependent type systems and enable expressing rich data structures with internal constraints.
+]]--
+
+@Sigma: {
+  typ: {
+    -- Core dependent types
+    SigmaType SigmaCtx
+    
+    -- Type expressions
+    TypeExpr TypeApp TypeLam TypeVar
+    
+    -- Proof terms
+    Proof Judgment Derivation
+  }
+
+  op: {
+    -- Type operators
+    Σ × ∃
+    
+    -- Judgment operators
+    ⊢ ⊣ ⊨
+    
+    -- Equality operators
+    ≡ ≢ ≤
+  }
+
+  fn: {
+    -- Core type functions
+    sigma_type pair fst snd
+    type_eval type_check type_infer
+    
+    -- Context operations
+    ctx_empty ctx_extend ctx_merge
+    
+    -- Proof operations
+    derive check infer
+    prove subst
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Sigma, @T, true),            -- Add dependency on Type system
+    (@Sigma, @Pi, true),           -- Add dependency on Pi type system
+    (@Sigma, @Unrestricted, true), -- Add dependency on Unrestricted type system
+    (@Sigma, @Cat, true),          -- Add dependency on Category theory
+    (@Sigma, @Context, true)       -- Add dependency on Context category
+  }
+
+  --------------------------------------------------
+  -- Core Dependent Types
+  --------------------------------------------------
+
+  --[[
+    SigmaType defines a dependent pair type Σ(x:A).B(x)
+    where B's type depends on the value of x
+  ]]--
+  SigmaType: {
+    fst_name: S,
+    fst_type: TypeExpr,
+    snd_type_fn: (a -> TypeExpr)  -- Function from values to types
+  }
+
+  --[[
+    SigmaPair defines a dependent pair value (a, b) where b's type
+    depends on the value of a
+  ]]--
+  SigmaPair: {
+    type: SigmaType,
+    fst: a,
+    snd: b
+  }
+
+  --[[
+    SigmaCtx defines a typing context for dependent pairs
+  ]]--
+  SigmaCtx: {
+    bindings: S:-> TypeExpr,
+    assumptions: [Judgment]  -- Logical assumptions in scope
+  }
+
+  --[[
+    TypeExpr defines a type expression in the dependent type system
+    Reused from Pi module, but redefined here for clarity
+  ]]--
+  TypeExpr: TypeApp | TypeLam | TypeVar | T.Type
+
+  --[[
+    TypeApp represents a type application, like T(v)
+  ]]--
+  TypeApp: {
+    fn: TypeExpr,
+    arg: a
+  }
+
+  --[[
+    TypeLam represents a type-level function
+  ]]--
+  TypeLam: {
+    param: S,
+    param_type: TypeExpr,
+    body: TypeExpr
+  }
+
+  --[[
+    TypeVar represents a type variable
+  ]]--
+  TypeVar: {
+    name: S
+  }
+
+  --[[
+    Judgment represents a typing judgment
+  ]]--
+  Judgment: {
+    ctx: SigmaCtx,
+    expr: a,
+    type: TypeExpr
+  }
+
+  --------------------------------------------------
+  -- Type Constructors and Functions
+  --------------------------------------------------
+
+  --[[
+    sigma_type creates a dependent pair type Σ(x:A).B(x)
+  ]]--
+  sigma_type: S * TypeExpr * (a -> TypeExpr) -> SigmaType [name fst_type snd_type_fn ->
+    {
+      fst_name: name,
+      fst_type: fst_type,
+      snd_type_fn: snd_type_fn
+    }
+  ]
+
+  --[[
+    pair creates a dependent pair
+  ]]--
+  pair: SigmaType * a * b -> SigmaPair [type fst_val snd_val ->
+    -- Check that first value has the correct type
+    if not type_check(fst_val, type.fst_type) {
+      error("Type mismatch: first component doesn't match first type")
+    }
+    
+    -- Compute the expected second type for this specific first value
+    let expected_snd_type = type.snd_type_fn(fst_val) in
+    
+    -- Check that second value has the correct type
+    if not type_check(snd_val, expected_snd_type) {
+      error("Type mismatch: second component doesn't match dependent type")
+    }
+    
+    {
+      type: type,
+      fst: fst_val,
+      snd: snd_val
+    }
+  ]
+
+  --[[
+    fst extracts the first component of a dependent pair
+  ]]--
+  fst: SigmaPair -> a [p ->
+    p.fst
+  ]
+
+  --[[
+    snd extracts the second component of a dependent pair
+  ]]--
+  snd: SigmaPair -> b [p ->
+    p.snd
+  ]
+
+  --[[
+    type_eval evaluates a type expression in a context
+    Similar to Pi's type_eval, but redefined here for clarity
+  ]]--
+  type_eval: TypeExpr * SigmaCtx -> TypeExpr [expr ctx ->
+    match expr with
+      -- Evaluate type application
+      | { _type: "TypeApp", fn: f, arg: a } ->
+          let evaluated_fn = type_eval(f, ctx) in
+          let evaluated_arg = a in  -- Assume arg is already a value
+          
+          match evaluated_fn with
+            | { _type: "TypeLam", param: p, body: b } ->
+                -- Substitute arg into the body
+                type_eval(subst_type(b, p, evaluated_arg), ctx)
+            | _ ->
+                -- Cannot apply non-function type
+                error("Cannot apply non-function type")
+      
+      -- Look up type variable
+      | { _type: "TypeVar", name: n } ->
+          if n in ctx.bindings {
+            ctx.bindings[n]
+          } else {
+            error("Unbound type variable: " + n)
+          }
+      
+      -- Type lambda is already a value
+      | { _type: "TypeLam" } ->
+          expr
+      
+      -- Base type is already a value
+      | _ ->
+          expr
+  ]
+
+  --[[
+    type_check checks if a value has the expected type
+  ]]--
+  type_check: a * TypeExpr -> Bool [val type_expr ->
+    -- In a real implementation, this would perform proper type checking
+    -- with support for dependent types
+    true
+  ]
+
+  --[[
+    type_infer infers the type of a value
+  ]]--
+  type_infer: a * SigmaCtx -> TypeExpr [val ctx ->
+    -- In a real implementation, this would perform proper type inference
+    -- with support for dependent types
+    { _type: "TypeVar", name: "Any" }
+  ]
+
+  --[[
+    subst_type substitutes a value for a variable in a type expression
+    Similar to Pi's subst_type, but redefined here for clarity
+  ]]--
+  subst_type: TypeExpr * S * a -> TypeExpr [expr var val ->
+    match expr with
+      -- Substitute in type application
+      | { _type: "TypeApp", fn: f, arg: a } ->
+          { _type: "TypeApp", fn: subst_type(f, var, val), arg: a }
+      
+      -- Substitute in type lambda, but watch for shadowing
+      | { _type: "TypeLam", param: p, param_type: pt, body: b } ->
+          if p == var {
+            -- The parameter shadows the variable we're substituting
+            expr
+          } else {
+            -- Substitute in the body
+            { _type: "TypeLam", param: p, param_type: subst_type(pt, var, val), body: subst_type(b, var, val) }
+          }
+      
+      -- Substitute type variable
+      | { _type: "TypeVar", name: n } ->
+          if n == var {
+            -- This is the variable we're substituting
+            val
+          } else {
+            -- Different variable, leave unchanged
+            expr
+          }
+      
+      -- Base type, leave unchanged
+      | _ ->
+          expr
+  ]
+
+  --------------------------------------------------
+  -- Context Operations
+  --------------------------------------------------
+
+  --[[
+    ctx_empty creates an empty typing context
+  ]]--
+  ctx_empty: () -> SigmaCtx [->
+    {
+      bindings: {},
+      assumptions: []
+    }
+  ]
+
+  --[[
+    ctx_extend extends a context with a new type binding
+  ]]--
+  ctx_extend: SigmaCtx * S * TypeExpr -> SigmaCtx [ctx var type_expr ->
+    {
+      bindings: ctx.bindings cup { var: type_expr },
+      assumptions: ctx.assumptions
+    }
+  ]
+
+  --[[
+    ctx_assume extends a context with a new assumption
+  ]]--
+  ctx_assume: SigmaCtx * Judgment -> SigmaCtx [ctx assumption ->
+    {
+      bindings: ctx.bindings,
+      assumptions: ctx.assumptions + [assumption]
+    }
+  ]
+
+  --[[
+    ctx_merge merges two contexts
+  ]]--
+  ctx_merge: SigmaCtx * SigmaCtx -> SigmaCtx [ctx1 ctx2 ->
+    {
+      bindings: ctx1.bindings cup ctx2.bindings,
+      assumptions: ctx1.assumptions + ctx2.assumptions
+    }
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping to Categorical Semantics
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @Sigma as a locally cartesian closed category.
+    
+    In this categorical structure:
+    - Objects are types in a context (contextual types)
+    - Morphisms are functions between types
+    - Slices Ctx/A represent the context with a distinguished variable of type A
+    - Dependent sums Σ(a:A)B(a) are left adjoints to context extensions
+  ]]--
+  structure: {
+    -- Map Sigma to a locally cartesian closed category
+    objects: [ctx:SigmaCtx, type:TypeExpr],  -- Types in contexts
+    morphisms: [a b -> [fn | source(fn) == a && target(fn) == b]],
+    
+    -- Base category structure
+    dom: [f -> source(f)],
+    cod: [f -> target(f)],
+    id: [a -> identity_fn(a)],
+    compose: [f g -> compose_fn(f, g)],
+    
+    -- Slice category structure
+    slice: [ctx A -> create_slice(ctx, A)],
+    base: [ctx A -> ctx],
+    fiber: [ctx A -> A],
+    
+    -- Dependent sum structure
+    dependent_sum: [ctx A B -> sigma_type("x", A, [x -> B])],
+    pair_constructor: [x y -> pair(dependent_sum(ctx_type(x), type_of(x), type_of(y)), x, y)],
+    
+    -- Connection to context category
+    to_context: [ctx_type -> @Context.extend(@Context.empty(), "x", ctx_type[1])],
+    from_context: [@Context.Ctx -> [empty_ctx(), @Context.lookup(ctx, "x").type]],
+    
+    -- Sigma as left adjoint to context extension
+    context_extension: [@Context.Ctx * TypeExpr -> @Context.extend(ctx, "x", type)],
+    
+    -- Laws for dependent type category
+    laws: {
+      -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
+      associativity: forall [f g h ->
+        compose(compose(f, g), h) == compose(f, compose(g, h))
+      ],
+      
+      -- Identity: id ∘ f = f = f ∘ id
+      identity: forall [f ->
+        compose(id(dom(f)), f) == f && compose(f, id(cod(f))) == f
+      ],
+      
+      -- Beck-Chevalley condition (for dependent sums)
+      beck_chevalley: forall [f A B ->
+        reindex(dependent_sum(cod(f), A, B), f) ==
+        dependent_sum(dom(f), reindex(A, f), reindex(B, f))
+      ],
+      
+      -- Sigma-Context adjunction law
+      sigma_context_adjunction: true  -- Context-extension ⊣ Σ
+    }
+  }
+  
+  --[[
+    Helper function to get the source of a function
+  ]]--
+  source: (a -> b) -> [SigmaCtx, TypeExpr] [fn ->
+    [create_ctx_from_type(infer_domain(fn)), infer_domain(fn)]
+  ]
+  
+  --[[
+    Helper function to get the target of a function
+  ]]--
+  target: (a -> b) -> [SigmaCtx, TypeExpr] [fn ->
+    [create_ctx_from_type(infer_codomain(fn)), infer_codomain(fn)]
+  ]
+  
+  --[[
+    Helper function to create a context from a type
+  ]]--
+  create_ctx_from_type: TypeExpr -> SigmaCtx [type ->
+    -- In a real implementation, this would extract free variables
+    ctx_empty()
+  ]
+  
+  --[[
+    Helper function to infer the domain type of a function
+  ]]--
+  infer_domain: (a -> b) -> TypeExpr [fn ->
+    -- In a real implementation, this would infer the domain
+    { _type: "TypeVar", name: "Any" }
+  ]
+  
+  --[[
+    Helper function to infer the codomain type of a function
+  ]]--
+  infer_codomain: (a -> b) -> TypeExpr [fn ->
+    -- In a real implementation, this would infer the codomain
+    { _type: "TypeVar", name: "Any" }
+  ]
+  
+  --[[
+    Helper function to create an identity function
+  ]]--
+  identity_fn: [SigmaCtx, TypeExpr] -> (a -> a) [ctx_type ->
+    [x -> x]
+  ]
+  
+  --[[
+    Helper function to compose functions
+  ]]--
+  compose_fn: (a -> b) * (b -> c) -> (a -> c) [f g ->
+    [x -> g(f(x))]
+  ]
+  
+  --[[
+    Helper function to create a slice category
+  ]]--
+  create_slice: SigmaCtx * TypeExpr -> [SigmaCtx, TypeExpr] [ctx type ->
+    [ctx_extend(ctx, "slice_var", type), type]
+  ]
+  
+  --[[
+    Helper function to reindex a type along a function
+  ]]--
+  reindex: TypeExpr * (a -> b) -> TypeExpr [type f ->
+    -- In a real implementation, this would substitute through the type
+    type_subst(type, f)
+  ]
+  
+  --[[
+    Helper function to get the context from an object
+  ]]--
+  ctx_type: a -> SigmaCtx [x ->
+    create_ctx_from_type(type_of(x))
+  ]
+  
+  --[[
+    Helper function to get the type of a value
+  ]]--
+  type_of: a -> TypeExpr [x ->
+    -- In a real implementation, this would return the type
+    { _type: "TypeVar", name: "Any" }
+  ]
+
+  --------------------------------------------------
+  -- Example Dependent Pairs
+  --------------------------------------------------
+  
+  --[[
+    Example: Non-empty list as a dependent pair
+  ]]--
+  example.non_empty_list: TypeExpr [->
+    -- Define types
+    let A = { _type: "TypeVar", name: "A" } in  -- Element type
+    
+    -- Define non-empty list type: Σ(x:A).(List A)
+    -- This represents a non-empty list as a pair of (head, tail)
+    sigma_type("head", A, [_ -> { _type: "TypeVar", name: "List", param: A }])
+  ]
+  
+  --[[
+    Example: Subset type - numbers satisfying a predicate
+  ]]--
+  example.natural_subset: (Z -> Bool) -> SigmaType [predicate ->
+    -- Define the natural numbers type
+    let Nat = { _type: "TypeVar", name: "Nat" } in
+    
+    -- Define a type for the subset of naturals satisfying the predicate
+    -- Σ(n:Nat).{predicate(n)}
+    -- The second component is a proof that the predicate holds
+    sigma_type("n", Nat, [n ->
+      -- The type of proofs that predicate(n) is true
+      if predicate(n) {
+        { _type: "TypeVar", name: "Unit" }  -- Non-empty type (proof exists)
+      } else {
+        { _type: "TypeVar", name: "Void" }  -- Empty type (no proof exists)
+      }
+    ])
+  ]
+  
+  --[[
+    Example: Create even numbers subset type
+  ]]--
+  example.even_numbers: SigmaType [->
+    -- Define the predicate for even numbers
+    let is_even = [n -> n % 2 == 0] in
+    
+    -- Create the subset type
+    example.natural_subset(is_even)
+  ]
+  
+  --[[
+    Example: Existential type - package of an implementation with operations
+  ]]--
+  example.counter: TypeExpr [->
+    -- Define the interface for a counter
+    -- Σ(state:Type).(state × (state -> state) × (state -> Nat))
+    -- This represents an abstract data type with:
+    -- 1. An initial state
+    -- 2. An increment operation
+    -- 3. A getter operation that returns the current count
+    
+    -- The state type is abstract
+    let StateType = { _type: "TypeVar", name: "Type" } in
+    
+    -- The operation types depend on the state type
+    sigma_type("state", StateType, [state ->
+      -- Create a product type for the operations
+      let InitialState = state in
+      let Increment = { _type: "TypeVar", name: "Function", params: [state, state] } in
+      let GetCount = { _type: "TypeVar", name: "Function", params: [state, { _type: "TypeVar", name: "Nat" }] } in
+      
+      -- Package everything as a product type
+      { _type: "TypeVar", name: "Product", params: [InitialState, { _type: "TypeVar", name: "Product", params: [Increment, GetCount] }] }
+    ])
+  ]
+  
+  --[[
+    Example: Create a simple counter implementation
+  ]]--
+  example.simple_counter: SigmaPair [->
+    -- Get the counter type
+    let counter_type = example.counter() in
+    
+    -- Create an implementation using natural numbers
+    let state_type = { _type: "TypeVar", name: "Nat" } in
+    let initial_state = 0 in
+    let increment = [n -> n + 1] in
+    let get_count = [n -> n] in
+    
+    -- Create the existential package
+    pair(
+      counter_type,
+      state_type,
+      (initial_state, (increment, get_count))
+    )
+  ]
+} 

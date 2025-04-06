@@ -12,13 +12,13 @@
     LambdaTransform
     TypedTransform
     LinearTransform
-    
+
     -- Specific transformations
     LambdaToPrim
     LambdaToTerm
     LambdaToRW
     LambdaToGraph
-    
+
     -- Interpreter types
     Interpreter
     Environment
@@ -28,10 +28,10 @@
   op: {
     -- Transformation operators
     ==> <== <=> ~~
-    
+
     -- Composition operators
     >>> <<< +++ &&&
-    
+
     -- Interpretation operators
     |= |> <| $$
   }
@@ -42,19 +42,19 @@
     to_term from_term
     to_rw from_rw
     to_graph from_graph
-    
+
     -- Typed lambda transformations
     typed_to_untyped untyped_to_typed
     church_encode church_decode
-    
+
     -- Linear lambda transformations
     linear_to_resource resource_to_linear
     linear_to_session session_to_linear
-    
+
     -- Interpretation functions
     interpret evaluate compile
     optimize cps_transform
-    
+
     -- Category theory connections
     curry_howard yoneda_embedding
     adjunction_transform monad_transform
@@ -88,33 +88,33 @@
       -- Identity function
       | { _type: "Abs", param: x, body: { _type: "Var", name: y } } when x == y ->
           @Prim.id
-      
+
       -- Function composition
-      | { _type: "Abs", param: "x", body: { _type: "App", 
-          fn: g, 
+      | { _type: "Abs", param: "x", body: { _type: "App",
+          fn: g,
           arg: { _type: "App", fn: f, arg: { _type: "Var", name: "x" } }
         }} ->
           @Prim.compose(to_prim(f), to_prim(g))
-      
+
       -- Map operation (simplified pattern)
       | { _type: "Rec", name: "map", param: "f", body: b } when is_map_pattern(b) ->
           @Prim.map
-      
+
       -- Fold operation (simplified pattern)
       | { _type: "Rec", name: "fold", param: "f", body: b } when is_fold_pattern(b) ->
           @Prim.fold
-      
+
       -- Linear operations
       | { _type: "LinearAbs", param: x, body: { _type: "Var", name: y } } when x == y ->
           @Prim.id
-      
+
       | { _type: "LinearAbs", param: x, body: @Lambda.unit } ->
           @Prim.consume
-      
+
       -- Primitive operation
       | { _type: "Primitive", op: p } ->
           p
-      
+
       -- Default case: compile the expression into a function
       | _ ->
           compile_to_function(expr)
@@ -129,25 +129,25 @@
       -- Identity function
       | @Prim.id ->
           @Lambda.abs("x", @Lambda.var("x"))
-      
+
       -- Function composition
       | @Prim.compose ->
-          @Lambda.abs("f", @Lambda.abs("g", @Lambda.abs("x", 
+          @Lambda.abs("f", @Lambda.abs("g", @Lambda.abs("x",
             @Lambda.app(@Lambda.var("g"), @Lambda.app(@Lambda.var("f"), @Lambda.var("x")))
           )))
-      
+
       -- Map operation
       | @Prim.map ->
           create_map_lambda()
-      
+
       -- Fold operation
       | @Prim.fold ->
           create_fold_lambda()
-      
+
       -- Linear operations
       | @Prim.consume ->
           @Lambda.linear_abs("x", @Lambda.unit)
-      
+
       -- Default case: wrap the primitive in a lambda expression
       | _ ->
           @Lambda.primitive(prim_op)
@@ -175,7 +175,7 @@
   compile_to_function: @Lambda.Expr -> (@Prim.a -> @Prim.a) [expr ->
     -- Create an interpreter for the expression
     let interpreter = create_interpreter(expr) in
-    
+
     -- Return a function that interprets the expression with the given argument
     [arg -> interpreter.evaluate(initial_environment(arg))]
   ]
@@ -184,13 +184,13 @@
     Helper function to create a map lambda expression
   ]]--
   create_map_lambda: () -> @Lambda.Expr [->
-    @Lambda.rec("map", "f", 
+    @Lambda.rec("map", "f",
       @Lambda.abs("xs",
         @Lambda.cond(
           @Lambda.app(@Lambda.primitive(@Prim.is_empty), @Lambda.var("xs")),
           @Lambda.empty_list,
           @Lambda.app(
-            @Lambda.app(@Lambda.cons, 
+            @Lambda.app(@Lambda.cons,
               @Lambda.app(@Lambda.var("f"), @Lambda.app(@Lambda.primitive(@Prim.head), @Lambda.var("xs")))
             ),
             @Lambda.app(
@@ -241,7 +241,7 @@
   ]]--
   to_term: @Lambda.Expr -> @Term.Evidence [expr ->
     let net = create_interaction_net(expr) in
-    
+
     -- Check for recursive patterns
     if has_recursion(expr) then
       analyze_recursive_termination(expr, net)
@@ -307,7 +307,7 @@
   analyze_recursive_termination: @Lambda.Expr * @Term.Net -> @Term.Evidence [expr net ->
     -- Simplistic termination analysis based on structural recursion
     let decreasing = has_structural_recursion(expr) in
-    
+
     {
       net: net,
       terminating: ?Some(decreasing),
@@ -361,21 +361,21 @@
   ]]--
   to_rw: @Lambda.Expr -> @RW.RuleSet [expr ->
     let rules = [] in
-    
+
     -- Add beta reduction rule
     let beta_rule = create_beta_rule() in
     rules = rules + [beta_rule] in
-    
+
     -- Add rules for let bindings
     let let_rule = create_let_rule() in
     rules = rules + [let_rule] in
-    
+
     -- Add rules for linear beta reduction
     if has_linear_abs(expr) then
       let linear_beta_rule = create_linear_beta_rule() in
       rules = rules + [linear_beta_rule]
     in
-    
+
     @RW.create_ruleset(rules)
   ]
 
@@ -386,9 +386,9 @@
   from_rw: @RW.RuleSet -> @Lambda.Expr [ruleset ->
     -- Create a generic lambda term that captures the structure of the rewrite system
     let rules = @RW.rules(ruleset) in
-    
+
     match rules with
-      | [r] when is_beta_rule(r) -> 
+      | [r] when is_beta_rule(r) ->
           @Lambda.abs("x", @Lambda.abs("y", @Lambda.app(@Lambda.var("x"), @Lambda.var("y"))))
       | _ ->
           create_ruleset_lambda(rules)
@@ -497,18 +497,18 @@
     match expr with
       | { _type: "Var", name: n } ->
           env.bindings[n]
-      
+
       | { _type: "Abs", param: p, body: b } ->
           [arg -> evaluate_expr(b, extend_env(env, p, arg))]
-      
+
       | { _type: "App", fn: f, arg: a } ->
           let fn_val = evaluate_expr(f, env) in
           let arg_val = evaluate_expr(a, env) in
           fn_val(arg_val)
-      
+
       | { _type: "Primitive", op: p } ->
           p
-      
+
       | _ ->
           error("Cannot evaluate expression")
   ]
@@ -633,4 +633,4 @@
       preserves_composition: true
     }
   ]
-} 
+}

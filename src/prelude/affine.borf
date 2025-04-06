@@ -1,0 +1,413 @@
+--[[
+  Affine Type System
+
+  This module defines an affine type system where resources can be used at most once
+  (can be dropped but not duplicated). Affine types are more permissive than linear types
+  as they allow resources to be discarded, but still prevent duplication.
+]]--
+
+@Affine: {
+  typ: {
+    -- Core affine types
+    AffineType AffineFn AffineCtx
+    
+    -- Type constructors
+    Tensor Unit Impl Par Bang
+    
+    -- Type operations
+    TypeOp TypeEquiv TypeSub
+    
+    -- Proof terms
+    Proof Judgment Derivation
+  }
+
+  op: {
+    -- Type operators
+    ⊗ ⊸ & ⊕ !
+    
+    -- Judgment operators
+    ⊢ ⊣ ⊨
+    
+    -- Resource tracking
+    drop
+  }
+
+  fn: {
+    -- Core type functions
+    affine_fn affine_app drop
+    tensor_intro tensor_elim
+    unit_intro unit_elim
+    
+    -- Context operations
+    ctx_empty ctx_extend ctx_merge
+    ctx_weaken ctx_contract
+    
+    -- Proof operations
+    derive check infer
+    prove subst
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Affine, @T, true),          -- Add dependency on Type system
+    (@Affine, @Linear, true),     -- Add dependency on Linear type system
+    (@Affine, @Cat, true)         -- Add dependency on Category theory
+  }
+
+  --------------------------------------------------
+  -- Core Affine Types
+  --------------------------------------------------
+
+  --[[
+    AffineType defines a type in the affine type system
+  ]]--
+  AffineType: {
+    base: T.Type,
+    affine: Bool,
+    weakening: Bool
+  }
+
+  --[[
+    AffineFn defines an affine function type A ⊸ B
+    where A can be used at most once to produce B
+  ]]--
+  AffineFn: {
+    domain: AffineType,
+    codomain: AffineType
+  }
+
+  --[[
+    AffineCtx defines a typing context for affine types
+  ]]--
+  AffineCtx: {
+    bindings: S:-> AffineType,
+    used: S:-> Bool  -- Tracks which variables have been used
+  }
+
+  --------------------------------------------------
+  -- Affine Type Constructors
+  --------------------------------------------------
+
+  --[[
+    Tensor forms the multiplicative conjunction A ⊗ B
+  ]]--
+  Tensor: AffineType * AffineType -> AffineType [a b ->
+    {
+      base: a.base * b.base,
+      affine: a.affine || b.affine,
+      weakening: a.weakening && b.weakening
+    }
+  ]
+
+  --[[
+    Unit is the unit of tensor, corresponding to no resources
+  ]]--
+  Unit: AffineType [
+    {
+      base: (),
+      affine: false,
+      weakening: true
+    }
+  ]
+
+  --[[
+    Impl forms the affine implication A ⊸ B
+  ]]--
+  Impl: AffineType * AffineType -> AffineType [a b ->
+    {
+      base: a.base -> b.base,
+      affine: false,  -- Functions themselves are not affine resources
+      weakening: true
+    }
+  ]
+
+  --[[
+    Par forms the multiplicative disjunction A ⅋ B
+  ]]--
+  Par: AffineType * AffineType -> AffineType [a b ->
+    {
+      base: a.base + b.base,  -- Represented as a sum type
+      affine: a.affine || b.affine,
+      weakening: a.weakening && b.weakening
+    }
+  ]
+
+  --[[
+    Bang forms the exponential !A, which makes an affine type unrestricted
+  ]]--
+  Bang: AffineType -> AffineType [a ->
+    {
+      base: a.base,
+      affine: false,  -- !A is not affine
+      weakening: true  -- !A can be weakened (dropped)
+    }
+  ]
+
+  --------------------------------------------------
+  -- Core Function Operations
+  --------------------------------------------------
+
+  --[[
+    affine_fn creates an affine function
+  ]]--
+  affine_fn: S * AffineType * (AffineCtx -> a) -> AffineFn [param typ body ->
+    {
+      domain: typ,
+      codomain: infer_type(body)
+    }
+  ]
+
+  --[[
+    affine_app applies an affine function to an argument
+  ]]--
+  affine_app: AffineFn * a -> b [fn arg ->
+    -- Check that argument is used at most once
+    check_affine_usage(arg)
+    
+    -- Apply the function
+    fn.body(arg)
+  ]
+
+  --[[
+    drop explicitly discards an affine resource
+  ]]--
+  drop: AffineType -> Unit [resource ->
+    -- Verify that the type supports dropping
+    if not resource.weakening {
+      error("Cannot drop a resource that does not support weakening")
+    }
+    
+    -- Return unit value to indicate resource was consumed
+    ()
+  ]
+
+  --[[
+    tensor_intro creates a tensor product of two affine values
+  ]]--
+  tensor_intro: a * b -> (a * b) [a b ->
+    -- Check that a and b are used at most once
+    check_affine_usage(a)
+    check_affine_usage(b)
+    
+    -- Create tensor product
+    (a, b)
+  ]
+
+  --[[
+    tensor_elim eliminates a tensor product by pattern matching
+  ]]--
+  tensor_elim: (a * b) * ((a * b) -> c) -> c [tensor f ->
+    let (a, b) = tensor in
+    f(a, b)
+  ]
+
+  --------------------------------------------------
+  -- Context Operations
+  --------------------------------------------------
+
+  --[[
+    ctx_empty creates an empty affine typing context
+  ]]--
+  ctx_empty: () -> AffineCtx [->
+    {
+      bindings: {},
+      used: {}
+    }
+  ]
+
+  --[[
+    ctx_extend extends a context with a new variable binding
+  ]]--
+  ctx_extend: AffineCtx * S * AffineType -> AffineCtx [ctx var typ ->
+    {
+      bindings: ctx.bindings cup { var: typ },
+      used: ctx.used cup { var: false }
+    }
+  ]
+
+  --[[
+    ctx_merge merges two contexts, ensuring no variable is used in both
+  ]]--
+  ctx_merge: AffineCtx * AffineCtx -> AffineCtx [ctx1 ctx2 ->
+    -- Check that no variable is in both contexts
+    let shared = keys(ctx1.bindings) cap keys(ctx2.bindings) in
+    if shared != [] {
+      error("Cannot merge contexts with shared variables: " + shared)
+    }
+    
+    {
+      bindings: ctx1.bindings cup ctx2.bindings,
+      used: ctx1.used cup ctx2.used
+    }
+  ]
+
+  --[[
+    ctx_weaken removes a variable from context without using it
+  ]]--
+  ctx_weaken: AffineCtx * S -> AffineCtx [ctx var ->
+    -- Check that the variable supports weakening
+    let typ = ctx.bindings[var] in
+    if not typ.weakening {
+      error("Cannot weaken variable of type that does not support weakening")
+    }
+    
+    -- Remove variable from context
+    {
+      bindings: ctx.bindings - var,
+      used: ctx.used - var
+    }
+  ]
+
+  --------------------------------------------------
+  -- Type Operations
+  --------------------------------------------------
+
+  --[[
+    infer_type infers the affine type of an expression
+  ]]--
+  infer_type: (AffineCtx -> a) -> AffineType [expr ->
+    -- This would be implemented in a real type system
+    -- with a proper affine type inference algorithm
+    { base: T.Any, affine: true, weakening: true }
+  ]
+
+  --[[
+    check_affine_usage checks that a value is used at most once
+  ]]--
+  check_affine_usage: a -> Bool [val ->
+    -- This would track usage of val to ensure it's used at most once
+    true
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping to Categorical Semantics
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @Affine as a symmetric monoidal category
+    with additional structure for affine mappings.
+    
+    In this categorical structure:
+    - Objects are affine types
+    - Morphisms are affine functions between types
+    - Tensor product is the multiplicative conjunction
+    - Unit is the tensor unit
+    - The affine structure allows weakening (dropping) but not contraction (copying)
+  ]]--
+  structure: {
+    -- Map Affine to a symmetric monoidal category
+    objects: AffineType,
+    morphisms: [a b -> AffineFn],
+    
+    -- Base category structure
+    dom: [f -> f.domain],
+    cod: [f -> f.codomain],
+    id: [a -> affine_fn("x", a, [x -> x])],
+    compose: [f g -> affine_fn("x", f.domain, [x -> g(f(x))])],
+    
+    -- Monoidal structure
+    tensor_objects: [a b -> Tensor(a, b)],
+    tensor_morphisms: [f g -> affine_fn("p", Tensor(f.domain, g.domain), [p -> 
+      let (x, y) = p in 
+      (f(x), g(y))
+    ])],
+    unit: Unit,
+    
+    -- Symmetric structure
+    swap: [a b -> affine_fn("p", Tensor(a, b), [p -> 
+      let (x, y) = p in 
+      (y, x)
+    ])],
+    
+    -- Affine structure (allows weakening)
+    discard: [a -> affine_fn("x", a, [x -> drop(x)])],
+    
+    -- Laws for affine category
+    laws: {
+      -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
+      associativity: forall [f g h ->
+        compose(compose(f, g), h) == compose(f, compose(g, h))
+      ],
+      
+      -- Identity: id ∘ f = f = f ∘ id
+      identity: forall [f ->
+        compose(id(dom(f)), f) == f && compose(f, id(cod(f))) == f
+      ],
+      
+      -- Functoriality of tensor
+      tensor_functorial: forall [f1 f2 g1 g2 ->
+        tensor_morphisms(compose(f1, f2), compose(g1, g2)) ==
+        compose(tensor_morphisms(f1, g1), tensor_morphisms(f2, g2))
+      ],
+      
+      -- Symmetric monoidal coherence
+      symmetry: forall [a b ->
+        compose(swap(a, b), swap(b, a)) == id(tensor_objects(a, b))
+      ],
+      
+      -- Affine laws (weakening)
+      weakening: forall [a f ->
+        compose(discard(dom(f)), id(unit)) == compose(f, discard(cod(f)))
+      ]
+    }
+  }
+  
+  --------------------------------------------------
+  -- Example Affine Programs
+  --------------------------------------------------
+  
+  --[[
+    Example: Affine file handle usage
+  ]]--
+  example.file_handle: () -> () [->
+    -- Create an affine file handle
+    let file_type = { base: "File", affine: true, weakening: true } in
+    let open_file = affine_fn("path", { base: "String", affine: false, weakening: true }, [path ->
+      { _type: "File", handle: "FileHandle:123" }
+    ]) in
+    
+    -- Use the file and then close it (handle is used exactly once)
+    let file = open_file("example.txt") in
+    
+    -- Read from file (consuming file handle)
+    let close_file = affine_fn("file", file_type, [file ->
+      -- Close file handle
+      ()
+    ]) in
+    
+    -- File is used linearly and then closed
+    close_file(file)
+  ]
+  
+  --[[
+    Example: Optional resource usage with explicit drop
+  ]]--
+  example.conditional_resource: Bool -> () [condition ->
+    -- Create an affine resource
+    let resource_type = { base: "Resource", affine: true, weakening: true } in
+    let create_resource = affine_fn("unit", Unit, [unit ->
+      { _type: "Resource", data: "ResourceData:456" }
+    ]) in
+    
+    -- Create resource
+    let resource = create_resource(()) in
+    
+    -- Conditional usage with explicit drop if unused
+    if condition {
+      -- Use resource
+      let use_resource = affine_fn("r", resource_type, [r ->
+        -- Use the resource
+        ()
+      ]) in
+      use_resource(resource)
+    } else {
+      -- Explicitly drop resource
+      drop(resource)
+    }
+  ]
+} 

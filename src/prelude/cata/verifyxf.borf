@@ -2,7 +2,7 @@
   Verification Transformations
 
   This module defines transformations between verification functions,
-  treating verification functions for the same invariant and system 
+  treating verification functions for the same invariant and system
   as objects in a category where morphisms represent optimizations,
   refinements, or other relationships between implementations.
 ]]--
@@ -13,7 +13,7 @@
     VerificationTransform
     VerificationCategory
     VerificationFunctor
-    
+
     -- Specific verification categories
     FunctorialVerifications
     NaturalityVerifications
@@ -22,7 +22,7 @@
     ResourceUsageVerifications
     ConsistencyVerifications
     CompositionVerifications
-    
+
     -- Optimization types
     Optimization
     VerificationRefinement
@@ -32,7 +32,7 @@
   op: {
     -- Transformation operators
     refine optimize compose
-    
+
     -- Categorical operators
     |=> <=| <|> |||
   }
@@ -41,23 +41,23 @@
     -- Core transformation functions
     create_verification_category
     create_verification_functor
-    
+
     -- Verification transformation functions
     optimize_verification
     refine_verification
     compose_verifications
-    
+
     -- Efficiency and accuracy transformations
     improve_efficiency
     improve_accuracy
     specialize_verification
     generalize_verification
-    
+
     -- Categorical structure functions
     verification_identity
     verification_composition
     verification_natural_transformation
-    
+
     -- Specific transformations
     functorial_to_natural
     natural_to_adjunction
@@ -84,11 +84,11 @@
   --------------------------------------------------
 
   --[[
-    create_verification_category creates a category where objects are verification 
-    functions for a specific invariant and system, and morphisms are transformations 
+    create_verification_category creates a category where objects are verification
+    functions for a specific invariant and system, and morphisms are transformations
     between these verification functions.
   ]]--
-  create_verification_category: forall(A: T.Type_0 I: (A -> Bool)) -> 
+  create_verification_category: forall(A: T.Type_0 I: (A -> Bool)) ->
                                VerificationCategory [system invariant ->
     {
       -- Objects: Different verification functions for the same invariant and system
@@ -99,7 +99,7 @@
         @Verify.verify_consistent,
         @Verify.verify_composition_preservation
       ],
-      
+
       -- Morphisms: Transformations between verification functions
       morphisms: [
         -- Identity morphisms
@@ -107,21 +107,21 @@
         verification_identity(@Verify.verify_resource_usage),
         verification_identity(@Verify.verify_consistent),
         verification_identity(@Verify.verify_composition_preservation),
-        
+
         -- Example optimization morphisms
         optimize_verification(@Verify.verify_type_preservation, EfficiencyMetric.Time),
         optimize_verification(@Verify.verify_resource_usage, EfficiencyMetric.Space),
-        
+
         -- Example refinement morphisms
         refine_verification(@Verify.verify_consistent, AccuracyMetric.Precision)
       ],
-      
+
       -- Composition of morphisms
       compose: [f g -> verification_compose(f, g)],
-      
+
       -- Identity morphism for each object
       id: [v -> verification_identity(v)],
-      
+
       -- Associativity and identity laws are automatically satisfied
       associative: true,
       identity: true
@@ -142,26 +142,26 @@
     match metric with
       -- Optimize for time efficiency
       | EfficiencyMetric.Time ->
-          [a -> 
+          [a ->
             -- Sample-based approach instead of exhaustive verification
             let samples = Prim.smart_sample(a, 5) in
             let results = samples |> map [s -> v(s)] in
-            
+
             if results |> exists [r -> not r.success] {
-              let errors = results |> filter [r -> not r.success] |> 
+              let errors = results |> filter [r -> not r.success] |>
                           flatmap [r -> r.errors] in
               {success: false, errors: errors}
             } else {
               {success: true, errors: []}
             }
           ]
-      
+
       -- Optimize for space efficiency
       | EfficiencyMetric.Space ->
           [a ->
             -- Stream-based verification instead of collecting all results
             let result = {success: true, errors: []} in
-            
+
             -- Simulate streaming verification
             let stream_verify = [elem result ->
               let sub_result = v(elem) in
@@ -171,16 +171,16 @@
                 {success: false, errors: sub_result.errors}
               }
             ] in
-            
+
             -- Apply streaming verification to samples
             let samples = Prim.stream_sample(a, 5) in
             Prim.stream_reduce(samples, result, stream_verify)
           ]
-      
+
       -- Default: return original verification
       | _ -> v
   ]
-  
+
   --[[
     refine_verification increases the accuracy or precision of a verification function
   ]]--
@@ -192,16 +192,16 @@
       | AccuracyMetric.Precision ->
           [a ->
             let basic_result = v(a) in
-            
+
             if basic_result.success {
               -- Add additional verification steps for higher precision
               let detailed_checks = perform_detailed_verification(a) in
-              
+
               if detailed_checks.success {
                 {success: true, errors: []}
               } else {
                 {
-                  success: false, 
+                  success: false,
                   errors: ["Detailed verification failed: " + detailed_checks.errors[0]]
                 }
               }
@@ -209,28 +209,28 @@
               basic_result
             }
           ]
-      
+
       -- Increase recall (catch more potential issues)
       | AccuracyMetric.Recall ->
           [a ->
             let basic_result = v(a) in
-            
+
             -- Add additional verification steps to catch more issues
             let edge_cases = generate_edge_cases(a) in
             let edge_results = edge_cases |> map [e -> v(e)] in
-            
+
             if edge_results |> exists [r -> not r.success] {
-              let errors = edge_results |> filter [r -> not r.success] |> 
+              let errors = edge_results |> filter [r -> not r.success] |>
                           flatmap [r -> r.errors] in
               {
-                success: false, 
+                success: false,
                 errors: ["Edge case verification failed: " + errors[0]]
               }
             } else {
               basic_result
             }
           ]
-      
+
       -- Default: return original verification
       | _ -> v
   ]
@@ -239,12 +239,12 @@
     verification_compose composes two verification transformations
   ]]--
   verification_compose: forall(A: T.Type_0) ->
-                        (A -> @Verify.VerificationResult) -> 
-                        (A -> @Verify.VerificationResult) -> 
+                        (A -> @Verify.VerificationResult) ->
+                        (A -> @Verify.VerificationResult) ->
                         (A -> @Verify.VerificationResult) [f g ->
     [a ->
       let result_f = f(a) in
-      
+
       if result_f.success {
         g(a)  -- Only apply g if f succeeds
       } else {
@@ -257,13 +257,13 @@
     verification_identity creates the identity transformation for a verification function
   ]]--
   verification_identity: forall(A: T.Type_0) ->
-                         (A -> @Verify.VerificationResult) -> 
+                         (A -> @Verify.VerificationResult) ->
                          (A -> @Verify.VerificationResult) [v ->
     [a -> v(a)]  -- Simply return the original verification function
   ]
 
   --------------------------------------------------
-  -- Specific Verification Transformations 
+  -- Specific Verification Transformations
   --------------------------------------------------
 
   --[[
@@ -277,9 +277,9 @@
       -- First verify that F and G are functors
       let F_is_functor = verify_functorial(F) in
       let G_is_functor = verify_functorial(G) in
-      
+
       if F_is_functor.success and G_is_functor.success {
-        -- Then verify naturality 
+        -- Then verify naturality
         @Verify.verify_natural(A, B, F, G, alpha)
       } else {
         let errors = [] in
@@ -303,14 +303,14 @@
   ]]--
   natural_to_adjunction: forall(A: @Cata.Theory.Category B: @Cata.Theory.Category) ->
                          (forall(F: @Cata.Theory.Functor A B G: @Cata.Theory.Functor B A) ->
-                         (forall(X: A.O) -> A.M(X, G(F(X)))) -> 
-                         (forall(Y: B.O) -> B.M(F(G(Y)), Y)) -> 
+                         (forall(X: A.O) -> A.M(X, G(F(X)))) ->
+                         (forall(Y: B.O) -> B.M(F(G(Y)), Y)) ->
                          @Verify.VerificationResult) [verify_natural ->
     [F G unit counit ->
       -- Create natural transformations for unit and counit
       let unit_natural = verify_natural(A, A, A.identity, G ∘ F, unit) in
       let counit_natural = verify_natural(B, B, F ∘ G, B.identity, counit) in
-      
+
       if unit_natural.success and counit_natural.success {
         -- Then verify adjunction triangle identities
         @Verify.verify_adjunction(A, B, F, G, unit, counit)
@@ -343,7 +343,7 @@
       let source_type = [a -> Prim.get_type(a)] in
       let target_type = [b -> Prim.get_type(b)] in
       let predicate = [a b -> Prim.is_consumed(a) and Prim.is_valid(b)] in
-      
+
       -- Apply type preservation verification with linear constraints
       verify_type_preservation(f, source_type, target_type, predicate)
     ]
@@ -359,11 +359,11 @@
       -- Create linearly constrained versions of f and g
       let linear_f = [!a -> f(a)] in
       let linear_g = [!b -> g(b)] in
-      
+
       -- Verify resource usage for both functions
       let f_resources = verify_resource_usage(linear_f) in
       let g_resources = verify_resource_usage(linear_g) in
-      
+
       if f_resources.success and g_resources.success {
         -- Then verify round-trip consistency
         @Verify.verify_consistent(A, B, f, g)
@@ -409,7 +409,7 @@
   --[[
     perform_detailed_verification performs more detailed verification checks
   ]]--
-  perform_detailed_verification: forall(A: T.Type_0) -> 
+  perform_detailed_verification: forall(A: T.Type_0) ->
                                A -> @Verify.VerificationResult [a ->
     -- In a real implementation, this would perform more detailed checks
     {success: true, errors: []}
@@ -436,13 +436,13 @@
     {
       source_category: source_cat,
       target_category: target_cat,
-      
+
       -- Map verification functions
       map_obj: [v -> transform_verification(v)],
-      
+
       -- Map transformations between verification functions
       map_morph: [t -> transform_transformation(t)],
-      
+
       -- Preserve categorical structure
       preserves_id: true,
       preserves_composition: true
@@ -502,4 +502,4 @@
       )
     )
   ]
-} 
+}

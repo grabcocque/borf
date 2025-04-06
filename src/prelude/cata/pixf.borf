@@ -1,0 +1,629 @@
+--[[
+  Pi (Dependent Function) Type System Transformations
+
+  This module defines transformations between dependent function types and other
+  categorical frameworks, enabling rigorous mappings between dependent and non-dependent
+  type systems with a focus on preserving the appropriate semantic properties.
+]]--
+
+@PiXf: {
+  typ: {
+    -- Core transformation types
+    PiTransform
+    DependencyTransform
+    
+    -- Specific transformations
+    PiToFunction
+    FunctionToPi
+    PiToProd
+    
+    -- Context transformations
+    ContextTransform
+    ProofTransform
+  }
+
+  op: {
+    -- Transformation operators
+    ==> <== <=> ~~
+    
+    -- Composition operators
+    >>> <<< +++ &&&
+    
+    -- Dependency operators
+    erase reify
+  }
+
+  fn: {
+    -- Core transformation functions
+    to_function from_function
+    to_prod from_prod
+    to_sigma from_sigma
+    
+    -- Type transformations
+    pi_to_function_type function_to_pi_type
+    pi_to_prod_type prod_to_pi_type
+    
+    -- Dependency operations
+    erase_dependency reify_dependency
+    
+    -- Context transformations
+    transform_context convert_assumptions
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@PiXf, @T, true),            -- Add dependency on Type system
+    (@PiXf, @Pi, true),           -- Add dependency on Pi type system
+    (@PiXf, @Unrestricted, true), -- Add dependency on Unrestricted type system
+    (@PiXf, @CatXf, true),        -- Add dependency on Category transformations
+    (@PiXf, @Context, true),      -- Add dependency on Context category
+    (@PiXf, @ContextXf, true)     -- Add dependency on Context transformations
+  }
+
+  --------------------------------------------------
+  -- Pi to Function Transformations
+  --------------------------------------------------
+
+  --[[
+    to_function transforms dependent function types into non-dependent function types
+    by erasing the dependency information.
+  ]]--
+  to_function: @Pi.a -> @Unrestricted.a [pi_val ->
+    match pi_val with
+      -- Transform dependent type to function type
+      | { _type: "PiType" } ->
+          pi_to_function_type(pi_val)
+      
+      -- Transform dependent function to regular function
+      | { type: typ, body: bod } ->
+          @Unrestricted.unrestricted_fn(
+            "x", 
+            pi_to_function_type(typ),
+            [x -> erase_dependency(bod)(x)]
+          )
+      
+      -- Default for other values
+      | _ -> 
+          -- Pass through with dependency erased
+          erase_dependency_value(pi_val)
+  ]
+
+  --[[
+    from_function transforms non-dependent function types into dependent function types
+    by adding trivial dependency information.
+  ]]--
+  from_function: @Unrestricted.a -> @Pi.a [fn_val ->
+    match fn_val with
+      -- Transform function type to dependent type
+      | { _type: "UnrestrictedType", base: (@T.Function(_, _)) } ->
+          function_to_pi_type(fn_val)
+      
+      -- Transform regular function to dependent function
+      | { domain: dom, codomain: cod, body: bod } ->
+          @Pi.pi_fn(
+            "x",
+            function_to_pi_type(dom),
+            [_ -> function_to_pi_type(cod)],
+            bod
+          )
+      
+      -- Default for other values
+      | _ -> 
+          -- Pass through with trivial dependency added
+          reify_dependency_value(fn_val)
+  ]
+
+  --[[
+    pi_to_function_type transforms a dependent function type into a non-dependent function type
+  ]]--
+  pi_to_function_type: @Pi.PiType -> @Unrestricted.UnrestrictedType [pi_type ->
+    -- Extract a representative return type by applying to a placeholder
+    let placeholder = create_placeholder(pi_type.param_type) in
+    let return_type = pi_type.return_type_fn(placeholder) in
+    
+    {
+      base: @T.Function(
+        extract_base_type(pi_type.param_type),
+        extract_base_type(return_type)
+      ),
+      weakening: true,  -- Functions can be dropped
+      contraction: true  -- Functions can be copied
+    }
+  ]
+
+  --[[
+    function_to_pi_type transforms a non-dependent function type into a dependent function type
+  ]]--
+  function_to_pi_type: @Unrestricted.UnrestrictedType -> @Pi.PiType [fn_type ->
+    -- Extract domain and codomain from the function type
+    let (domain, codomain) = extract_function_types(fn_type.base) in
+    
+    @Pi.pi_type(
+      "x",
+      create_simple_type_expr(domain),
+      [_ -> create_simple_type_expr(codomain)]
+    )
+  ]
+
+  --[[
+    erase_dependency transforms a dependent function to a non-dependent function
+  ]]--
+  erase_dependency: (a -> b) -> (a -> b) [dep_fn ->
+    -- Simply pass through, erasing the dependency structure
+    dep_fn
+  ]
+
+  --[[
+    reify_dependency transforms a non-dependent function to a dependent function
+  ]]--
+  reify_dependency: (a -> b) -> (a -> b) [fn ->
+    -- Simply pass through, adding trivial dependency structure
+    fn
+  ]
+
+  --[[
+    erase_dependency_value erases dependency information from a value
+  ]]--
+  erase_dependency_value: a -> a [val ->
+    -- In a real implementation, this would remove dependency metadata
+    val
+  ]
+
+  --[[
+    reify_dependency_value adds dependency information to a value
+  ]]--
+  reify_dependency_value: a -> a [val ->
+    -- In a real implementation, this would add dependency metadata
+    val
+  ]
+
+  --------------------------------------------------
+  -- Pi to Product/Sigma Transformations
+  --------------------------------------------------
+
+  --[[
+    to_prod transforms certain dependent function types into product types
+    when the dependency is not used in the return type.
+  ]]--
+  to_prod: @Pi.a -> @Unrestricted.a [pi_val ->
+    match pi_val with
+      -- Transform non-dependent Pi type to product type
+      | { _type: "PiType", return_type_fn: rtf } if is_constant(rtf) ->
+          pi_to_prod_type(pi_val)
+      
+      -- Transform dependent function to higher-order function returning products
+      | { type: typ, body: bod } ->
+          transform_to_prod(typ, bod)
+      
+      -- Default for other Pi values (can't transform)
+      | _ -> 
+          to_function(pi_val)
+  ]
+
+  --[[
+    from_prod transforms product types into dependent function types
+    with trivial dependency.
+  ]]--
+  from_prod: @Unrestricted.a -> @Pi.a [prod_val ->
+    match prod_val with
+      -- Transform product type to dependent type
+      | { _type: "UnrestrictedType", base: (@T.Product(_, _)) } ->
+          prod_to_pi_type(prod_val)
+      
+      -- Default for other values
+      | _ -> 
+          -- Try to treat as function instead
+          from_function(prod_val)
+  ]
+
+  --[[
+    pi_to_prod_type transforms a non-dependent Pi type into a product type
+  ]]--
+  pi_to_prod_type: @Pi.PiType -> @Unrestricted.UnrestrictedType [pi_type ->
+    -- Check if this Pi type doesn't actually use the dependency
+    if is_constant(pi_type.return_type_fn) {
+      -- Get representative return type
+      let placeholder = create_placeholder(pi_type.param_type) in
+      let return_type = pi_type.return_type_fn(placeholder) in
+      
+      {
+        base: @T.Product(
+          extract_base_type(pi_type.param_type),
+          extract_base_type(return_type)
+        ),
+        weakening: true,
+        contraction: true
+      }
+    } else {
+      -- Fallback to function type for truly dependent types
+      pi_to_function_type(pi_type)
+    }
+  ]
+
+  --[[
+    prod_to_pi_type transforms a product type into a non-dependent Pi type
+  ]]--
+  prod_to_pi_type: @Unrestricted.UnrestrictedType -> @Pi.PiType [prod_type ->
+    -- Extract product components
+    let (first, second) = extract_product_types(prod_type.base) in
+    
+    @Pi.pi_type(
+      "x",
+      create_simple_type_expr(first),
+      [_ -> create_simple_type_expr(second)]
+    )
+  ]
+
+  --[[
+    transform_to_prod transforms a dependent function to a function with products
+    when possible
+  ]]--
+  transform_to_prod: @Pi.PiType * (a -> b) -> @Unrestricted.a [type body ->
+    -- Check if this Pi type doesn't actually use the dependency
+    if is_constant(type.return_type_fn) {
+      -- Create a function that returns pairs
+      @Unrestricted.unrestricted_fn(
+        "x",
+        pi_to_function_type(type),
+        [x -> (x, body(x))]
+      )
+    } else {
+      -- Fallback to regular function for truly dependent types
+      to_function({ type: type, body: body })
+    }
+  ]
+
+  --------------------------------------------------
+  -- Helper Functions
+  --------------------------------------------------
+
+  --[[
+    is_constant checks if a function doesn't depend on its input
+  ]]--
+  is_constant: (a -> b) -> Bool [f ->
+    -- In a real implementation, this would analyze the function
+    -- to determine if it uses its input
+    false
+  ]
+
+  --[[
+    create_placeholder creates a placeholder value of the given type
+  ]]--
+  create_placeholder: @Pi.TypeExpr -> a [type ->
+    -- In a real implementation, this would create a suitable placeholder
+    null
+  ]
+
+  --[[
+    extract_base_type extracts the underlying base type from a type expression
+  ]]--
+  extract_base_type: @Pi.TypeExpr -> T.Type [type_expr ->
+    match type_expr with
+      | { base: b } -> b
+      | _ -> @T.Any
+    
+  ]
+
+  --[[
+    extract_function_types extracts domain and codomain from a function type
+  ]]--
+  extract_function_types: T.Type -> (T.Type * T.Type) [type ->
+    match type with
+      | @T.Function(dom, cod) -> (dom, cod)
+      | _ -> (@T.Any, @T.Any)
+    
+  ]
+
+  --[[
+    extract_product_types extracts components from a product type
+  ]]--
+  extract_product_types: T.Type -> (T.Type * T.Type) [type ->
+    match type with
+      | @T.Product(fst, snd) -> (fst, snd)
+      | _ -> (@T.Any, @T.Any)
+    
+  ]
+
+  --[[
+    create_simple_type_expr creates a simple type expression from a base type
+  ]]--
+  create_simple_type_expr: T.Type -> @Pi.TypeExpr [type ->
+    -- In a real implementation, this would create a proper TypeExpr
+    type
+  ]
+
+  --------------------------------------------------
+  -- Categorical Structure of Pi Transformations
+  --------------------------------------------------
+
+  --[[
+    PiTransform defines a transformation between the dependent function type system
+    and other type systems, preserving appropriate semantic properties.
+  ]]--
+  PiTransform: {
+    source_type: T.T,
+    target_type: T.T,
+    transform: (a -> b),
+    inverse: ?(b -> a),
+    preserves_semantics: Bool
+  }
+
+  --[[
+    Functor that maps from the category of dependent types to function types.
+    This represents the dependency erasure operation.
+  ]]--
+  pi_function_functor: @CatXf.Functor [
+    {
+      source_category: @Pi.structure,
+      target_category: @Unrestricted.structure,
+      map_obj: [t -> pi_to_function_type(t)],
+      map_morph: [f -> to_function(f)],
+      preserves_id: true,
+      preserves_composition: true
+    }
+  ]
+
+  --[[
+    Functor that maps from the category of function types to dependent types.
+    This represents the trivial dependency addition operation.
+  ]]--
+  function_pi_functor: @CatXf.Functor [
+    {
+      source_category: @Unrestricted.structure,
+      target_category: @Pi.structure,
+      map_obj: [t -> function_to_pi_type(t)],
+      map_morph: [f -> from_function(f)],
+      preserves_id: true,
+      preserves_composition: true
+    }
+  ]
+
+  --[[
+    Natural transformation that witnesses the relationship between
+    erasing dependency and then reifying it.
+  ]]--
+  pi_erase_reify_transform: @CatXf.NaturalTransformation [
+    {
+      source_functor: compose_functors(pi_function_functor, function_pi_functor),
+      target_functor: identity_functor(@Pi.structure),
+      components: [a -> [x -> normalize_pi_transform(x)]],
+      naturality: true
+    }
+  ]
+
+  --[[
+    Helper function to compose functors
+  ]]--
+  compose_functors: @CatXf.Functor * @CatXf.Functor -> @CatXf.Functor [F G ->
+    @CatXf.functor_composition(F, G)
+  ]
+
+  --[[
+    Helper function for identity functor on a category
+  ]]--
+  identity_functor: @CatXf.Category -> @CatXf.Functor [cat ->
+    {
+      source_category: cat,
+      target_category: cat,
+      map_obj: [t -> t],
+      map_morph: [f -> f],
+      preserves_id: true,
+      preserves_composition: true
+    }
+  ]
+
+  --[[
+    Helper function to normalize Pi transformations
+  ]]--
+  normalize_pi_transform: a -> a [x -> x]
+
+  --[[
+    Helper function to connect to the context category
+  ]]--
+  pi_to_context: @Pi.PiType -> @Context.Ctx [pi_type ->
+    let param_type = convert_type_to_context(pi_type.param_type) in
+    let ctx = @Context.empty() in
+    @Context.extend(ctx, pi_type.param_name, param_type)
+  ]
+
+  --[[
+    Helper function to convert from the context category
+  ]]--
+  context_to_pi: @Context.Ctx -> @Pi.PiType [ctx ->
+    if length(@Context.bindings(ctx)) == 0 {
+      error("Cannot convert empty context to Pi type")
+    } else {
+      let var = @Context.bindings(ctx)[length(@Context.bindings(ctx)) - 1] in
+      let param_type = convert_context_to_type(var.type) in
+      @Pi.pi_type(
+        var.name,
+        param_type,
+        [_ -> { _type: "TypeVar", name: "Any" }]  -- Simplified return type
+      )
+    }
+  ]
+
+  --[[
+    Helper function to convert type expressions between systems
+  ]]--
+  convert_type_to_context: @Pi.TypeExpr -> @Context.TypeExpr [type ->
+    -- In a real implementation, this would properly convert between type representations
+    type
+  ]
+
+  --[[
+    Helper function to convert context type expressions to Pi types
+  ]]--
+  convert_context_to_type: @Context.TypeExpr -> @Pi.TypeExpr [type ->
+    -- In a real implementation, this would properly convert between type representations
+    type
+  ]
+
+  --[[
+    Helper function to get length of a list
+  ]]--
+  length: [a] -> Z [list ->
+    match list with
+      | [] -> 0
+      | [_ @ rest] -> 1 + length(rest)
+  ]
+
+  --------------------------------------------------
+  -- Examples of Pi Transformations
+  --------------------------------------------------
+  
+  --[[
+    Example: Transform a dependent length-indexed vector type to a product type
+  ]]--
+  example.vector_to_product: () -> PiTransform [->
+    -- Get the vector type from Pi module
+    let vector_type = @Pi.example.vector() in
+    
+    -- Create transform from dependent vector type to product of nat and list
+    {
+      source_type: vector_type,
+      target_type: @Unrestricted.Product(
+        { _type: "TypeVar", name: "Nat" },
+        { _type: "TypeVar", name: "List" }
+      ),
+      transform: [v -> (length(v), to_list(v))],
+      inverse: [p -> from_list(p[0], p[1])],
+      preserves_semantics: true
+    }
+  ]
+  
+  --[[
+    Example: Transform a dependent lookup function to a function with runtime checks
+  ]]--
+  example.safe_lookup_transform: () -> PiTransform [->
+    -- Get the vector access function from Pi module
+    let vector_nth = @Pi.example.vector_nth() in
+    
+    -- Create transform from safe lookup to checked lookup
+    {
+      source_type: vector_nth.type,
+      target_type: @Unrestricted.Function(
+        @Unrestricted.Product(
+          { _type: "TypeVar", name: "List" },
+          { _type: "TypeVar", name: "Nat" }
+        ),
+        @Unrestricted.Option({ _type: "TypeVar", name: "A" })
+      ),
+      transform: [safe_lookup -> [pair ->
+        let (list, index) = pair in
+        if index < length(list) {
+          Some(list[index])
+        } else {
+          None
+        }
+      ]],
+      inverse: [checked_lookup -> [n -> [v -> [i ->
+        -- The wrapper enforces that i : Fin(n), so it's safe
+        checked_lookup((v, i)).value
+      ]]]],
+      preserves_semantics: true
+    }
+  ]
+  
+  --[[
+    Helper function to calculate the length of a collection
+  ]]--
+  length: a -> Z [coll ->
+    -- In a real implementation, this would calculate the collection length
+    0
+  ]
+  
+  --[[
+    Helper function to convert a vector to a list
+  ]]--
+  to_list: a -> [a] [vec ->
+    -- In a real implementation, this would convert a vector to a list
+    []
+  ]
+  
+  --[[
+    Helper function to convert a list to a vector of given length
+  ]]--
+  from_list: Z * [a] -> a [n list ->
+    -- In a real implementation, this would convert a list to a vector
+    null
+  ]
+
+  structure: {
+    -- Map Pi to a locally cartesian closed category
+    objects: [ctx:PiCtx, type:TypeExpr],  -- Types in contexts
+    morphisms: [a b -> [pifn | source(pifn) == a && target(pifn) == b]],
+    
+    -- Pi transformation to Context category
+    pi_context_functor: @CatXf.Functor [
+      {
+        source_category: @Pi.structure,
+        target_category: @Context.structure,
+        map_obj: [t -> pi_to_context(t)],
+        map_morph: [f -> convert_pi_morph_to_subst(f)],
+        preserves_id: true,
+        preserves_composition: true
+      }
+    ],
+    
+    -- Context transformation to Pi category
+    context_pi_functor: @CatXf.Functor [
+      {
+        source_category: @Context.structure,
+        target_category: @Pi.structure,
+        map_obj: [t -> context_to_pi(t)],
+        map_morph: [f -> convert_subst_to_pi_morph(f)],
+        preserves_id: true,
+        preserves_composition: true
+      }
+    ],
+    
+    -- Natural transformation connecting the functors
+    pi_context_transform: @CatXf.NaturalTransformation [
+      {
+        source_functor: compose_functors(pi_context_functor, context_pi_functor),
+        target_functor: identity_functor(@Pi.structure),
+        components: [a -> [x -> normalize_pi_transform(x)]],
+        naturality: true
+      }
+    ],
+    
+    -- Connection to the ContextXf structures
+    adj_equivalence: @CatXf.NaturalIsomorphism [
+      {
+        source_functor: @ContextXf.dependent_product_adjunction.right_functor,
+        target_functor: context_pi_functor
+      }
+    ]
+  }
+
+  --[[
+    Helper function to convert a Pi morphism to a Context substitution
+  ]]--
+  convert_pi_morph_to_subst: @Pi.PiFn -> @Context.Substitution [pi_fn ->
+    -- In a real implementation, this would properly convert between morphism representations
+    {
+      source: pi_to_context(pi_fn.type),
+      target: @Context.empty(),
+      mappings: []
+    }
+  ]
+
+  --[[
+    Helper function to convert a Context substitution to a Pi morphism
+  ]]--
+  convert_subst_to_pi_morph: @Context.Substitution -> @Pi.PiFn [subst ->
+    -- In a real implementation, this would properly convert between morphism representations
+    @Pi.pi_fn(
+      "x",
+      { _type: "TypeVar", name: "Any" },
+      [_ -> { _type: "TypeVar", name: "Any" }],
+      [x -> x]
+    )
+  ]
+} 

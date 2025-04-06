@@ -1,0 +1,585 @@
+--[[
+  Unrestricted Type System Transformations
+
+  This module defines transformations between the unrestricted type system and other
+  categorical frameworks, enabling rigorous mappings between different resource usage
+  models with a focus on unrestricted types (which can be used any number of times).
+]]--
+
+@UnrestrictedXf: {
+  typ: {
+    -- Core transformation types
+    UnrestrictedTransform
+    ResourceTransform
+    TypeTransform
+    
+    -- Specific transformations
+    UnrestrictedToLinear
+    UnrestrictedToAffine
+    UnrestrictedToRelevant
+    
+    -- Context transformations
+    ContextTransform
+    ProofTransform
+  }
+
+  op: {
+    -- Transformation operators
+    ==> <== <=> ~~
+    
+    -- Composition operators
+    >>> <<< +++ &&&
+    
+    -- Resource tracking operators
+    bang promote demote
+  }
+
+  fn: {
+    -- Core transformation functions
+    to_linear from_linear
+    to_affine from_affine
+    to_relevant from_relevant
+    
+    -- Type transformations
+    unrestricted_to_linear_type linear_to_unrestricted_type
+    unrestricted_to_affine_type affine_to_unrestricted_type
+    unrestricted_to_relevant_type relevant_to_unrestricted_type
+    
+    -- Promotion and demotion operations
+    promote_type demote_type
+    bang box unbox
+    
+    -- Resource operations
+    track_usage remove_constraints
+    
+    -- Context transformations
+    transform_context convert_bindings
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@UnrestrictedXf, @T, true),            -- Add dependency on Type system
+    (@UnrestrictedXf, @Unrestricted, true), -- Add dependency on Unrestricted type system
+    (@UnrestrictedXf, @Linear, true),       -- Add dependency on Linear type system
+    (@UnrestrictedXf, @Affine, true),       -- Add dependency on Affine type system
+    (@UnrestrictedXf, @Relevant, true),     -- Add dependency on Relevant type system
+    (@UnrestrictedXf, @CatXf, true),        -- Add dependency on Category transformations
+    (@UnrestrictedXf, @LinearXf, true),     -- Add dependency on Linear transformations
+    (@UnrestrictedXf, @AffineXf, true),     -- Add dependency on Affine transformations
+    (@UnrestrictedXf, @RelevantXf, true)    -- Add dependency on Relevant transformations
+  }
+
+  --------------------------------------------------
+  -- Unrestricted to Linear Transformations
+  --------------------------------------------------
+
+  --[[
+    to_linear transforms unrestricted types and functions into linear types and functions,
+    adding resource tracking to enforce linear usage.
+  ]]--
+  to_linear: @Unrestricted.a -> @Linear.a [unrestricted_val ->
+    match unrestricted_val with
+      -- Transform unrestricted type to linear type
+      | { _type: "UnrestrictedType" } ->
+          unrestricted_to_linear_type(unrestricted_val)
+      
+      -- Transform unrestricted function to linear function
+      | { domain: _, codomain: _ } ->
+          @Linear.linear_fn(
+            transform_param(unrestricted_val.domain),
+            transform_body(unrestricted_val.codomain),
+            [x -> add_linear_constraints(unrestricted_val.body, x)]
+          )
+      
+      -- Default for values
+      | _ -> 
+          -- Wrap in linear wrapper for linear usage tracking
+          @Linear.make_linear(unrestricted_val)
+  ]
+
+  --[[
+    from_linear transforms linear types and functions into unrestricted types and functions,
+    removing resource tracking constraints.
+  ]]--
+  from_linear: @Linear.a -> @Unrestricted.a [linear_val ->
+    match linear_val with
+      -- Transform linear type to unrestricted type
+      | { _type: "LinearType" } ->
+          linear_to_unrestricted_type(linear_val)
+      
+      -- Transform linear function to unrestricted function
+      | { domain: _, codomain: _ } ->
+          @Unrestricted.unrestricted_fn(
+            transform_param(linear_val.domain),
+            transform_body(linear_val.codomain),
+            [x -> remove_linear_constraints(linear_val.body, x)]
+          )
+      
+      -- Default for values
+      | _ -> 
+          -- Wrap in unrestricted wrapper allowing unlimited usage
+          @Unrestricted.make_unrestricted(linear_val)
+  ]
+
+  --[[
+    unrestricted_to_linear_type transforms an unrestricted type into a linear type
+  ]]--
+  unrestricted_to_linear_type: @Unrestricted.UnrestrictedType -> @Linear.LinearType [unrestricted_type ->
+    {
+      base: unrestricted_type.base,
+      linear: true,
+      consumed: false
+    }
+  ]
+
+  --[[
+    linear_to_unrestricted_type transforms a linear type into an unrestricted type
+  ]]--
+  linear_to_unrestricted_type: @Linear.LinearType -> @Unrestricted.UnrestrictedType [linear_type ->
+    {
+      base: linear_type.base,
+      weakening: false,  -- Linear values cannot be weakened
+      contraction: false  -- Linear values cannot be contracted
+    }
+  ]
+
+  --[[
+    add_linear_constraints transforms an unrestricted function body to enforce
+    linear usage patterns in a linear context
+  ]]--
+  add_linear_constraints: (@Unrestricted.UnrestrictedCtx -> a) -> (@Linear.LinearCtx -> a) [body ctx ->
+    -- In a real implementation, this would:
+    -- 1. Track all resources in the context
+    -- 2. Enforce exactly-once usage for all resources
+    -- 3. Insert necessary runtime checks for linear usage
+    
+    body(convert_context_linear(ctx))
+  ]
+
+  --[[
+    remove_linear_constraints transforms a linear function body to allow
+    unrestricted usage patterns in an unrestricted context
+  ]]--
+  remove_linear_constraints: (@Linear.LinearCtx -> a) -> (@Unrestricted.UnrestrictedCtx -> a) [body ctx ->
+    -- In a real implementation, this would:
+    -- 1. Convert linear usage tracking to unrestricted tracking
+    -- 2. Remove linearity constraints
+    
+    body(convert_context_linear_reverse(ctx))
+  ]
+
+  --[[
+    convert_context_linear converts from linear to unrestricted contexts
+  ]]--
+  convert_context_linear: @Linear.LinearCtx -> @Unrestricted.UnrestrictedCtx [ctx ->
+    {
+      bindings: ctx.bindings |> map [binding ->
+        linear_to_unrestricted_type(binding)
+      ],
+      used: ctx.used |> map [used -> if used then 1 else 0]
+    }
+  ]
+
+  --[[
+    convert_context_linear_reverse converts from unrestricted to linear contexts
+  ]]--
+  convert_context_linear_reverse: @Unrestricted.UnrestrictedCtx -> @Linear.LinearCtx [ctx ->
+    {
+      bindings: ctx.bindings |> map [binding ->
+        unrestricted_to_linear_type(binding)
+      ],
+      used: ctx.used |> map [count -> count > 0]
+    }
+  ]
+
+  --------------------------------------------------
+  -- Unrestricted to Affine Transformations
+  --------------------------------------------------
+
+  --[[
+    to_affine transforms unrestricted types and functions into affine types and functions,
+    adding constraints to disallow copying but preserving dropping.
+  ]]--
+  to_affine: @Unrestricted.a -> @Affine.a [unrestricted_val ->
+    match unrestricted_val with
+      -- Transform unrestricted type to affine type
+      | { _type: "UnrestrictedType" } ->
+          unrestricted_to_affine_type(unrestricted_val)
+      
+      -- Transform unrestricted function to affine function
+      | { domain: _, codomain: _ } ->
+          @Affine.affine_fn(
+            transform_param(unrestricted_val.domain),
+            transform_body(unrestricted_val.codomain),
+            [x -> restrict_copying(unrestricted_val.body, x)]
+          )
+      
+      -- Default for values
+      | _ -> 
+          -- Wrap in affine wrapper to prevent copying
+          @Affine.make_affine(unrestricted_val)
+  ]
+
+  --[[
+    from_affine transforms affine types and functions into unrestricted types and functions,
+    removing constraints on copying.
+  ]]--
+  from_affine: @Affine.a -> @Unrestricted.a [affine_val ->
+    match affine_val with
+      -- Transform affine type to unrestricted type
+      | { _type: "AffineType" } ->
+          affine_to_unrestricted_type(affine_val)
+      
+      -- Transform affine function to unrestricted function
+      | { domain: _, codomain: _ } ->
+          @Unrestricted.unrestricted_fn(
+            transform_param(affine_val.domain),
+            transform_body(affine_val.codomain),
+            [x -> allow_copying(affine_val.body, x)]
+          )
+      
+      -- Default for values
+      | _ -> 
+          -- Wrap in unrestricted wrapper enabling copying
+          @Unrestricted.make_unrestricted(affine_val)
+  ]
+
+  --[[
+    unrestricted_to_affine_type transforms an unrestricted type into an affine type
+  ]]--
+  unrestricted_to_affine_type: @Unrestricted.UnrestrictedType -> @Affine.AffineType [unrestricted_type ->
+    {
+      base: unrestricted_type.base,
+      affine: true,
+      weakening: unrestricted_type.weakening  -- Preserve weakening
+    }
+  ]
+
+  --[[
+    affine_to_unrestricted_type transforms an affine type into an unrestricted type
+  ]]--
+  affine_to_unrestricted_type: @Affine.AffineType -> @Unrestricted.UnrestrictedType [affine_type ->
+    {
+      base: affine_type.base,
+      weakening: affine_type.weakening,
+      contraction: true  -- Enable contraction in unrestricted context
+    }
+  ]
+
+  --[[
+    restrict_copying transforms an unrestricted function body to prevent
+    copying resources in an affine context
+  ]]--
+  restrict_copying: (@Unrestricted.UnrestrictedCtx -> a) -> (@Affine.AffineCtx -> a) [body ctx ->
+    -- In a real implementation, this would:
+    -- 1. Track all resources in the context
+    -- 2. Prevent any resource from being used more than once
+    -- 3. Allow resources to be dropped
+    
+    body(convert_context_affine(ctx))
+  ]
+
+  --[[
+    allow_copying transforms an affine function body to permit
+    copying resources in an unrestricted context
+  ]]--
+  allow_copying: (@Affine.AffineCtx -> a) -> (@Unrestricted.UnrestrictedCtx -> a) [body ctx ->
+    -- In a real implementation, this would:
+    -- 1. Convert affine usage tracking to unrestricted tracking
+    -- 2. Add support for copying resources
+    
+    body(convert_context_affine_reverse(ctx))
+  ]
+
+  --[[
+    convert_context_affine converts from affine to unrestricted contexts
+  ]]--
+  convert_context_affine: @Affine.AffineCtx -> @Unrestricted.UnrestrictedCtx [ctx ->
+    {
+      bindings: ctx.bindings |> map [binding ->
+        affine_to_unrestricted_type(binding)
+      ],
+      used: ctx.used |> map [used -> if used then 1 else 0]
+    }
+  ]
+
+  --[[
+    convert_context_affine_reverse converts from unrestricted to affine contexts
+  ]]--
+  convert_context_affine_reverse: @Unrestricted.UnrestrictedCtx -> @Affine.AffineCtx [ctx ->
+    {
+      bindings: ctx.bindings |> map [binding ->
+        unrestricted_to_affine_type(binding)
+      ],
+      used: ctx.used |> map [count -> count > 0]
+    }
+  ]
+
+  --------------------------------------------------
+  -- Unrestricted to Relevant Transformations
+  --------------------------------------------------
+
+  --[[
+    to_relevant transforms unrestricted types and functions into relevant types and functions,
+    adding constraints to disallow dropping but preserving copying.
+  ]]--
+  to_relevant: @Unrestricted.a -> @Relevant.a [unrestricted_val ->
+    match unrestricted_val with
+      -- Transform unrestricted type to relevant type
+      | { _type: "UnrestrictedType" } ->
+          unrestricted_to_relevant_type(unrestricted_val)
+      
+      -- Transform unrestricted function to relevant function
+      | { domain: _, codomain: _ } ->
+          @Relevant.relevant_fn(
+            transform_param(unrestricted_val.domain),
+            transform_body(unrestricted_val.codomain),
+            [x -> require_usage(unrestricted_val.body, x)]
+          )
+      
+      -- Default for values
+      | _ -> 
+          -- Wrap in relevant wrapper to require usage
+          @Relevant.make_relevant(unrestricted_val)
+  ]
+
+  --[[
+    from_relevant transforms relevant types and functions into unrestricted types and functions,
+    removing constraints that require usage.
+  ]]--
+  from_relevant: @Relevant.a -> @Unrestricted.a [relevant_val ->
+    match relevant_val with
+      -- Transform relevant type to unrestricted type
+      | { _type: "RelevantType" } ->
+          relevant_to_unrestricted_type(relevant_val)
+      
+      -- Transform relevant function to unrestricted function
+      | { domain: _, codomain: _ } ->
+          @Unrestricted.unrestricted_fn(
+            transform_param(relevant_val.domain),
+            transform_body(relevant_val.codomain),
+            [x -> allow_dropping(relevant_val.body, x)]
+          )
+      
+      -- Default for values
+      | _ -> 
+          -- Wrap in unrestricted wrapper enabling dropping
+          @Unrestricted.make_unrestricted(relevant_val)
+  ]
+
+  --[[
+    unrestricted_to_relevant_type transforms an unrestricted type into a relevant type
+  ]]--
+  unrestricted_to_relevant_type: @Unrestricted.UnrestrictedType -> @Relevant.RelevantType [unrestricted_type ->
+    {
+      base: unrestricted_type.base,
+      relevant: true,
+      contraction: unrestricted_type.contraction  -- Preserve contraction
+    }
+  ]
+
+  --[[
+    relevant_to_unrestricted_type transforms a relevant type into an unrestricted type
+  ]]--
+  relevant_to_unrestricted_type: @Relevant.RelevantType -> @Unrestricted.UnrestrictedType [relevant_type ->
+    {
+      base: relevant_type.base,
+      weakening: true,  -- Enable weakening in unrestricted context
+      contraction: relevant_type.contraction
+    }
+  ]
+
+  --[[
+    require_usage transforms an unrestricted function body to require
+    resource usage in a relevant context
+  ]]--
+  require_usage: (@Unrestricted.UnrestrictedCtx -> a) -> (@Relevant.RelevantCtx -> a) [body ctx ->
+    -- In a real implementation, this would:
+    -- 1. Track all resources in the context
+    -- 2. Ensure each resource is used at least once
+    -- 3. Allow resources to be used multiple times
+    
+    body(convert_context_relevant(ctx))
+  ]
+
+  --[[
+    allow_dropping transforms a relevant function body to permit
+    dropping resources in an unrestricted context
+  ]]--
+  allow_dropping: (@Relevant.RelevantCtx -> a) -> (@Unrestricted.UnrestrictedCtx -> a) [body ctx ->
+    -- In a real implementation, this would:
+    -- 1. Convert relevant usage tracking to unrestricted tracking
+    -- 2. Add support for dropping resources
+    
+    body(convert_context_relevant_reverse(ctx))
+  ]
+
+  --[[
+    convert_context_relevant converts from relevant to unrestricted contexts
+  ]]--
+  convert_context_relevant: @Relevant.RelevantCtx -> @Unrestricted.UnrestrictedCtx [ctx ->
+    {
+      bindings: ctx.bindings |> map [binding ->
+        relevant_to_unrestricted_type(binding)
+      ],
+      used: ctx.used |> map [used -> if used then 1 else 0]
+    }
+  ]
+
+  --[[
+    convert_context_relevant_reverse converts from unrestricted to relevant contexts
+  ]]--
+  convert_context_relevant_reverse: @Unrestricted.UnrestrictedCtx -> @Relevant.RelevantCtx [ctx ->
+    {
+      bindings: ctx.bindings |> map [binding ->
+        unrestricted_to_relevant_type(binding)
+      ],
+      used: ctx.used |> map [count -> count > 0]
+    }
+  ]
+
+  --------------------------------------------------
+  -- Promotion and Demotion Operations
+  --------------------------------------------------
+
+  --[[
+    bang makes an unrestricted type available in a more restricted context
+    using the exponential modality !A
+  ]]--
+  bang: @Unrestricted.UnrestrictedType -> @Linear.LinearType [typ ->
+    {
+      base: !typ.base,  -- Using exponential modality
+      linear: false,  -- !A is not linear
+      consumed: false
+    }
+  ]
+
+  --[[
+    box packages a value for use in a more restricted context
+  ]]--
+  box: @Unrestricted.a -> @Linear.a [val ->
+    -- In a real implementation, this would:
+    -- 1. Create a special boxed value using the bang operator
+    -- 2. Enable special usage patterns in the linear system
+    
+    @Linear.make_linear(val)
+  ]
+
+  --[[
+    unbox extracts a value from a box, allowing restricted usage
+  ]]--
+  unbox: @Linear.a -> @Unrestricted.a [boxed_val ->
+    -- In a real implementation, this would:
+    -- 1. Extract the value from the boxed representation
+    -- 2. Enforce appropriate usage patterns based on context
+    
+    @Unrestricted.make_unrestricted(boxed_val)
+  ]
+
+  --------------------------------------------------
+  -- Categorical Structure of Unrestricted Transformations
+  --------------------------------------------------
+
+  --[[
+    UnrestrictedTransform defines a transformation between the unrestricted type system
+    and other type systems, capturing the relationship between different resource usage models.
+  ]]--
+  UnrestrictedTransform: {
+    source_type: T.T,
+    target_type: T.T,
+    transform: (a -> b),
+    inverse: ?(b -> a),
+    preserves_semantics: Bool
+  }
+
+  --[[
+    Functor that maps from the category of unrestricted types to affine types.
+    This represents the restriction from unrestricted to affine usage patterns.
+  ]]--
+  unrestricted_affine_functor: @CatXf.Functor [
+    {
+      source_category: @Unrestricted.structure,
+      target_category: @Affine.structure,
+      map_obj: [t -> unrestricted_to_affine_type(t)],
+      map_morph: [f -> to_affine(f)],
+      preserves_id: true,
+      preserves_composition: true
+    }
+  ]
+
+  --[[
+    Functor that maps from the category of unrestricted types to relevant types.
+    This represents the restriction from unrestricted to relevant usage patterns.
+  ]]--
+  unrestricted_relevant_functor: @CatXf.Functor [
+    {
+      source_category: @Unrestricted.structure,
+      target_category: @Relevant.structure,
+      map_obj: [t -> unrestricted_to_relevant_type(t)],
+      map_morph: [f -> to_relevant(f)],
+      preserves_id: true,
+      preserves_composition: true
+    }
+  ]
+
+  --[[
+    Functor that maps from the category of unrestricted types to linear types.
+    This represents the restriction from unrestricted to linear usage patterns.
+  ]]--
+  unrestricted_linear_functor: @CatXf.Functor [
+    {
+      source_category: @Unrestricted.structure,
+      target_category: @Linear.structure,
+      map_obj: [t -> unrestricted_to_linear_type(t)],
+      map_morph: [f -> to_linear(f)],
+      preserves_id: true,
+      preserves_composition: true
+    }
+  ]
+
+  --[[
+    Natural transformation that witnesses the relationship between going from
+    unrestricted to linear directly versus going through affine.
+  ]]--
+  unrestricted_linear_affine_transform: @CatXf.NaturalTransformation [
+    {
+      source_functor: unrestricted_linear_functor,
+      target_functor: compose_functors(unrestricted_affine_functor, @AffineXf.affine_linear_functor),
+      components: [a -> [x -> normalize_transform(x)]],
+      naturality: true
+    }
+  ]
+
+  --[[
+    Helper function to compose functors
+  ]]--
+  compose_functors: @CatXf.Functor * @CatXf.Functor -> @CatXf.Functor [F G ->
+    @CatXf.functor_composition(F, G)
+  ]
+
+  --[[
+    Helper function to normalize transformations
+  ]]--
+  normalize_transform: a -> a [x -> x]
+
+  --[[
+    Helper function to transform parameters
+  ]]--
+  transform_param: a -> b [param ->
+    -- In a real implementation, this would transform parameter types
+    param
+  ]
+
+  --[[
+    Helper function to transform function bodies
+  ]]--
+  transform_body: a -> b [body ->
+    -- In a real implementation, this would transform return types
+    body
+  ]
+} 

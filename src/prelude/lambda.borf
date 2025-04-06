@@ -10,16 +10,16 @@
   typ: {
     -- Core lambda calculus types
     Expr Var Abs App
-    
+
     -- Extended types
     Rec Cond Let
-    
+
     -- Typed lambda calculus
     Type TypeEnv TypedExpr
-    
+
     -- Linear lambda calculus
     LinearAbs LinearApp Resource
-    
+
     -- Pattern matching
     Pattern Match
   }
@@ -27,13 +27,13 @@
   op: {
     -- Core lambda operators
     -> => ~> @>
-    
+
     -- Binding operators
     := <| |>
-    
+
     -- Linear operators
     -o --o
-    
+
     -- Evaluation operators
     eval step beta_reduce
   }
@@ -41,25 +41,25 @@
   fn: {
     -- Core lambda functions
     var abs app
-    
+
     -- Constructor functions
     lambda variable application
-    
+
     -- Evaluators
     evaluate beta_normalize call_by_value call_by_name
-    
+
     -- Type checkers
     type_of type_check infer_type
-    
+
     -- Linear resource handling
     linear_abs linear_app consume_linear use_once
-    
+
     -- Pattern matching
     match pattern_match
-    
+
     -- Common lambda utilities
     id const compose fix curry uncurry
-    
+
     -- Lambda library functions
     map fold filter zip pair fst snd
   }
@@ -380,7 +380,7 @@
       -- Beta reduction: (\x.e) v -> e[v/x]
       | { _type: "App", fn: { _type: "Abs", param: x, body: e }, arg: v } ->
           substitute(e, x, v)
-      
+
       -- Linear beta reduction: (!x.e) v -o> e[v/x] (consumes v)
       | { _type: "LinearApp", fn: { _type: "LinearAbs", param: x, body: e }, arg: v } ->
           -- Verify v is used exactly once in e
@@ -388,7 +388,7 @@
             substitute(e, x, v)
           else
             error("Linear resource violation: parameter not used exactly once")
-      
+
       -- Recurse into subexpressions
       | { _type: "App", fn: f, arg: a } ->
           let f' = beta_reduce(f) in
@@ -397,7 +397,7 @@
             { _type: "App", fn: f', arg: a' }
           else
             expr
-      
+
       -- Handle conditionals
       | { _type: "Cond", cond: c, then_branch: t, else_branch: e } ->
           let c' = beta_reduce(c) in
@@ -407,12 +407,12 @@
             e
           else
             { _type: "Cond", cond: c', then_branch: t, else_branch: e }
-      
+
       -- Handle let bindings
       | { _type: "Let", name: n, value: v, body: b } ->
           let v' = beta_reduce(v) in
           substitute(b, n, v')
-      
+
       -- No reducible expression found
       | _ -> expr
   ]
@@ -423,51 +423,51 @@
   substitute: Expr * S * Expr -> Expr [expr var value ->
     match expr with
       | { _type: "Var", name: n } ->
-          if n == var then 
-            value 
-          else 
+          if n == var then
+            value
+          else
             expr
-      
+
       | { _type: "Abs", param: p, body: b, param_type: t } ->
-          if p == var then 
+          if p == var then
             -- Variable shadowed, don't substitute
-            expr 
-          else 
+            expr
+          else
             { _type: "Abs", param: p, body: substitute(b, var, value), param_type: t }
-      
+
       | { _type: "App", fn: f, arg: a } ->
           { _type: "App", fn: substitute(f, var, value), arg: substitute(a, var, value) }
-      
+
       | { _type: "Cond", cond: c, then_branch: t, else_branch: e } ->
-          { 
-            _type: "Cond", 
-            cond: substitute(c, var, value), 
-            then_branch: substitute(t, var, value), 
-            else_branch: substitute(e, var, value) 
+          {
+            _type: "Cond",
+            cond: substitute(c, var, value),
+            then_branch: substitute(t, var, value),
+            else_branch: substitute(e, var, value)
           }
-      
+
       | { _type: "Let", name: n, value: v, body: b } ->
           if n == var then
             -- Variable shadowed, substitute only in value
             { _type: "Let", name: n, value: substitute(v, var, value), body: b }
           else
-            { 
-              _type: "Let", 
-              name: n, 
-              value: substitute(v, var, value), 
-              body: substitute(b, var, value) 
+            {
+              _type: "Let",
+              name: n,
+              value: substitute(v, var, value),
+              body: substitute(b, var, value)
             }
-      
+
       | { _type: "LinearAbs", param: p, body: b, param_type: t } ->
-          if p == var then 
+          if p == var then
             -- Variable shadowed, don't substitute
-            expr 
-          else 
+            expr
+          else
             { _type: "LinearAbs", param: p, body: substitute(b, var, value), param_type: t }
-      
+
       | { _type: "LinearApp", fn: f, arg: a } ->
           { _type: "LinearApp", fn: substitute(f, var, value), arg: substitute(a, var, value) }
-      
+
       | _ -> expr
   ]
 
@@ -487,29 +487,29 @@
     match expr with
       | { _type: "Var", name: n } ->
           if n == var then 1 else 0
-      
+
       | { _type: "Abs", param: p, body: b } ->
           if p == var then 0 else count_var_occurrences(b, var)
-      
+
       | { _type: "App", fn: f, arg: a } ->
           count_var_occurrences(f, var) + count_var_occurrences(a, var)
-      
+
       | { _type: "LinearAbs", param: p, body: b } ->
           if p == var then 0 else count_var_occurrences(b, var)
-      
+
       | { _type: "LinearApp", fn: f, arg: a } ->
           count_var_occurrences(f, var) + count_var_occurrences(a, var)
-      
+
       | { _type: "Cond", cond: c, then_branch: t, else_branch: e } ->
           count_var_occurrences(c, var) + count_var_occurrences(t, var) + count_var_occurrences(e, var)
-      
+
       | { _type: "Let", name: n, value: v, body: b } ->
           let value_count = count_var_occurrences(v, var) in
           if n == var then
             value_count
           else
             value_count + count_var_occurrences(b, var)
-      
+
       | _ -> 0
   ]
 
@@ -548,7 +548,7 @@
   ]]--
   cons: Expr [
     -- Church encoding of cons
-    abs("h", abs("t", abs("c", abs("n", 
+    abs("h", abs("t", abs("c", abs("n",
       app(app(var("c"), var("h")), app(app(var("t"), var("c")), var("n")))
     ))))
   ]
@@ -567,12 +567,12 @@
     match expr with
       | { _type: "Var", name: n } ->
           env.bindings[n]
-      
+
       | { _type: "Abs", param: p, body: b, param_type: ?Some(t) } ->
           let new_env = { bindings: env.bindings cup { p: t } } in
           let body_type = type_of(b, new_env) in
           { _type: "ArrowType", domain: t, codomain: body_type }
-      
+
       | { _type: "App", fn: f, arg: a } ->
           let fn_type = type_of(f, env) in
           let arg_type = type_of(a, env) in
@@ -583,26 +583,26 @@
                 else
                   error("Type mismatch in application")
             | _ -> error("Expected function type")
-      
+
       | { _type: "LinearAbs", param: p, body: b, param_type: ?Some(t) } ->
           let linear_type = { _type: "LinearType", inner: t } in
           let new_env = { bindings: env.bindings cup { p: linear_type } } in
           let body_type = type_of(b, new_env) in
           { _type: "ArrowType", domain: linear_type, codomain: body_type }
-      
+
       | _ -> error("Cannot determine type")
   ]
 
   --------------------------------------------------
   -- Structure Mapping to Lambda Calculus Category
   --------------------------------------------------
-  
+
   --[[
     Structure mapping that establishes @Lambda as a cartesian closed category
-    with additional structure for linear types. This maps the lambda calculus 
+    with additional structure for linear types. This maps the lambda calculus
     to its categorical interpretation, forming the theoretical foundation for
     functional programming in Borf.
-    
+
     In this categorical structure:
     - Objects are types in the simply typed lambda calculus
     - Morphisms are lambda terms (with appropriate types)
@@ -616,68 +616,68 @@
     -- Map Lambda to a cartesian closed category
     objects: Type,
     morphisms: [a b -> [e | e is Expr && type_of(e, empty_env) is ArrowType(a, b)]],
-    
+
     -- Base category structure
     dom: [f -> f |> type_of(empty_env) |> [t -> t.domain]],
     cod: [f -> f |> type_of(empty_env) |> [t -> t.codomain]],
     id: [a -> abs("x", var("x"))],
     compose: [f g -> abs("x", app(g, app(f, var("x"))))],
-    
+
     -- Cartesian structure (products)
     product: [a b -> { _type: "ProductType", left: a, right: b }],
     proj1: [a b -> abs("p", app(var("p"), abs("x", abs("y", var("x")))))],
     proj2: [a b -> abs("p", app(var("p"), abs("x", abs("y", var("y")))))],
     pair: [a b f g -> abs("x", app(app(abs("p", app(app(var("p"), app(f, var("x"))), app(g, var("x")))), abs("x", abs("y", var("x")))), abs("x", abs("y", var("y")))))],
-    
+
     -- Cocartesian structure (coproducts)
     coproduct: [a b -> { _type: "SumType", left: a, right: b }],
     inj1: [a b -> abs("x", app(abs("f", abs("g", app(var("f"), var("x")))), abs("x", var("x"))))],
     inj2: [a b -> abs("x", app(abs("f", abs("g", app(var("g"), var("x")))), abs("x", var("x"))))],
     case: [a b c f g -> abs("s", app(app(var("s"), f), g))],
-    
+
     -- Closed structure (function types)
     exponential: [a b -> { _type: "ArrowType", domain: a, codomain: b }],
     eval: [a b -> abs("p", app(app(var("p"), abs("f", abs("x", app(var("f"), var("x"))))), abs("x", var("x"))))],
     curry: [a b c f -> abs("x", abs("y", app(f, app(pair_constructor, app(var("x"), var("y"))))))],
-    
+
     -- Linear structure
     linear_type: [a -> { _type: "LinearType", inner: a }],
     linear_arrow: [a b -> { _type: "ArrowType", domain: { _type: "LinearType", inner: a }, codomain: b }],
     linear_eval: [a b -> abs("p", app(app(var("p"), linear_abs("f", linear_abs("x", linear_app(var("f"), var("x"))))), linear_abs("x", var("x"))))],
     linear_curry: [a b c f -> abs("x", linear_abs("y", app(f, app(linear_pair_constructor, app(var("x"), var("y"))))))],
-    
+
     -- Extra structures for lambda calculus
     pair_constructor: abs("x", abs("y", abs("p", app(app(var("p"), var("x")), var("y"))))),
     linear_pair_constructor: abs("x", linear_abs("y", abs("p", app(linear_app(var("p"), var("x")), var("y"))))),
     true_value: abs("x", abs("y", var("x"))),
     false_value: abs("x", abs("y", var("y"))),
-    
+
     -- Category laws
     laws: {
       -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
       associativity: forall [f g h ->
         beta_normalize(compose(compose(f, g), h)) == beta_normalize(compose(f, compose(g, h)))
       ],
-      
+
       -- Identity: id ∘ f = f = f ∘ id
       identity: forall [f ->
-        beta_normalize(compose(id(dom(f)), f)) == beta_normalize(f) && 
+        beta_normalize(compose(id(dom(f)), f)) == beta_normalize(f) &&
         beta_normalize(compose(f, id(cod(f)))) == beta_normalize(f)
       ],
-      
+
       -- Product laws
       product_universal: forall [c a b f g ->
         beta_normalize(compose(pair(a, b, f, g), proj1(a, b))) == beta_normalize(f) &&
         beta_normalize(compose(pair(a, b, f, g), proj2(a, b))) == beta_normalize(g)
       ],
-      
+
       -- Exponential laws
       curry_uncurry: forall [a b c f ->
         let curried = curry(a, b, c, f) in
         let uncurried = abs("p", app(app(curried, app(proj1(a, b), var("p"))), app(proj2(a, b), var("p")))) in
         beta_normalize(uncurried) == beta_normalize(f)
       ],
-      
+
       -- Linear laws
       linear_resource: forall [f x ->
         f is { _type: "LinearAbs" } implies uses_exactly_once(f.body, f.param)
@@ -698,4 +698,4 @@
   subtype: Type * Type -> Bool [a b ->
     a == b
   ]
-} 
+}

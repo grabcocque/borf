@@ -1,0 +1,421 @@
+--[[
+  Relevant Type System
+
+  This module defines a relevant type system where resources must be used at least once
+  (can be duplicated but not dropped). Relevant types ensure that no resources are wasted,
+  while allowing resources to be reused multiple times.
+]]--
+
+@Relevant: {
+  typ: {
+    -- Core relevant types
+    RelevantType RelevantFn RelevantCtx
+    
+    -- Type constructors
+    Tensor Unit Impl With Plus
+    
+    -- Type operations
+    TypeOp TypeEquiv TypeSub
+    
+    -- Proof terms
+    Proof Judgment Derivation
+  }
+
+  op: {
+    -- Type operators
+    ⊗ ⊸ & ⊕ !
+    
+    -- Judgment operators
+    ⊢ ⊣ ⊨
+    
+    -- Resource tracking
+    copy
+  }
+
+  fn: {
+    -- Core type functions
+    relevant_fn relevant_app copy
+    tensor_intro tensor_elim
+    unit_intro unit_elim
+    
+    -- Context operations
+    ctx_empty ctx_extend ctx_merge
+    ctx_contract
+    
+    -- Proof operations
+    derive check infer
+    prove subst
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Relevant, @T, true),       -- Add dependency on Type system
+    (@Relevant, @Linear, true),  -- Add dependency on Linear type system
+    (@Relevant, @Cat, true)      -- Add dependency on Category theory
+  }
+
+  --------------------------------------------------
+  -- Core Relevant Types
+  --------------------------------------------------
+
+  --[[
+    RelevantType defines a type in the relevant type system
+  ]]--
+  RelevantType: {
+    base: T.Type,
+    relevant: Bool,
+    contraction: Bool
+  }
+
+  --[[
+    RelevantFn defines a relevant function type A ⊸ B
+    where A must be used at least once to produce B
+  ]]--
+  RelevantFn: {
+    domain: RelevantType,
+    codomain: RelevantType
+  }
+
+  --[[
+    RelevantCtx defines a typing context for relevant types
+  ]]--
+  RelevantCtx: {
+    bindings: S:-> RelevantType,
+    used: S:-> Bool  -- Tracks which variables have been used
+  }
+
+  --------------------------------------------------
+  -- Relevant Type Constructors
+  --------------------------------------------------
+
+  --[[
+    Tensor forms the multiplicative conjunction A ⊗ B
+  ]]--
+  Tensor: RelevantType * RelevantType -> RelevantType [a b ->
+    {
+      base: a.base * b.base,
+      relevant: a.relevant || b.relevant,
+      contraction: a.contraction && b.contraction
+    }
+  ]
+
+  --[[
+    Unit is the unit of tensor, corresponding to no resources
+  ]]--
+  Unit: RelevantType [
+    {
+      base: (),
+      relevant: false,
+      contraction: true
+    }
+  ]
+
+  --[[
+    Impl forms the relevant implication A ⊸ B
+  ]]--
+  Impl: RelevantType * RelevantType -> RelevantType [a b ->
+    {
+      base: a.base -> b.base,
+      relevant: false,  -- Functions themselves are not relevant resources
+      contraction: true
+    }
+  ]
+
+  --[[
+    With forms the additive conjunction A & B
+  ]]--
+  With: RelevantType * RelevantType -> RelevantType [a b ->
+    {
+      base: a.base * b.base,  -- Represented as a product type
+      relevant: a.relevant || b.relevant,
+      contraction: a.contraction && b.contraction
+    }
+  ]
+
+  --[[
+    Plus forms the additive disjunction A ⊕ B
+  ]]--
+  Plus: RelevantType * RelevantType -> RelevantType [a b ->
+    {
+      base: a.base + b.base,  -- Represented as a sum type
+      relevant: a.relevant || b.relevant,
+      contraction: a.contraction && b.contraction
+    }
+  ]
+
+  --------------------------------------------------
+  -- Core Function Operations
+  --------------------------------------------------
+
+  --[[
+    relevant_fn creates a relevant function
+  ]]--
+  relevant_fn: S * RelevantType * (RelevantCtx -> a) -> RelevantFn [param typ body ->
+    {
+      domain: typ,
+      codomain: infer_type(body)
+    }
+  ]
+
+  --[[
+    relevant_app applies a relevant function to an argument
+  ]]--
+  relevant_app: RelevantFn * a -> b [fn arg ->
+    -- Check that argument is used at least once
+    check_relevant_usage(arg)
+    
+    -- Apply the function
+    fn.body(arg)
+  ]
+
+  --[[
+    copy explicitly duplicates a relevant resource
+  ]]--
+  copy: RelevantType -> (RelevantType * RelevantType) [resource ->
+    -- Verify that the type supports copying
+    if not resource.contraction {
+      error("Cannot copy a resource that does not support contraction")
+    }
+    
+    -- Return two copies of the resource
+    (resource, resource)
+  ]
+
+  --[[
+    tensor_intro creates a tensor product of two relevant values
+  ]]--
+  tensor_intro: a * b -> (a * b) [a b ->
+    -- Check that a and b are used at least once
+    check_relevant_usage(a)
+    check_relevant_usage(b)
+    
+    -- Create tensor product
+    (a, b)
+  ]
+
+  --[[
+    tensor_elim eliminates a tensor product by pattern matching
+  ]]--
+  tensor_elim: (a * b) * ((a * b) -> c) -> c [tensor f ->
+    let (a, b) = tensor in
+    f(a, b)
+  ]
+
+  --------------------------------------------------
+  -- Context Operations
+  --------------------------------------------------
+
+  --[[
+    ctx_empty creates an empty relevant typing context
+  ]]--
+  ctx_empty: () -> RelevantCtx [->
+    {
+      bindings: {},
+      used: {}
+    }
+  ]
+
+  --[[
+    ctx_extend extends a context with a new variable binding
+  ]]--
+  ctx_extend: RelevantCtx * S * RelevantType -> RelevantCtx [ctx var typ ->
+    {
+      bindings: ctx.bindings cup { var: typ },
+      used: ctx.used cup { var: false }
+    }
+  ]
+
+  --[[
+    ctx_merge merges two contexts, allowing shared variables if they support contraction
+  ]]--
+  ctx_merge: RelevantCtx * RelevantCtx -> RelevantCtx [ctx1 ctx2 ->
+    -- Find shared variables
+    let shared = keys(ctx1.bindings) cap keys(ctx2.bindings) in
+    
+    -- Check that all shared variables support contraction
+    shared |> forall [var ->
+      let typ = ctx1.bindings[var] in
+      typ.contraction
+    ] or error("Cannot merge contexts with shared variables that do not support contraction") in
+    
+    {
+      bindings: ctx1.bindings cup ctx2.bindings,
+      used: ctx1.used cup ctx2.used
+    }
+  ]
+
+  --[[
+    ctx_contract adds contraction to the context, allowing variables to be used multiple times
+  ]]--
+  ctx_contract: RelevantCtx * S -> RelevantCtx [ctx var ->
+    -- Check that the variable supports contraction
+    let typ = ctx.bindings[var] in
+    if not typ.contraction {
+      error("Cannot contract variable of type that does not support contraction")
+    }
+    
+    -- Mark the variable as supporting multiple uses
+    ctx
+  ]
+
+  --------------------------------------------------
+  -- Type Operations
+  --------------------------------------------------
+
+  --[[
+    infer_type infers the relevant type of an expression
+  ]]--
+  infer_type: (RelevantCtx -> a) -> RelevantType [expr ->
+    -- This would be implemented in a real type system
+    -- with a proper relevant type inference algorithm
+    { base: T.Any, relevant: true, contraction: true }
+  ]
+
+  --[[
+    check_relevant_usage checks that a value is used at least once
+  ]]--
+  check_relevant_usage: a -> Bool [val ->
+    -- This would track usage of val to ensure it's used at least once
+    true
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping to Categorical Semantics
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @Relevant as a symmetric monoidal category
+    with additional structure for relevant mappings.
+    
+    In this categorical structure:
+    - Objects are relevant types
+    - Morphisms are relevant functions between types
+    - Tensor product is the multiplicative conjunction
+    - Unit is the tensor unit
+    - The relevant structure allows contraction (copying) but not weakening (dropping)
+  ]]--
+  structure: {
+    -- Map Relevant to a symmetric monoidal category
+    objects: RelevantType,
+    morphisms: [a b -> RelevantFn],
+    
+    -- Base category structure
+    dom: [f -> f.domain],
+    cod: [f -> f.codomain],
+    id: [a -> relevant_fn("x", a, [x -> x])],
+    compose: [f g -> relevant_fn("x", f.domain, [x -> g(f(x))])],
+    
+    -- Monoidal structure
+    tensor_objects: [a b -> Tensor(a, b)],
+    tensor_morphisms: [f g -> relevant_fn("p", Tensor(f.domain, g.domain), [p -> 
+      let (x, y) = p in 
+      (f(x), g(y))
+    ])],
+    unit: Unit,
+    
+    -- Symmetric structure
+    swap: [a b -> relevant_fn("p", Tensor(a, b), [p -> 
+      let (x, y) = p in 
+      (y, x)
+    ])],
+    
+    -- Relevant structure (allows contraction)
+    duplicate: [a -> relevant_fn("x", a, [x -> 
+      let (x1, x2) = copy(x) in 
+      (x1, x2)
+    ])],
+    
+    -- Laws for relevant category
+    laws: {
+      -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
+      associativity: forall [f g h ->
+        compose(compose(f, g), h) == compose(f, compose(g, h))
+      ],
+      
+      -- Identity: id ∘ f = f = f ∘ id
+      identity: forall [f ->
+        compose(id(dom(f)), f) == f && compose(f, id(cod(f))) == f
+      ],
+      
+      -- Functoriality of tensor
+      tensor_functorial: forall [f1 f2 g1 g2 ->
+        tensor_morphisms(compose(f1, f2), compose(g1, g2)) ==
+        compose(tensor_morphisms(f1, g1), tensor_morphisms(f2, g2))
+      ],
+      
+      -- Symmetric monoidal coherence
+      symmetry: forall [a b ->
+        compose(swap(a, b), swap(b, a)) == id(tensor_objects(a, b))
+      ],
+      
+      -- Relevant laws (contraction)
+      contraction: forall [a f ->
+        let diag = duplicate(a) in
+        let f_pair = tensor_morphisms(f, f) in
+        compose(diag, f_pair) == compose(f, diag)
+      ]
+    }
+  }
+  
+  --------------------------------------------------
+  -- Example Relevant Programs
+  --------------------------------------------------
+  
+  --[[
+    Example: Connection resource that must be used
+  ]]--
+  example.network_connection: () -> () [->
+    -- Create a relevant connection resource
+    let conn_type = { base: "Connection", relevant: true, contraction: true } in
+    let open_connection = relevant_fn("unit", Unit, [unit ->
+      { _type: "Connection", handle: "ConnHandle:123" }
+    ]) in
+    
+    -- Open a connection
+    let conn = open_connection(()) in
+    
+    -- Use the connection (required since it's relevant)
+    let use_connection = relevant_fn("conn", conn_type, [conn ->
+      -- Send data over connection
+      { _type: "Result", success: true }
+    ]) in
+    
+    -- We can copy the connection for multiple uses
+    let (conn1, conn2) = copy(conn) in
+    
+    -- Use both copies
+    let result1 = use_connection(conn1) in
+    let result2 = use_connection(conn2) in
+    
+    -- Success
+    ()
+  ]
+  
+  --[[
+    Example: Resource that must be processed
+  ]]--
+  example.process_task: () -> Bool [->
+    -- Create a relevant task that must be processed
+    let task_type = { base: "Task", relevant: true, contraction: false } in
+    let create_task = relevant_fn("unit", Unit, [unit ->
+      { _type: "Task", id: "Task:456", completed: false }
+    ]) in
+    
+    -- Create task
+    let task = create_task(()) in
+    
+    -- Process the task (must happen, cannot be dropped)
+    let process_task = relevant_fn("task", task_type, [task ->
+      -- Process the task and return success
+      true
+    ]) in
+    
+    -- Task must be processed, cannot be ignored
+    process_task(task)
+  ]
+} 
