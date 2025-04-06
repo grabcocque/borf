@@ -1,0 +1,876 @@
+--[[
+  Process Calculi Category
+
+  This module defines a categorical framework for process calculi,
+  modeling concurrent systems with labeled transition systems (LTS).
+  
+  It formalizes the connection between operational semantics (LTS)
+  and categorical structure, implementing both CCS-like and π-calculus-like
+  operations within a categorical framework.
+]]--
+
+@ProcessCalc: {
+  typ: {
+    -- Core process types
+    Process
+    ProcessArrow
+    Action
+    Label
+    Channel
+
+    -- Process constructors
+    Nil
+    Prefix
+    Choice
+    Parallel
+    Restriction
+    Replication
+    
+    -- LTS structure
+    LTS
+    Transition
+    Trace
+    
+    -- Bisimulation
+    Bisimulation
+    Simulation
+  }
+
+  op: {
+    -- Process operators
+    + | &
+    
+    -- Action operators
+    ! ?
+  }
+
+  fn: {
+    -- Process constructors
+    nil prefix choice parallel restrict replicate
+    
+    -- LTS functions
+    transition step trace
+    
+    -- Bisimulation functions
+    bisimilar simulates
+    
+    -- Category structure
+    process_arrow compose_processes id_process
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@ProcessCalc, @T, true),     -- Add dependency on Type system
+    (@ProcessCalc, @Task, true),  -- Add dependency on Task category
+    (@ProcessCalc, @Cat, true)    -- Add dependency on Category
+  }
+
+  --------------------------------------------------
+  -- Core Process Types
+  --------------------------------------------------
+
+  --[[
+    Process represents a concurrent process
+  ]]--
+  Process: {
+    constructor: S,      -- The constructor type
+    channels: [Channel], -- Channels used by this process
+    actions: [Action],   -- Possible actions
+    next: [Process]      -- Next processes after transitions
+  }
+
+  --[[
+    ProcessArrow represents a morphism between processes
+  ]]--
+  ProcessArrow: {
+    source: Process,
+    target: Process,
+    label_map: (Label -> Label | Null),
+    path: [Action]
+  }
+
+  --[[
+    Action represents a communication action
+  ]]--
+  Action: {
+    type: S,        -- "input", "output", "tau"
+    channel: Channel | Null,
+    value: Any | Null
+  }
+
+  --[[
+    Label represents a transition label
+  ]]--
+  Label: {
+    name: S,
+    params: [Any]
+  }
+
+  --[[
+    Channel represents a communication channel
+  ]]--
+  Channel: {
+    name: S,
+    type: Any
+  }
+
+  --[[
+    LTS represents a labeled transition system
+  ]]--
+  LTS: {
+    states: [Process],
+    labels: [Label],
+    transitions: [Transition],
+    initial: Process
+  }
+
+  --[[
+    Transition represents a labeled transition
+  ]]--
+  Transition: {
+    source: Process,
+    action: Action,
+    target: Process
+  }
+
+  --[[
+    Trace represents a sequence of actions
+  ]]--
+  Trace: {
+    actions: [Action],
+    source: Process,
+    target: Process
+  }
+
+  --[[
+    Bisimulation represents a bisimulation relation between processes
+  ]]--
+  Bisimulation: {
+    relation: [(Process * Process)],
+    check: (Process * Process -> Bool)
+  }
+
+  --[[
+    Simulation represents a simulation relation between processes
+  ]]--
+  Simulation: {
+    relation: [(Process * Process)],
+    check: (Process * Process -> Bool)
+  }
+
+  --------------------------------------------------
+  -- Process Constructors
+  --------------------------------------------------
+
+  --[[
+    Nil represents a process that does nothing
+  ]]--
+  Nil: {
+    _type: "Nil"
+  }
+
+  --[[
+    Prefix represents an action followed by a process
+  ]]--
+  Prefix: {
+    _type: "Prefix",
+    action: Action,
+    process: Process
+  }
+
+  --[[
+    Choice represents a choice between processes
+  ]]--
+  Choice: {
+    _type: "Choice",
+    left: Process,
+    right: Process
+  }
+
+  --[[
+    Parallel represents parallel composition of processes
+  ]]--
+  Parallel: {
+    _type: "Parallel",
+    left: Process,
+    right: Process
+  }
+
+  --[[
+    Restriction represents channel restriction
+  ]]--
+  Restriction: {
+    _type: "Restriction",
+    channel: Channel,
+    process: Process
+  }
+
+  --[[
+    Replication represents process replication
+  ]]--
+  Replication: {
+    _type: "Replication",
+    process: Process
+  }
+
+  --------------------------------------------------
+  -- Process Constructor Functions
+  --------------------------------------------------
+
+  --[[
+    nil creates an inactive process
+  ]]--
+  nil: () -> Process [->
+    {
+      constructor: "Nil",
+      channels: [],
+      actions: [],
+      next: []
+    }
+  ]
+
+  --[[
+    prefix creates a process that performs an action then continues as another process
+  ]]--
+  prefix: Action * Process -> Process [action process ->
+    {
+      constructor: "Prefix",
+      channels: action.channel ? [action.channel] : [] + process.channels,
+      actions: [action] + process.actions,
+      next: [process]
+    }
+  ]
+
+  --[[
+    choice creates a process that can behave as either of two processes
+  ]]--
+  choice: Process * Process -> Process [p q ->
+    {
+      constructor: "Choice",
+      channels: p.channels + q.channels,
+      actions: p.actions + q.actions,
+      next: p.next + q.next
+    }
+  ]
+
+  --[[
+    parallel creates a process that is the parallel composition of two processes
+  ]]--
+  parallel: Process * Process -> Process [p q ->
+    {
+      constructor: "Parallel",
+      channels: p.channels + q.channels,
+      actions: p.actions + q.actions,
+      next: []  -- Next states are determined by transition rules
+    }
+  ]
+
+  --[[
+    restrict creates a process where a channel is restricted
+  ]]--
+  restrict: Channel * Process -> Process [channel process ->
+    {
+      constructor: "Restriction",
+      channels: process.channels - [channel],
+      actions: process.actions |> filter [a -> a.channel != channel],
+      next: []  -- Next states are determined by transition rules
+    }
+  ]
+
+  --[[
+    replicate creates a process that can be used any number of times
+  ]]--
+  replicate: Process -> Process [process ->
+    {
+      constructor: "Replication",
+      channels: process.channels,
+      actions: process.actions,
+      next: []  -- Next states are determined by transition rules
+    }
+  ]
+
+  --------------------------------------------------
+  -- Action Constructor Functions
+  --------------------------------------------------
+
+  --[[
+    input creates an input action on a channel
+  ]]--
+  input: Channel * Any -> Action [channel value ->
+    {
+      type: "input",
+      channel: channel,
+      value: value
+    }
+  ]
+
+  --[[
+    output creates an output action on a channel
+  ]]--
+  output: Channel * Any -> Action [channel value ->
+    {
+      type: "output",
+      channel: channel,
+      value: value
+    }
+  ]
+
+  --[[
+    tau creates a silent action
+  ]]--
+  tau: () -> Action [->
+    {
+      type: "tau",
+      channel: null,
+      value: null
+    }
+  ]
+
+  --------------------------------------------------
+  -- LTS Functions
+  --------------------------------------------------
+
+  --[[
+    transition creates a transition between processes
+  ]]--
+  transition: Process * Action * Process -> Transition [source action target ->
+    {
+      source: source,
+      action: action,
+      target: target
+    }
+  ]
+
+  --[[
+    step performs a single transition step from a process
+  ]]--
+  step: Process * Action -> Process | Null [process action ->
+    -- Implement operational semantics based on process type
+    match process.constructor {
+      "Nil" => null,
+      
+      "Prefix" => 
+        if eq(process.actions[0], action) {
+          process.next[0]
+        } else {
+          null
+        },
+      
+      "Choice" =>
+        let left_result = step(process.next[0], action) in
+        if left_result != null {
+          left_result
+        } else {
+          step(process.next[1], action)
+        },
+      
+      "Parallel" =>
+        -- Handle interleaving and communication
+        let left = process.next[0] in
+        let right = process.next[1] in
+        
+        -- Try left transition
+        let left_result = step(left, action) in
+        if left_result != null {
+          parallel(left_result, right)
+        } else {
+          -- Try right transition
+          let right_result = step(right, action) in
+          if right_result != null {
+            parallel(left, right_result)
+          } else {
+            -- Try communication (simplified)
+            if action.type == "tau" {
+              for l_action in left.actions {
+                for r_action in right.actions {
+                  if can_communicate(l_action, r_action) {
+                    let left_next = step(left, l_action) in
+                    let right_next = step(right, r_action) in
+                    if left_next != null && right_next != null {
+                      return parallel(left_next, right_next)
+                    }
+                  }
+                }
+              }
+            }
+            null
+          }
+        },
+      
+      "Restriction" =>
+        if action.channel != process.channels[0] {
+          let inner_result = step(process.next[0], action) in
+          if inner_result != null {
+            restrict(process.channels[0], inner_result)
+          } else {
+            null
+          }
+        } else {
+          null
+        },
+      
+      "Replication" =>
+        let base_result = step(process.next[0], action) in
+        if base_result != null {
+          parallel(base_result, replicate(process.next[0]))
+        } else {
+          null
+        },
+      
+      _ => null
+    }
+  ]
+
+  --[[
+    can_communicate checks if two actions can communicate
+  ]]--
+  can_communicate: Action * Action -> Bool [a1 a2 ->
+    a1.type == "input" && a2.type == "output" && 
+    a1.channel == a2.channel
+  ]
+
+  --[[
+    trace computes a trace from a sequence of actions
+  ]]--
+  trace: Process * [Action] -> Trace | Null [process actions ->
+    if actions == [] {
+      {
+        actions: [],
+        source: process,
+        target: process
+      }
+    } else {
+      let action = actions[0] in
+      let rest = Prim.slice(actions, 1, Prim.length(actions)) in
+      
+      let next_process = step(process, action) in
+      if next_process == null {
+        null
+      } else {
+        let rest_trace = trace(next_process, rest) in
+        if rest_trace == null {
+          null
+        } else {
+          {
+            actions: [action] + rest_trace.actions,
+            source: process,
+            target: rest_trace.target
+          }
+        }
+      }
+    }
+  ]
+
+  --------------------------------------------------
+  -- Bisimulation Functions
+  --------------------------------------------------
+
+  --[[
+    bisimilar checks if two processes are bisimilar
+  ]]--
+  bisimilar: Process * Process -> Bool [p q ->
+    -- Create bisimulation relation
+    let relation = [(p, q)] in
+    let to_check = [(p, q)] in
+    
+    while to_check != [] {
+      let (curr_p, curr_q) = to_check[0] in
+      to_check = Prim.slice(to_check, 1, Prim.length(to_check))
+      
+      -- Check p's actions
+      for a in curr_p.actions {
+        let p_next = step(curr_p, a) in
+        if p_next != null {
+          let matched = false in
+          
+          -- Find matching q action
+          for a_q in curr_q.actions {
+            if a.type == a_q.type && (a.channel == a_q.channel || a.type == "tau") {
+              let q_next = step(curr_q, a_q) in
+              if q_next != null {
+                -- Check if pair already in relation
+                let already_related = false in
+                for (rp, rq) in relation {
+                  if structurally_equal(rp, p_next) && structurally_equal(rq, q_next) {
+                    already_related = true
+                    break
+                  }
+                }
+                
+                if !already_related {
+                  relation = relation + [(p_next, q_next)]
+                  to_check = to_check + [(p_next, q_next)]
+                }
+                
+                matched = true
+                break
+              }
+            }
+          }
+          
+          if !matched {
+            return false
+          }
+        }
+      }
+      
+      -- Check q's actions
+      for a in curr_q.actions {
+        let q_next = step(curr_q, a) in
+        if q_next != null {
+          let matched = false in
+          
+          -- Find matching p action
+          for a_p in curr_p.actions {
+            if a.type == a_p.type && (a.channel == a_p.channel || a.type == "tau") {
+              let p_next = step(curr_p, a_p) in
+              if p_next != null {
+                -- Check if pair already in relation
+                let already_related = false in
+                for (rp, rq) in relation {
+                  if structurally_equal(rp, p_next) && structurally_equal(rq, q_next) {
+                    already_related = true
+                    break
+                  }
+                }
+                
+                if !already_related {
+                  relation = relation + [(p_next, q_next)]
+                  to_check = to_check + [(p_next, q_next)]
+                }
+                
+                matched = true
+                break
+              }
+            }
+          }
+          
+          if !matched {
+            return false
+          }
+        }
+      }
+    }
+    
+    true
+  ]
+
+  --[[
+    structurally_equal checks if two processes are structurally equal
+  ]]--
+  structurally_equal: Process * Process -> Bool [p q ->
+    -- Placeholder for structural equality check
+    p.constructor == q.constructor
+  ]
+
+  --[[
+    simulates checks if process p simulates process q
+  ]]--
+  simulates: Process * Process -> Bool [p q ->
+    -- Create simulation relation
+    let relation = [(p, q)] in
+    let to_check = [(p, q)] in
+    
+    while to_check != [] {
+      let (curr_p, curr_q) = to_check[0] in
+      to_check = Prim.slice(to_check, 1, Prim.length(to_check))
+      
+      -- For each action of p, q must be able to match it
+      for a in curr_p.actions {
+        let p_next = step(curr_p, a) in
+        if p_next != null {
+          let matched = false in
+          
+          -- Find matching q action
+          for a_q in curr_q.actions {
+            if a.type == a_q.type && (a.channel == a_q.channel || a.type == "tau") {
+              let q_next = step(curr_q, a_q) in
+              if q_next != null {
+                -- Check if pair already in relation
+                let already_related = false in
+                for (rp, rq) in relation {
+                  if structurally_equal(rp, p_next) && structurally_equal(rq, q_next) {
+                    already_related = true
+                    break
+                  }
+                }
+                
+                if !already_related {
+                  relation = relation + [(p_next, q_next)]
+                  to_check = to_check + [(p_next, q_next)]
+                }
+                
+                matched = true
+                break
+              }
+            }
+          }
+          
+          if !matched {
+            return false
+          }
+        }
+      }
+    }
+    
+    true
+  ]
+
+  --------------------------------------------------
+  -- Category Structure
+  --------------------------------------------------
+
+  --[[
+    process_arrow creates an arrow between processes
+  ]]--
+  process_arrow: Process * Process * (Label -> Label | Null) * [Action] -> ProcessArrow [
+    source target label_map path ->
+    {
+      source: source,
+      target: target,
+      label_map: label_map,
+      path: path
+    }
+  ]
+
+  --[[
+    compose_processes composes two process arrows
+  ]]--
+  compose_processes: ProcessArrow * ProcessArrow -> ProcessArrow [f g ->
+    if f.target != g.source {
+      error("Cannot compose process arrows: target of first must equal source of second")
+    }
+    
+    process_arrow(
+      f.source,
+      g.target,
+      [label -> 
+        let intermediate = f.label_map(label) in
+        if intermediate == null {
+          null
+        } else {
+          g.label_map(intermediate)
+        }
+      ],
+      f.path + g.path
+    )
+  ]
+
+  --[[
+    id_process creates an identity process arrow
+  ]]--
+  id_process: Process -> ProcessArrow [p ->
+    process_arrow(
+      p,
+      p,
+      [label -> label],
+      []
+    )
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping to Categorical Semantics
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @ProcessCalc as a category of processes.
+    
+    In this categorical structure:
+    - Objects are processes
+    - Morphisms are process arrows (transitions or traces)
+    - Identity is the empty transition
+    - Composition is path concatenation
+    
+    This captures the essence of LTS as a category, with additional structure
+    for the specific process calculi operations.
+  ]]--
+  structure: {
+    -- Map ProcessCalc to a category
+    objects: Process,
+    morphisms: ProcessArrow,
+    
+    -- Base category structure
+    dom: [arrow -> arrow.source],
+    cod: [arrow -> arrow.target],
+    id: [p -> id_process(p)],
+    compose: [f g -> compose_processes(f, g)],
+    
+    -- LTS structure
+    lts: [processes labels transitions initial ->
+      {
+        states: processes,
+        labels: labels,
+        transitions: transitions,
+        initial: initial
+      }
+    ],
+    
+    -- Process constructors
+    nil: nil,
+    prefix: prefix,
+    choice: choice,
+    parallel: parallel,
+    restrict: restrict,
+    replicate: replicate,
+    
+    -- Action constructors
+    input: input,
+    output: output,
+    tau: tau,
+    
+    -- LTS operations
+    step: step,
+    trace: trace,
+    
+    -- Equivalence relations
+    bisimilar: bisimilar,
+    simulates: simulates,
+    
+    -- Laws for process category
+    law: {
+      -- Associativity of composition
+      associativity: [f g h ->
+        compose_processes(compose_processes(f, g), h) ==
+        compose_processes(f, compose_processes(g, h))
+      ],
+      
+      -- Left identity
+      left_identity: [f ->
+        compose_processes(id_process(f.source), f) == f
+      ],
+      
+      -- Right identity
+      right_identity: [f ->
+        compose_processes(f, id_process(f.target)) == f
+      ]
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    -- Example 1: Simple CCS-like processes
+    ccs_example: () -> (Process * Process) [->
+      -- Create channels
+      let a = { name: "a", type: "unit" } in
+      let b = { name: "b", type: "unit" } in
+      
+      -- P = a.b.0
+      let P = prefix(
+        input(a, null),
+        prefix(
+          input(b, null),
+          nil()
+        )
+      ) in
+      
+      -- Q = a.0 | b.0
+      let Q1 = prefix(
+        input(a, null),
+        nil()
+      ) in
+      
+      let Q2 = prefix(
+        input(b, null),
+        nil()
+      ) in
+      
+      let Q = parallel(Q1, Q2) in
+      
+      -- Return the two processes for comparison
+      (P, Q)
+    ],
+    
+    -- Example 2: π-calculus-like processes with name passing
+    pi_example: () -> Process [->
+      -- Create channels
+      let a = { name: "a", type: "channel" } in
+      let b = { name: "b", type: "channel" } in
+      let c = { name: "c", type: "channel" } in
+      
+      -- P = a(x).x<b>.0
+      let x = { name: "x", type: "channel" } in
+      
+      let P = prefix(
+        input(a, x),
+        prefix(
+          output(x, b),
+          nil()
+        )
+      ) in
+      
+      -- Q = a<c>.0 | c(y).0
+      let Q1 = prefix(
+        output(a, c),
+        nil()
+      ) in
+      
+      let y = { name: "y", type: "channel" } in
+      
+      let Q2 = prefix(
+        input(c, y),
+        nil()
+      ) in
+      
+      let Q = parallel(Q1, Q2) in
+      
+      -- Full system with restriction: (νc)(P | Q)
+      restrict(c, parallel(P, Q))
+    ],
+    
+    -- Example 3: Testing bisimulation
+    bisimulation_example: () -> Bool [->
+      -- Create channels
+      let a = { name: "a", type: "unit" } in
+      let b = { name: "b", type: "unit" } in
+      
+      -- P = a.b.0 + a.c.0
+      let P1 = prefix(
+        input(a, null),
+        prefix(
+          input(b, null),
+          nil()
+        )
+      ) in
+      
+      let c = { name: "c", type: "unit" } in
+      
+      let P2 = prefix(
+        input(a, null),
+        prefix(
+          input(c, null),
+          nil()
+        )
+      ) in
+      
+      let P = choice(P1, P2) in
+      
+      -- Q = a.(b.0 + c.0)
+      let Q_inner = choice(
+        prefix(
+          input(b, null),
+          nil()
+        ),
+        prefix(
+          input(c, null),
+          nil()
+        )
+      ) in
+      
+      let Q = prefix(
+        input(a, null),
+        Q_inner
+      ) in
+      
+      -- Check if P and Q are bisimilar
+      bisimilar(P, Q)
+    ]
+  }
+} 

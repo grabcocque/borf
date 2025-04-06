@@ -1,0 +1,455 @@
+--[[
+  Delimited Continuations
+
+  This module defines the category of delimited continuations with shift and reset
+  operations. Delimited continuations provide a powerful control mechanism where
+  specific portions of a computation can be captured and manipulated.
+  
+  Unlike regular (undelimited) continuations, delimited continuations represent
+  only a portion of the remaining computation up to a specific delimiter.
+  This structure is particularly useful for expressing many advanced control
+  flow patterns and computational effects.
+]]--
+
+@CallCC: {
+  typ: {
+    -- Core continuation types
+    Cont Prompt SubCont
+    
+    -- Continuation operators
+    Shift Reset Control Run
+    
+    -- Effect tracking
+    PromptType AnswerType
+  }
+
+  op: {
+    -- Delimited continuation operators
+    shift reset
+    
+    -- Composition operators
+    @ @@
+  }
+
+  fn: {
+    -- Core continuation functions
+    call_cc shift reset control_prompt abort
+    
+    -- Conversion functions
+    cont_to_fun fun_to_cont
+    
+    -- Composition functions
+    compose_cont sequence_cont parallel_cont
+    
+    -- Utility functions
+    prompt prompt_run
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@CallCC, @T, true),           -- Add dependency on Type system
+    (@CallCC, @Kleisli, true)      -- Add dependency on Kleisli categories
+  }
+
+  --------------------------------------------------
+  -- Core Continuation Types
+  --------------------------------------------------
+
+  --[[
+    Cont defines a delimited continuation
+  ]]--
+  Cont: {
+    body: (a -> b),               -- The function that takes a continuation
+    answer_type: a,               -- Answer type r (result of the whole computation)
+    result_type: b,               -- Result type t (result of the continuation body)
+    prompt: Prompt                -- The delimiting prompt
+  }
+
+  --[[
+    Prompt defines a prompt tag that delimits continuations
+  ]]--
+  Prompt: {
+    id: Z,                        -- Unique identifier for the prompt
+    answer_type: a,               -- Type of answer expected at this prompt
+    result_type: b                -- Type of result captured by this prompt
+  }
+
+  --[[
+    SubCont defines a sub-continuation (portion of a continuation)
+  ]]--
+  SubCont: {
+    body: (a -> b),               -- The function representing the sub-continuation
+    prompt_src: Prompt,           -- Source prompt
+    prompt_dst: Prompt            -- Destination prompt
+  }
+
+  --[[
+    Shift is the shift operator for capturing delimited continuations
+  ]]--
+  Shift: {
+    body: ((a -> r) -> r),        -- Body function that takes the current continuation
+    prompt: Prompt,               -- The prompt to which this shift is associated
+    result_type: a,               -- Type to be returned by the body
+    answer_type: r                -- Answer type expected at the prompt
+  }
+
+  --[[
+    Reset is the reset operator that delimits continuations
+  ]]--
+  Reset: {
+    body: () -> a,                -- Body of the computation to be delimited
+    prompt: Prompt,               -- Prompt marking the boundary
+    result_type: a                -- Type returned by the body
+  }
+
+  --[[
+    PromptType is a type constructor for tracking prompt types
+  ]]--
+  PromptType: {
+    answer: a,                    -- Answer type
+    result: b                     -- Result type
+  }
+
+  --[[
+    AnswerType is a type constructor for tracking answer types
+  ]]--
+  AnswerType: {
+    type: a                       -- The answer type
+  }
+
+  --------------------------------------------------
+  -- Core Continuation Functions
+  --------------------------------------------------
+
+  --[[
+    create_cont constructs a delimited continuation
+  ]]--
+  create_cont: (a -> b) * a * b * Prompt -> Cont [body answer_type result_type prompt ->
+    {
+      body: body,
+      answer_type: answer_type,
+      result_type: result_type,
+      prompt: prompt
+    }
+  ]
+
+  --[[
+    create_prompt creates a new prompt with a unique identifier
+  ]]--
+  create_prompt: a * b -> Prompt [answer_type result_type ->
+    {
+      id: gen_unique_id(),
+      answer_type: answer_type,
+      result_type: result_type
+    }
+  ]
+
+  --[[
+    gen_unique_id generates a unique identifier for prompts
+  ]]--
+  gen_unique_id: () -> Z [->
+    -- In a real implementation, this would use a global counter or UUID
+    0
+  ]
+
+  --[[
+    create_subcont creates a sub-continuation
+  ]]--
+  create_subcont: (a -> b) * Prompt * Prompt -> SubCont [body prompt_src prompt_dst ->
+    {
+      body: body,
+      prompt_src: prompt_src,
+      prompt_dst: prompt_dst
+    }
+  ]
+
+  --[[
+    call_cc is the call-with-current-continuation operator
+  ]]--
+  call_cc: ((a -> b) -> b) * Prompt -> b [f prompt ->
+    -- In a real implementation, this would capture the current continuation
+    -- and pass it to f, with the rest of the computation delimited by prompt
+    f([x -> x])
+  ]
+
+  --[[
+    shift captures the current continuation up to the nearest matching reset
+  ]]--
+  shift: ((a -> r) -> r) * Prompt -> a [f prompt ->
+    call_cc([k ->
+      prompt_run(prompt, f(k))
+    ], prompt)
+  ]
+
+  --[[
+    reset delimits the scope of continuation capture
+  ]]--
+  reset: (() -> a) * Prompt -> a [body prompt ->
+    -- In a real implementation, this would establish a prompt
+    -- and run the body in that context
+    body()
+  ]
+
+  --[[
+    prompt_run runs a computation with a specific prompt
+  ]]--
+  prompt_run: Prompt * a -> a [prompt comp ->
+    -- In a real implementation, this would set up the prompt context
+    comp
+  ]
+
+  --[[
+    control_prompt is the control operator (another variant of shift)
+  ]]--
+  control_prompt: ((a -> r) -> r) * Prompt -> a [f prompt ->
+    call_cc([k ->
+      prompt_run(prompt, f([x -> reset([-> k(x)], prompt)]))
+    ], prompt)
+  ]
+
+  --[[
+    abort aborts the current computation up to the nearest matching reset
+  ]]--
+  abort: a * Prompt -> b [value prompt ->
+    shift([_ -> value], prompt)
+  ]
+
+  --------------------------------------------------
+  -- Continuation Composition Functions
+  --------------------------------------------------
+
+  --[[
+    compose_cont composes two delimited continuations
+  ]]--
+  compose_cont: Cont * Cont -> Cont [f g ->
+    if f.prompt.id != g.prompt.id {
+      error("Cannot compose continuations with different prompts")
+    }
+    
+    if f.result_type != g.answer_type {
+      error("Type mismatch in continuation composition")
+    }
+    
+    create_cont(
+      [x -> f.body([y -> g.body(y)(x)])],
+      g.answer_type,
+      f.result_type,
+      f.prompt
+    )
+  ]
+
+  --[[
+    compose_subcont composes two sub-continuations
+  ]]--
+  compose_subcont: SubCont * SubCont -> SubCont [f g ->
+    if f.prompt_dst.id != g.prompt_src.id {
+      error("Cannot compose sub-continuations: prompt mismatch")
+    }
+    
+    create_subcont(
+      [x -> f.body(g.body(x))],
+      g.prompt_src,
+      f.prompt_dst
+    )
+  ]
+
+  --[[
+    sequence_cont sequences two delimited continuations
+  ]]--
+  sequence_cont: Cont * Cont -> Cont [f g ->
+    create_cont(
+      [k -> f.body([x -> g.body(k)(x)])],
+      g.answer_type,
+      f.result_type,
+      f.prompt
+    )
+  ]
+
+  --[[
+    parallel_cont runs two delimited continuations in parallel
+  ]]--
+  parallel_cont: Cont * Cont -> Cont [f g ->
+    create_cont(
+      [k -> (f.body([x -> x]), g.body([y -> y])) |> k],
+      f.answer_type * g.answer_type,
+      f.result_type * g.result_type,
+      f.prompt
+    )
+  ]
+
+  --[[
+    cont_to_fun converts a delimited continuation to a function
+  ]]--
+  cont_to_fun: Cont -> (a -> b) [cont ->
+    [x -> reset([-> cont.body([y -> y])(x)], cont.prompt)]
+  ]
+
+  --[[
+    fun_to_cont converts a function to a delimited continuation
+  ]]--
+  fun_to_cont: (a -> b) * Prompt -> Cont [f prompt ->
+    create_cont(
+      [k -> k(f)],
+      a,
+      b,
+      prompt
+    )
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping to Categorical Semantics
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @CallCC as a category of delimited continuations.
+    
+    In this categorical structure:
+    - Objects are prompt types (pairs of answer and result types)
+    - Morphisms are delimited continuations between prompt types
+    - Composition is continuation composition
+    - Identity is the identity continuation
+    
+    This categorical structure captures the computational model of
+    delimited continuations, providing a foundation for advanced
+    control flow operators.
+  ]]--
+  structure: {
+    -- Map CallCC to a category
+    objects: PromptType,
+    morphisms: Cont,
+    
+    -- Base category structure
+    dom: [cont -> { answer: cont.answer_type, result: cont.result_type }],
+    cod: [cont -> { answer: cont.prompt.answer_type, result: cont.prompt.result_type }],
+    id: [t -> create_cont([k -> k], t.answer, t.result, create_prompt(t.answer, t.result))],
+    compose: [f g -> compose_cont(f, g)],
+    
+    -- Delimited continuation structure
+    shift_op: [f prompt -> shift(f, prompt)],
+    reset_op: [body prompt -> reset(body, prompt)],
+    control_op: [f prompt -> control_prompt(f, prompt)],
+    abort_op: [val prompt -> abort(val, prompt)],
+    
+    -- Prompt structure
+    new_prompt: [a r -> create_prompt(a, r)],
+    prompt_run: prompt_run,
+    
+    -- Kleisli structure (connection to continuation effect)
+    to_kleisli: [r ->
+      @Kleisli.cont_effect(r)
+    ],
+    kleisli_arrow: [cont ->
+      @Kleisli.create_kleisli_arrow(
+        cont.answer_type,
+        cont.result_type,
+        to_kleisli(cont.prompt.answer_type),
+        [x -> [k -> cont.body([y -> k(y)])(x)]]
+      )
+    ],
+    
+    -- Extra composition structures
+    sequence: [f g -> sequence_cont(f, g)],
+    parallel: [f g -> parallel_cont(f, g)],
+    
+    -- Laws for delimited continuations
+    law: {
+      -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
+      associativity: forall [f g h ->
+        compose_cont(compose_cont(f, g), h) ==
+        compose_cont(f, compose_cont(g, h))
+      ],
+      
+      -- Identity: id ∘ f = f = f ∘ id
+      identity: forall [f ->
+        compose_cont(id(dom(f)), f) == f &&
+        compose_cont(f, id(cod(f))) == f
+      ],
+      
+      -- Reset-Shift law: reset(shift(f)) = f(id)
+      reset_shift: forall [f prompt ->
+        reset([-> shift(f, prompt)], prompt) ==
+        f([x -> x])
+      ],
+      
+      -- Shift and Subcontinuation
+      subcont_law: forall [f k prompt ->
+        shift([c -> f(compose_subcont(k, create_subcont(c, prompt, prompt)))], prompt) ==
+        f(k)
+      ]
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    -- Example: Simple state management using delimited continuations
+    state_management: () -> Z [->
+      let p = create_prompt("StateResult", "StateResult") in
+      
+      let get = [-> shift([k -> [s -> k(s)(s)]], p)] in
+      let put = [s -> shift([k -> [_ -> k(null)(s)]], p)] in
+      
+      let run_state = [init_state f -> 
+        reset([-> f()], p)(init_state)
+      ] in
+      
+      run_state(42, [->
+        let x = get() in
+        put(x + 1) |> [_ ->
+        let y = get() in
+        y]
+      ])
+      -- Returns 43
+    ],
+    
+    -- Example: Exception handling with delimited continuations
+    exception_handling: () -> S [->
+      let p = create_prompt("ExceptionResult", "ExceptionResult") in
+      
+      let try_catch = [body handler -> 
+        reset([-> body()], p) |> [result ->
+          if result is { _type: "Exception", message: m } then
+            handler(m)
+          else
+            result
+        ]
+      ] in
+      
+      let throw = [msg -> 
+        abort({ _type: "Exception", message: msg }, p)
+      ] in
+      
+      try_catch(
+        [-> "Result: " + (
+          100 / 0 |> [_ -> "Success"]
+                  |> [e -> throw("Division by zero")]
+        )],
+        [msg -> "Caught exception: " + msg]
+      )
+      -- Returns "Caught exception: Division by zero"
+    ],
+    
+    -- Example: Cooperative multitasking with delimited continuations
+    cooperative_multitasking: () -> [Z] [->
+      let p = create_prompt([Z], Z) in
+      
+      let yield = [value -> shift([k -> k(value) @ [value]], p)] in
+      
+      let run = [f -> reset([-> f() @ []], p)] in
+      
+      run([->
+        yield(1) |> [_ ->
+        yield(2) |> [_ ->
+        yield(3)]]
+      ])
+      -- Returns [1, 2, 3]
+    ]
+  }
+} 

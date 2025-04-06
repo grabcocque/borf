@@ -1,0 +1,583 @@
+--[[
+  Process Calculi to Task Mapping
+
+  This module defines mappings between process calculi and task categories,
+  showing how concurrent processes can be represented as asynchronous tasks.
+  
+  It provides a categorical framework for translating between process-oriented
+  and task-oriented concurrency models.
+]]--
+
+@ProcessTask: {
+  typ: {
+    -- Core mapping types
+    ProcessToTask
+    TaskToProcess
+    ProcessTaskAdjunction
+    
+    -- Process task representations
+    ProcessTask
+    ParallelProcessTask
+    ChoiceProcessTask
+    PrefixProcessTask
+    RestrictionProcessTask
+  }
+
+  op: {
+    -- Process task operators
+    <>
+    <|>
+    ->
+  }
+
+  fn: {
+    -- Mapping functions
+    process_to_task task_to_process
+    
+    -- Process task constructors
+    process_task parallel_process_task choice_process_task
+    prefix_process_task restriction_process_task
+    
+    -- Execution functions
+    run_process_as_task run_task_as_process
+    
+    -- Conversion functions
+    channel_to_address action_to_message process_to_handler
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@ProcessTask, @T, true),           -- Add dependency on Type system
+    (@ProcessTask, @ProcessCalc, true), -- Add dependency on Process category
+    (@ProcessTask, @Task, true),        -- Add dependency on Task category
+    (@ProcessTask, @Cat, true)          -- Add dependency on Category
+  }
+
+  --------------------------------------------------
+  -- Core Mapping Types
+  --------------------------------------------------
+
+  --[[
+    ProcessToTask maps process calculi to task categories
+  ]]--
+  ProcessToTask: {
+    map_process: (@ProcessCalc.Process -> @Task.Task.a),
+    map_action: (@ProcessCalc.Action -> Any),
+    map_channel: (@ProcessCalc.Channel -> S)
+  }
+
+  --[[
+    TaskToProcess maps task categories to process calculi
+  ]]--
+  TaskToProcess: {
+    map_task: (@Task.Task.a -> @ProcessCalc.Process),
+    map_message: (Any -> @ProcessCalc.Action),
+    map_address: (S -> @ProcessCalc.Channel)
+  }
+
+  --[[
+    ProcessTaskAdjunction defines an adjunction between process and task categories
+  ]]--
+  ProcessTaskAdjunction: {
+    process_to_task: ProcessToTask,
+    task_to_process: TaskToProcess,
+    unit: (@ProcessCalc.Process -> @ProcessCalc.Process),
+    counit: (@Task.Task.a -> @Task.Task.a)
+  }
+
+  --[[
+    ProcessTask represents a process as a task
+  ]]--
+  ProcessTask: {
+    _type: "ProcessTask",
+    process: @ProcessCalc.Process,
+    current_state: @ProcessCalc.Process,
+    channels: [@ProcessCalc.Channel],
+    pending_actions: [@ProcessCalc.Action],
+    completed_actions: [@ProcessCalc.Action]
+  }
+
+  --[[
+    ParallelProcessTask represents parallel composition of process tasks
+  ]]--
+  ParallelProcessTask: {
+    _type: "ParallelProcessTask",
+    left: ProcessTask,
+    right: ProcessTask,
+    synchronization: [((@ProcessCalc.Action * @ProcessCalc.Action) * @ProcessCalc.Action)]
+  }
+
+  --[[
+    ChoiceProcessTask represents choice between process tasks
+  ]]--
+  ChoiceProcessTask: {
+    _type: "ChoiceProcessTask",
+    left: ProcessTask,
+    right: ProcessTask,
+    chosen: ProcessTask | Null
+  }
+
+  --[[
+    PrefixProcessTask represents a prefixed process task
+  ]]--
+  PrefixProcessTask: {
+    _type: "PrefixProcessTask",
+    action: @ProcessCalc.Action,
+    continuation: ProcessTask,
+    performed: Bool
+  }
+
+  --[[
+    RestrictionProcessTask represents a restricted process task
+  ]]--
+  RestrictionProcessTask: {
+    _type: "RestrictionProcessTask",
+    process_task: ProcessTask,
+    restricted_channel: @ProcessCalc.Channel
+  }
+
+  --------------------------------------------------
+  -- Mapping Functions
+  --------------------------------------------------
+
+  --[[
+    process_to_task creates a mapping from processes to tasks
+  ]]--
+  process_to_task: (@ProcessCalc.Process -> @Task.Task.a) * (@ProcessCalc.Action -> Any) * (@ProcessCalc.Channel -> S) -> ProcessToTask [
+    map_process map_action map_channel ->
+    {
+      map_process: map_process,
+      map_action: map_action,
+      map_channel: map_channel
+    }
+  ]
+
+  --[[
+    task_to_process creates a mapping from tasks to processes
+  ]]--
+  task_to_process: (@Task.Task.a -> @ProcessCalc.Process) * (Any -> @ProcessCalc.Action) * (S -> @ProcessCalc.Channel) -> TaskToProcess [
+    map_task map_message map_address ->
+    {
+      map_task: map_task,
+      map_message: map_message,
+      map_address: map_address
+    }
+  ]
+
+  --[[
+    process_task_adjunction creates an adjunction between process and task categories
+  ]]--
+  process_task_adjunction: ProcessToTask * TaskToProcess * (@ProcessCalc.Process -> @ProcessCalc.Process) * (@Task.Task.a -> @Task.Task.a) -> ProcessTaskAdjunction [
+    p2t t2p unit counit ->
+    {
+      process_to_task: p2t,
+      task_to_process: t2p,
+      unit: unit,
+      counit: counit
+    }
+  ]
+
+  --------------------------------------------------
+  -- Process Task Constructors
+  --------------------------------------------------
+
+  --[[
+    process_task creates a task representation of a process
+  ]]--
+  process_task: @ProcessCalc.Process -> ProcessTask [process ->
+    {
+      _type: "ProcessTask",
+      process: process,
+      current_state: process,
+      channels: process.channels,
+      pending_actions: process.actions,
+      completed_actions: []
+    }
+  ]
+
+  --[[
+    parallel_process_task creates a parallel composition of process tasks
+  ]]--
+  parallel_process_task: ProcessTask * ProcessTask -> ParallelProcessTask [left right ->
+    {
+      _type: "ParallelProcessTask",
+      left: left,
+      right: right,
+      synchronization: derive_synchronization(left.pending_actions, right.pending_actions)
+    }
+  ]
+
+  --[[
+    derive_synchronization finds potential synchronization points between actions
+  ]]--
+  derive_synchronization: [@ProcessCalc.Action] * [@ProcessCalc.Action] -> [((@ProcessCalc.Action * @ProcessCalc.Action) * @ProcessCalc.Action)] [
+    left_actions right_actions ->
+    let result = [] in
+    
+    for left_action in left_actions {
+      for right_action in right_actions {
+        if can_synchronize(left_action, right_action) {
+          result = result + [((left_action, right_action), @ProcessCalc.tau())]
+        }
+      }
+    }
+    
+    result
+  ]
+
+  --[[
+    can_synchronize checks if two actions can synchronize
+  ]]--
+  can_synchronize: @ProcessCalc.Action * @ProcessCalc.Action -> Bool [a1 a2 ->
+    (a1.type == "input" && a2.type == "output" || 
+     a1.type == "output" && a2.type == "input") &&
+    a1.channel == a2.channel
+  ]
+
+  --[[
+    choice_process_task creates a choice between process tasks
+  ]]--
+  choice_process_task: ProcessTask * ProcessTask -> ChoiceProcessTask [left right ->
+    {
+      _type: "ChoiceProcessTask",
+      left: left,
+      right: right,
+      chosen: null
+    }
+  ]
+
+  --[[
+    prefix_process_task creates a prefixed process task
+  ]]--
+  prefix_process_task: @ProcessCalc.Action * ProcessTask -> PrefixProcessTask [action continuation ->
+    {
+      _type: "PrefixProcessTask",
+      action: action,
+      continuation: continuation,
+      performed: false
+    }
+  ]
+
+  --[[
+    restriction_process_task creates a restricted process task
+  ]]--
+  restriction_process_task: ProcessTask * @ProcessCalc.Channel -> RestrictionProcessTask [process_task channel ->
+    {
+      _type: "RestrictionProcessTask",
+      process_task: process_task,
+      restricted_channel: channel
+    }
+  ]
+
+  --------------------------------------------------
+  -- Execution Functions
+  --------------------------------------------------
+
+  --[[
+    run_process_as_task executes a process as a task
+  ]]--
+  run_process_as_task: @ProcessCalc.Process * @Task.Scheduler -> @Task.Task.[@ProcessCalc.Action] [process scheduler ->
+    @Task.create_task([->
+      let proc_task = process_task(process) in
+      let actions = [] in
+      
+      -- Keep running until no more actions are possible
+      while proc_task.pending_actions != [] {
+        -- Select an action to perform (non-deterministically)
+        let action = proc_task.pending_actions[0] in
+        
+        -- Perform the action
+        let next_state = @ProcessCalc.step(proc_task.current_state, action) in
+        
+        if next_state != null {
+          -- Action was successful
+          proc_task.current_state = next_state
+          proc_task.completed_actions = proc_task.completed_actions + [action]
+          proc_task.pending_actions = next_state.actions
+          actions = actions + [action]
+          
+          -- Yield control to simulate asynchronous execution
+          @Task.yield(10, scheduler)
+        } else {
+          -- Action failed, remove it from pending
+          proc_task.pending_actions = Prim.slice(
+            proc_task.pending_actions, 
+            1, 
+            Prim.length(proc_task.pending_actions)
+          )
+        }
+      }
+      
+      actions
+    ], scheduler)
+  ]
+
+  --[[
+    run_task_as_process interprets a task as a process
+  ]]--
+  run_task_as_process: @Task.Task.a * @ProcessCalc.Process -> @ProcessCalc.Process [task process ->
+    -- Create a process that evolves as the task executes
+    let initial_state = process in
+    let current_state = initial_state in
+    
+    -- Create a wrapper task that records the process evolution
+    @Task.create_task([->
+      -- Run the original task to completion
+      let result = @Task.await(task, null, task.scheduler) in
+      
+      -- For each yield/suspension in the task, create a tau transition
+      -- This is a simplified model - a full implementation would track
+      -- individual operations and map them to appropriate actions
+      while task.state._type != "Completed" {
+        -- Create a tau transition for each suspension
+        if task.state._type == "Suspended" {
+          let tau_action = @ProcessCalc.tau() in
+          let next_state = @ProcessCalc.step(current_state, tau_action) in
+          if next_state != null {
+            current_state = next_state
+          }
+        }
+        
+        @Task.yield(10, task.scheduler)
+      }
+      
+      current_state
+    ], task.scheduler)
+  ]
+
+  --------------------------------------------------
+  -- Conversion Functions
+  --------------------------------------------------
+
+  --[[
+    channel_to_address converts a process channel to a task address
+  ]]--
+  channel_to_address: @ProcessCalc.Channel -> S [channel ->
+    channel.name
+  ]
+
+  --[[
+    action_to_message converts a process action to a task message
+  ]]--
+  action_to_message: @ProcessCalc.Action -> Any [action ->
+    {
+      type: action.type,
+      channel: action.channel ? channel_to_address(action.channel) : null,
+      value: action.value
+    }
+  ]
+
+  --[[
+    process_to_handler converts a process to a message handler for tasks
+  ]]--
+  process_to_handler: @ProcessCalc.Process -> (Any -> @Task.Task.Any) [process ->
+    [message ->
+      -- Convert message to action
+      let action = {
+        type: message.type,
+        channel: message.channel ? { name: message.channel, type: "any" } : null,
+        value: message.value
+      } in
+      
+      -- Try to apply the action to the process
+      let next_state = @ProcessCalc.step(process, action) in
+      
+      @Task.create_task([->
+        if next_state != null {
+          -- Action succeeded
+          { success: true, next_process: next_state }
+        } else {
+          -- Action failed
+          { success: false, next_process: process }
+        }
+      ], @Task.default_scheduler())
+    ]
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping to Categorical Semantics
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @ProcessTask as a bridge between
+    process calculi and task categories.
+    
+    In this categorical structure:
+    - Functors map between process and task categories
+    - Natural transformations connect different mapping strategies
+    - Adjunctions formalize the relationship between the categories
+    
+    This captures the essence of how concurrent processes can be modeled
+    as asynchronous tasks and vice versa.
+  ]]--
+  structure: {
+    -- Process to Task mappings
+    process_to_task: [map_proc map_act map_chan -> 
+      process_to_task(map_proc, map_act, map_chan)
+    ],
+    
+    task_to_process: [map_task map_msg map_addr ->
+      task_to_process(map_task, map_msg, map_addr)
+    ],
+    
+    -- Adjunction between categories
+    process_task_adjunction: process_task_adjunction,
+    
+    -- Process task constructors
+    process_task: process_task,
+    parallel_task: parallel_process_task,
+    choice_task: choice_process_task,
+    prefix_task: prefix_process_task,
+    restriction_task: restriction_process_task,
+    
+    -- Execution functions
+    run_as_task: run_process_as_task,
+    run_as_process: run_task_as_process,
+    
+    -- Conversion helpers
+    channel_to_address: channel_to_address,
+    action_to_message: action_to_message,
+    process_to_handler: process_to_handler,
+    
+    -- Laws for process-task mappings
+    law: {
+      -- Adjunction laws
+      process_task_unit: [adj p ->
+        let p2t = adj.process_to_task in
+        let t2p = adj.task_to_process in
+        
+        t2p.map_task(p2t.map_process(adj.unit(p))) == p
+      ],
+      
+      process_task_counit: [adj t ->
+        let p2t = adj.process_to_task in
+        let t2p = adj.task_to_process in
+        
+        p2t.map_process(t2p.map_task(t)) == adj.counit(t)
+      ],
+      
+      -- Specific mapping laws
+      parallel_composition: [p q ->
+        let parallel_proc = @ProcessCalc.parallel(p, q) in
+        let p_task = process_task(p) in
+        let q_task = process_task(q) in
+        let parallel_task = parallel_process_task(p_task, q_task) in
+        
+        -- The task representation of parallel composition should 
+        -- behave like the parallel composition of task representations
+        is_equivalent(
+          run_process_as_task(parallel_proc, @Task.default_scheduler()),
+          @Task.create_task([->
+            let p_actions = @Task.await(
+              run_process_as_task(p, @Task.default_scheduler()),
+              null,
+              @Task.default_scheduler()
+            ) in
+            
+            let q_actions = @Task.await(
+              run_process_as_task(q, @Task.default_scheduler()),
+              null,
+              @Task.default_scheduler()
+            ) in
+            
+            merge_actions(p_actions, q_actions)
+          ], @Task.default_scheduler())
+        )
+      ]
+    }
+  }
+
+  --[[
+    is_equivalent checks if two tasks are equivalent (simplified)
+  ]]--
+  is_equivalent: @Task.Task.a * @Task.Task.b -> Bool [t1 t2 ->
+    -- This is a placeholder - full implementation would compare
+    -- the behavior of tasks more thoroughly
+    true
+  ]
+
+  --[[
+    merge_actions merges action sequences accounting for synchronization
+  ]]--
+  merge_actions: [@ProcessCalc.Action] * [@ProcessCalc.Action] -> [@ProcessCalc.Action] [a1 a2 ->
+    -- Simple interleaving for illustration
+    a1 + a2
+  ]
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    -- Example 1: Simple process as task
+    simple_process_task_example: () -> @Task.Task.[@ProcessCalc.Action] [->
+      -- Create channels
+      let a = { name: "a", type: "unit" } in
+      let b = { name: "b", type: "unit" } in
+      
+      -- Create a.b.0 process
+      let process = @ProcessCalc.prefix(
+        @ProcessCalc.input(a, null),
+        @ProcessCalc.prefix(
+          @ProcessCalc.input(b, null),
+          @ProcessCalc.nil()
+        )
+      ) in
+      
+      -- Run as task
+      run_process_as_task(process, @Task.default_scheduler())
+    ],
+    
+    -- Example 2: Parallel composition
+    parallel_task_example: () -> @Task.Task.[@ProcessCalc.Action] [->
+      -- Create channels
+      let a = { name: "a", type: "unit" } in
+      let b = { name: "b", type: "unit" } in
+      
+      -- Create process a.0 | b.0
+      let p1 = @ProcessCalc.prefix(
+        @ProcessCalc.input(a, null),
+        @ProcessCalc.nil()
+      ) in
+      
+      let p2 = @ProcessCalc.prefix(
+        @ProcessCalc.input(b, null),
+        @ProcessCalc.nil()
+      ) in
+      
+      let parallel_proc = @ProcessCalc.parallel(p1, p2) in
+      
+      -- Run as task
+      run_process_as_task(parallel_proc, @Task.default_scheduler())
+    ],
+    
+    -- Example 3: Process handler from task
+    process_handler_example: () -> @Task.Task.Any [->
+      -- Create channels
+      let a = { name: "a", type: "unit" } in
+      
+      -- Create process a.0
+      let process = @ProcessCalc.prefix(
+        @ProcessCalc.input(a, null),
+        @ProcessCalc.nil()
+      ) in
+      
+      -- Create handler
+      let handler = process_to_handler(process) in
+      
+      -- Invoke handler with a message
+      let message = { 
+        type: "input", 
+        channel: "a", 
+        value: null 
+      } in
+      
+      handler(message)
+    ]
+  }
+} 

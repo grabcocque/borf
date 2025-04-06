@@ -1,0 +1,507 @@
+--[[
+  Kleisli Arrow Category
+
+  This module defines the Kleisli arrow category construction.
+  A Kleisli arrow from A to B is a function a -> T b, where T is a type constructor
+  representing a computational effect. 
+  
+  Kleisli arrows provide a direct way to compose effectful computations
+  without explicitly using monads. This approach focuses on the morphisms
+  and their composition rather than the underlying structure.
+]]--
+
+@Kleisli: {
+  typ: {
+    -- Core Kleisli types
+    KleisliCategory
+    KleisliArrow
+    TypeConstructor
+    
+    -- Specific effect types
+    MaybeEffect
+    ListEffect
+    StateEffect
+    ContEffect
+    ReaderEffect
+    WriterEffect
+  }
+
+  op: {
+    -- Kleisli composition operators
+    <=< >=>
+    
+    -- Arrow application
+    >>> >->
+  }
+
+  fn: {
+    -- Core arrow functions
+    compose_arrows arr_id pure
+    
+    -- Effect functions
+    apply_effect map_effect sequence_effects
+    
+    -- Type constructor functions
+    create_type_constructor lift_function
+    
+    -- Specific effects
+    maybe_effect list_effect state_effect
+    cont_effect reader_effect writer_effect
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Kleisli, @T, true),        -- Add dependency on Type system
+    (@Kleisli, @Cat, true)       -- Add dependency on Category theory
+  }
+
+  --------------------------------------------------
+  -- Core Kleisli Types
+  --------------------------------------------------
+
+  --[[
+    TypeConstructor defines a type constructor that represents an effect
+  ]]--
+  TypeConstructor: {
+    name: S,
+    apply: (a -> T.a),         -- How to apply the type constructor to a type
+    pure: (a -> apply.a),      -- How to lift a pure value into the effect
+    bind: (apply.a * (a -> apply.b) -> apply.b)  -- How to sequence effects
+  }
+
+  --[[
+    KleisliArrow defines an arrow in a Kleisli category
+  ]]--
+  KleisliArrow: {
+    source: a,                 -- Source type
+    target: b,                 -- Target type
+    effect: TypeConstructor,   -- The effect type constructor
+    function: (a -> effect.apply.b)  -- The underlying function
+  }
+
+  --[[
+    KleisliCategory defines the category of Kleisli arrows for a type constructor
+  ]]--
+  KleisliCategory: {
+    effect: TypeConstructor,    -- The effect type constructor
+    objects: [a],               -- Objects (types)
+    arrows: [KleisliArrow],     -- Kleisli arrows
+    compose: (KleisliArrow * KleisliArrow -> KleisliArrow)  -- Arrow composition
+  }
+
+  --------------------------------------------------
+  -- Core Type Constructors
+  --------------------------------------------------
+
+  --[[
+    create_type_constructor constructs a type constructor for an effect
+  ]]--
+  create_type_constructor: S * (a -> effect.a) * (a -> effect.a) * (effect.a * (a -> effect.b) -> effect.b) -> TypeConstructor [
+    name apply pure bind ->
+    {
+      name: name,
+      apply: apply,
+      pure: pure,
+      bind: bind
+    }
+  ]
+
+  --[[
+    maybe_effect creates the Maybe effect type constructor
+  ]]--
+  maybe_effect: () -> TypeConstructor [->
+    create_type_constructor(
+      "Maybe",
+      [a -> a | Null],               -- Maybe type
+      [a -> a],                      -- Pure (Just)
+      [(ma, f) -> if ma is Null then Null else f(ma)]  -- Bind
+    )
+  ]
+
+  --[[
+    list_effect creates the List effect type constructor
+  ]]--
+  list_effect: () -> TypeConstructor [->
+    create_type_constructor(
+      "List",
+      [a -> [a]],                    -- List type
+      [a -> [a]],                    -- Pure (singleton list)
+      [(ma, f) -> ma |> flatten_map(f)]  -- Bind (flatMap)
+    )
+  ]
+
+  --[[
+    state_effect creates the State effect type constructor for a given state type s
+  ]]--
+  state_effect: a -> TypeConstructor [s ->
+    create_type_constructor(
+      "State",
+      [a -> (s -> (a, s))],          -- State type
+      [a -> [s -> (a, s)]],          -- Pure (preserves state)
+      [(ma, f) -> [s ->              -- Bind (threads state)
+        let (a, s') = ma(s) in
+        f(a)(s')
+      ]]
+    )
+  ]
+
+  --[[
+    cont_effect creates the Continuation effect type constructor for a given result type r
+  ]]--
+  cont_effect: a -> TypeConstructor [r ->
+    create_type_constructor(
+      "Cont",
+      [a -> ((a -> r) -> r)],        -- Cont type
+      [a -> [k -> k(a)]],            -- Pure (wraps value in continuation)
+      [(ma, f) -> [k ->              -- Bind (composes continuations)
+        ma([a -> f(a)(k)])
+      ]]
+    )
+  ]
+
+  --[[
+    reader_effect creates the Reader effect type constructor for a given environment type e
+  ]]--
+  reader_effect: a -> TypeConstructor [e ->
+    create_type_constructor(
+      "Reader",
+      [a -> (e -> a)],               -- Reader type
+      [a -> [_ -> a]],               -- Pure (ignores environment)
+      [(ma, f) -> [env ->            -- Bind (passes environment)
+        f(ma(env))(env)
+      ]]
+    )
+  ]
+
+  --[[
+    writer_effect creates the Writer effect type constructor for a given accumulator type w
+  ]]--
+  writer_effect: {empty: a, append: (a * a -> a)} -> TypeConstructor [monoid ->
+    create_type_constructor(
+      "Writer",
+      [a -> (a, monoid)],            -- Writer type
+      [a -> (a, monoid.empty)],      -- Pure (empty log)
+      [(ma, f) ->                     -- Bind (combines logs)
+        let (a, w1) = ma in
+        let (b, w2) = f(a) in
+        (b, monoid.append(w1, w2))
+      ]
+    )
+  ]
+
+  --------------------------------------------------
+  -- Kleisli Arrow Functions
+  --------------------------------------------------
+
+  --[[
+    create_kleisli_arrow constructs a Kleisli arrow
+  ]]--
+  create_kleisli_arrow: a * b * TypeConstructor * (a -> tc.apply.b) -> KleisliArrow [source target effect function ->
+    {
+      source: source,
+      target: target,
+      effect: effect,
+      function: function
+    }
+  ]
+
+  --[[
+    create_kleisli_category constructs a Kleisli category for a type constructor
+  ]]--
+  create_kleisli_category: TypeConstructor -> KleisliCategory [effect ->
+    {
+      effect: effect,
+      objects: [],  -- Initially empty, objects are added as needed
+      arrows: [],   -- Initially empty, arrows are added as needed
+      compose: [f g -> compose_arrows(f, g)]
+    }
+  ]
+
+  --[[
+    compose_arrows composes two Kleisli arrows
+  ]]--
+  compose_arrows: KleisliArrow * KleisliArrow -> KleisliArrow [f g ->
+    -- Ensure the arrows are compatible for composition
+    if f.target != g.source {
+      error("Cannot compose Kleisli arrows: target of first must equal source of second")
+    }
+    
+    if f.effect.name != g.effect.name {
+      error("Cannot compose Kleisli arrows with different effect types")
+    }
+    
+    -- Compose using the bind operation
+    create_kleisli_arrow(
+      f.source,
+      g.target,
+      f.effect,
+      [a -> f.effect.bind(f.function(a), g.function)]
+    )
+  ]
+
+  --[[
+    arr_id creates an identity Kleisli arrow
+  ]]--
+  arr_id: TypeConstructor * a -> KleisliArrow [effect a ->
+    create_kleisli_arrow(
+      a,
+      a,
+      effect,
+      effect.pure
+    )
+  ]
+
+  --[[
+    pure lifts a pure function to a Kleisli arrow
+  ]]--
+  pure: TypeConstructor * (a -> b) -> KleisliArrow [effect f ->
+    create_kleisli_arrow(
+      domain_of(f),
+      codomain_of(f),
+      effect,
+      [a -> effect.pure(f(a))]
+    )
+  ]
+
+  --[[
+    lift_function lifts a pure function to work with effect types
+  ]]--
+  lift_function: (a -> b) * TypeConstructor -> (effect.apply.a -> effect.apply.b) [f effect ->
+    [ta -> effect.bind(ta, [a -> effect.pure(f(a))])]
+  ]
+
+  --[[
+    apply_effect applies a Kleisli arrow to a value
+  ]]--
+  apply_effect: KleisliArrow * a -> effect.apply.b [arrow a ->
+    arrow.function(a)
+  ]
+
+  --[[
+    sequence_effects sequences two effect applications
+  ]]--
+  sequence_effects: TypeConstructor * effect.apply.a * (a -> effect.apply.b) -> effect.apply.b [effect ea f ->
+    effect.bind(ea, f)
+  ]
+
+  --[[
+    map_effect maps a function over an effect
+  ]]--
+  map_effect: TypeConstructor * (a -> b) * effect.apply.a -> effect.apply.b [effect f ea ->
+    effect.bind(ea, [a -> effect.pure(f(a))])
+  ]
+
+  --[[
+    flatten_map implements a flatMap operation for lists (used by list_effect)
+  ]]--
+  flatten_map: [a] * (a -> [b]) -> [b] [list f ->
+    list |> Prim.fold [acc x -> acc @ f(x)] []
+  ]
+
+  --[[
+    domain_of gets the domain of a function (placeholder implementation)
+  ]]--
+  domain_of: (a -> b) -> a [f -> null]
+
+  --[[
+    codomain_of gets the codomain of a function (placeholder implementation)
+  ]]--
+  codomain_of: (a -> b) -> b [f -> null]
+
+  --[[
+    kleisli_arrow_compose provides infix Kleisli composition (<=<)
+  ]]--
+  kleisli_arrow_compose: KleisliArrow * KleisliArrow -> KleisliArrow [g f ->
+    compose_arrows(f, g)
+  ]
+
+  --[[
+    forward_kleisli_arrow_compose provides forward infix Kleisli composition (>=>)
+  ]]--
+  forward_kleisli_arrow_compose: KleisliArrow * KleisliArrow -> KleisliArrow [f g ->
+    compose_arrows(f, g)
+  ]
+
+  --------------------------------------------------
+  -- Kleisli Arrow Laws
+  --------------------------------------------------
+
+  --[[
+    check_kleisli_laws verifies that a type constructor satisfies the Kleisli arrow laws
+  ]]--
+  check_kleisli_laws: TypeConstructor -> Bool [tc ->
+    -- Left identity: pure >=> f = f
+    let left_identity_holds = forall [a f -> 
+      compose_arrows(arr_id(tc, a), f) == f
+    ] in
+    
+    -- Right identity: f >=> pure = f
+    let right_identity_holds = forall [f -> 
+      compose_arrows(f, arr_id(tc, f.target)) == f
+    ] in
+    
+    -- Associativity: (f >=> g) >=> h = f >=> (g >=> h)
+    let associativity_holds = forall [f g h ->
+      compose_arrows(compose_arrows(f, g), h) ==
+      compose_arrows(f, compose_arrows(g, h))
+    ] in
+    
+    left_identity_holds && right_identity_holds && associativity_holds
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping to Categorical Semantics
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @Kleisli as a category constructor,
+    taking an effect type constructor and producing its Kleisli arrow category.
+    
+    In this categorical structure:
+    - Objects are types
+    - Morphisms are functions a -> T b (Kleisli arrows)
+    - Composition uses the bind operation of the effect type
+    - Identity is the pure function of the effect type
+    
+    This captures the essence of effectful computation through Kleisli arrows.
+  ]]--
+  structure: {
+    -- Kleisli construction as a category constructor
+    category_constructor: [effect -> create_kleisli_category(effect)],
+    
+    -- Core structure for any Kleisli category
+    objects: [kleisli -> kleisli.objects],
+    arrows: [kleisli -> kleisli.arrows],
+    dom: [arrow -> arrow.source],
+    cod: [arrow -> arrow.target],
+    id: [kleisli a -> arr_id(kleisli.effect, a)],
+    compose: [kleisli f g -> kleisli.compose(f, g)],
+    
+    -- Effect type constructor structure
+    effect_pure: [effect -> effect.pure],
+    effect_bind: [effect -> effect.bind],
+    effect_map: [effect f ta -> effect.bind(ta, [a -> effect.pure(f(a))])],
+    effect_join: [effect tta -> effect.bind(tta, [ta -> ta])],
+    
+    -- Specific effects
+    maybe: maybe_effect(),
+    list: list_effect(),
+    state: [s -> state_effect(s)],
+    cont: [r -> cont_effect(r)],
+    reader: [e -> reader_effect(e)],
+    writer: [w -> writer_effect(w)],
+    
+    -- Kleisli category properties
+    free_extension: true,  -- Kleisli category is the free extension with respect to the effect
+    
+    -- Kleisli arrow laws
+    law: {
+      -- Left identity: pure >=> f = f
+      left_identity: [effect a f -> 
+        compose_arrows(arr_id(effect, a), f) == f
+      ],
+      
+      -- Right identity: f >=> pure = f
+      right_identity: [effect f -> 
+        compose_arrows(f, arr_id(effect, f.target)) == f
+      ],
+      
+      -- Associativity: (f >=> g) >=> h = f >=> (g >=> h)
+      associativity: [effect f g h ->
+        compose_arrows(compose_arrows(f, g), h) ==
+        compose_arrows(f, compose_arrows(g, h))
+      ],
+      
+      -- Kleisli category laws
+      kleisli_associativity: forall [kleisli f g h ->
+        kleisli.compose(kleisli.compose(f, g), h) ==
+        kleisli.compose(f, kleisli.compose(g, h))
+      ],
+      
+      kleisli_identity: forall [kleisli f ->
+        kleisli.compose(arr_id(kleisli.effect, dom(f)), f) == f &&
+        kleisli.compose(f, arr_id(kleisli.effect, cod(f))) == f
+      ]
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    -- Example of a Kleisli arrow for the Maybe effect
+    safe_divide: () -> KleisliArrow [->
+      let maybe = maybe_effect() in
+      
+      create_kleisli_arrow(
+        Z * Z,  -- Pair of integers
+        Z,      -- Result
+        maybe,
+        [(n, d) -> 
+          if d == 0 
+          then null 
+          else n / d
+        ]
+      )
+    ],
+    
+    -- Example of Kleisli composition with the List effect
+    flatten_nested_lists: () -> ([Z] -> [[Z]] -> [Z]) [->
+      let list = list_effect() in
+      
+      let singleton = pure(list, [x -> [x]]) in
+      let concat = create_kleisli_arrow(
+        [[Z]],
+        [Z],
+        list,
+        [xss -> Prim.fold [acc xs -> acc @ xs] [] xss]
+      ) in
+      
+      -- Compose to get a flattening operation
+      let flatten = compose_arrows(singleton, concat) in
+      
+      -- Return the actual function
+      [xs xss -> 
+        apply_effect(flatten, xs @ xss)
+      ]
+    ],
+    
+    -- Example of state management with Kleisli arrows
+    counter: () -> KleisliCategory [->
+      let state = state_effect(Z) in
+      let kat = create_kleisli_category(state) in
+      
+      -- Define state operations as Kleisli arrows
+      let get = create_kleisli_arrow(
+        T.Unit,
+        Z,
+        state,
+        [_ -> [s -> (s, s)]]
+      ) in
+      
+      let increment = create_kleisli_arrow(
+        T.Unit,
+        T.Unit,
+        state,
+        [_ -> [s -> ((), s + 1)]]
+      ) in
+      
+      -- Use Kleisli composition to sequence operations
+      let get_after_increment = compose_arrows(increment, get) in
+      
+      -- Run the composition with initial state 0
+      let result = apply_effect(get_after_increment, ())
+      
+      -- Returns the function: [s -> (s + 1, s + 1)]
+      -- When applied with 0: (1, 1)
+      
+      kat
+    ]
+  }
+} 

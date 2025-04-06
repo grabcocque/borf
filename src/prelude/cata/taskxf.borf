@@ -1,0 +1,551 @@
+--[[
+  Task Category Transformations
+
+  This module defines transformations between task categories,
+  including effect transformations, task arrow transformations, and adjunctions.
+  These structures facilitate the composition of asynchronous computations
+  and the transformation between different asynchronous effect regimes.
+]]--
+
+@TaskXf: {
+  typ: {
+    -- Core transformation types
+    TaskTransformation
+    TaskEffectLifting
+    TaskAdjunction
+    
+    -- Specific transformations
+    StateTask
+    TimeoutTask
+    RetryTask
+    LoggingTask
+  }
+
+  op: {
+    -- Task transformation operators
+    >>^ ^<< |>^
+    
+    -- Effect lifting operators
+    lift_task
+  }
+
+  fn: {
+    -- Core transformation functions
+    task_transformation task_functor
+    
+    -- Task effect functions
+    lift_effect_to_task transform_task
+    
+    -- Specific transformations
+    add_state add_timeout add_retry add_logging
+    
+    -- Adjunction functions
+    task_adjunction verify_adjunction
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@TaskXf, @T, true),     -- Add dependency on Type system
+    (@TaskXf, @Task, true),  -- Add dependency on Task category
+    (@TaskXf, @CatXf, true)  -- Add dependency on Category transformations
+  }
+
+  --------------------------------------------------
+  -- Core Transformation Types
+  --------------------------------------------------
+
+  --[[
+    TaskTransformation defines a transformation between task categories
+  ]]--
+  TaskTransformation: {
+    source: a,  -- Source task category or arrow
+    target: b,  -- Target task category or arrow
+    map_obj: (a -> a),  -- Object mapping
+    map_morph: (@Task.TaskArrow -> @Task.TaskArrow)  -- Task arrow mapping
+  }
+
+  --[[
+    TaskEffectLifting defines a way to lift a computation into a richer task context
+  ]]--
+  TaskEffectLifting: {
+    name: S,
+    transform: (@Task.Task.a -> @Task.Task.b),  -- Transform a task to add effects
+    lift: (@Task.Task.a -> transform(@Task.Task.a))  -- Lift a task into the transformed context
+  }
+
+  --[[
+    TaskAdjunction defines an adjunction between task categories
+  ]]--
+  TaskAdjunction: {
+    left: TaskTransformation,   -- Left adjoint
+    right: TaskTransformation,  -- Right adjoint
+    unit: (a -> @Task.TaskArrow),  -- Unit natural transformation
+    counit: (a -> @Task.TaskArrow)  -- Counit natural transformation
+  }
+
+  --[[
+    StateTask adds state handling to a task
+  ]]--
+  StateTask: {
+    _type: "StateTask",
+    base_task: @Task.Task.a,    -- The underlying task
+    state: s,                   -- The state value
+    state_type: s,              -- The type of the state
+    handler: (a * s -> (a * s))  -- Function to handle state transitions
+  }
+
+  --[[
+    TimeoutTask adds timeout behavior to a task
+  ]]--
+  TimeoutTask: {
+    _type: "TimeoutTask",
+    base_task: @Task.Task.a,    -- The underlying task
+    timeout: Z,                 -- Timeout in milliseconds
+    default_value: a | Null     -- Value to return on timeout
+  }
+
+  --[[
+    RetryTask adds retry behavior to a task
+  ]]--
+  RetryTask: {
+    _type: "RetryTask",
+    base_task: @Task.Task.a,    -- The underlying task
+    max_attempts: Z,            -- Maximum number of retry attempts
+    delay: Z,                   -- Delay between retries in milliseconds
+    should_retry: (Any -> Bool)  -- Predicate to determine if retry should happen
+  }
+
+  --[[
+    LoggingTask adds logging to a task
+  ]]--
+  LoggingTask: {
+    _type: "LoggingTask",
+    base_task: @Task.Task.a,     -- The underlying task
+    log_start: (a -> ()),        -- Function to log at start
+    log_success: (a -> ()),      -- Function to log on success
+    log_error: (Any -> ())       -- Function to log on error
+  }
+
+  --------------------------------------------------
+  -- Core Transformation Functions
+  --------------------------------------------------
+
+  --[[
+    task_transformation creates a transformation between task categories
+  ]]--
+  task_transformation: a * b * (a -> a) * (@Task.TaskArrow -> @Task.TaskArrow) -> TaskTransformation [
+    source target map_obj map_morph ->
+    {
+      source: source,
+      target: target,
+      map_obj: map_obj,
+      map_morph: map_morph
+    }
+  ]
+
+  --[[
+    task_functor creates a functor between task categories
+  ]]--
+  task_functor: (a -> b) -> TaskTransformation [transform ->
+    task_transformation(
+      "SourceTask",
+      "TargetTask",
+      [a -> a],  -- Objects are preserved
+      [arrow -> 
+        @Task.task_arrow(
+          arrow.source,
+          arrow.target,
+          [a -> transform(arrow.function(a))]
+        )
+      ]
+    )
+  ]
+
+  --[[
+    create_task_effect_lifting creates a lifting transformation for tasks
+  ]]--
+  create_task_effect_lifting: S * (@Task.Task.a -> @Task.Task.b) * (@Task.Task.a -> transform(@Task.Task.a)) -> TaskEffectLifting [
+    name transform lift ->
+    {
+      name: name,
+      transform: transform,
+      lift: lift
+    }
+  ]
+
+  --------------------------------------------------
+  -- Task Effect Functions
+  --------------------------------------------------
+
+  --[[
+    lift_effect_to_task lifts a task to include additional effects
+  ]]--
+  lift_effect_to_task: TaskEffectLifting * @Task.Task.a -> @Task.Task.b [lifting task ->
+    lifting.lift(task)
+  ]
+
+  --[[
+    transform_task transforms a task using the given lifting
+  ]]--
+  transform_task: TaskEffectLifting * @Task.Task.a -> @Task.Task.b [lifting task ->
+    lifting.transform(task)
+  ]
+
+  --[[
+    lift_task_arrow lifts a task arrow through an effect transformation
+  ]]--
+  lift_task_arrow: TaskEffectLifting * @Task.TaskArrow -> @Task.TaskArrow [lifting arrow ->
+    @Task.task_arrow(
+      arrow.source,
+      arrow.target,
+      [a -> lifting.transform(arrow.function(a))]
+    )
+  ]
+
+  --------------------------------------------------
+  -- Specific Task Transformations
+  --------------------------------------------------
+
+  --[[
+    add_state adds state handling to a task
+  ]]--
+  add_state: @Task.Task.a * s * (a * s -> (a * s)) -> StateTask.a.s [task initial_state handler ->
+    {
+      _type: "StateTask",
+      base_task: task,
+      state: initial_state,
+      state_type: initial_state,
+      handler: handler
+    }
+  ]
+
+  --[[
+    state_task_lifting creates a lifting for state tasks
+  ]]--
+  state_task_lifting: s -> TaskEffectLifting [initial_state ->
+    create_task_effect_lifting(
+      "StateTask",
+      [task -> 
+        @Task.create_task([->
+          let result = @Task.await(task, null, task.scheduler) in
+          let state = initial_state in
+          let (new_result, new_state) = handler(result, state) in
+          new_result
+        ], task.scheduler)
+      ],
+      [task -> add_state(task, initial_state, [x s -> (x, s)])]
+    )
+  ]
+
+  --[[
+    add_timeout adds timeout behavior to a task
+  ]]--
+  add_timeout: @Task.Task.a * Z * (a | Null) -> TimeoutTask.a [task timeout default_value ->
+    {
+      _type: "TimeoutTask",
+      base_task: task,
+      timeout: timeout,
+      default_value: default_value
+    }
+  ]
+
+  --[[
+    timeout_task_lifting creates a lifting for timeout tasks
+  ]]--
+  timeout_task_lifting: Z * (a | Null) -> TaskEffectLifting [timeout default_value ->
+    create_task_effect_lifting(
+      "TimeoutTask",
+      [task -> 
+        @Task.create_task([->
+          try {
+            @Task.await(task, timeout, task.scheduler)
+          } catch _ {
+            default_value
+          }
+        ], task.scheduler)
+      ],
+      [task -> add_timeout(task, timeout, default_value)]
+    )
+  ]
+
+  --[[
+    add_retry adds retry behavior to a task
+  ]]--
+  add_retry: @Task.Task.a * Z * Z * (Any -> Bool) -> RetryTask.a [
+    task max_attempts delay should_retry ->
+    {
+      _type: "RetryTask",
+      base_task: task,
+      max_attempts: max_attempts,
+      delay: delay,
+      should_retry: should_retry
+    }
+  ]
+
+  --[[
+    retry_task_lifting creates a lifting for retry tasks
+  ]]--
+  retry_task_lifting: Z * Z * (Any -> Bool) -> TaskEffectLifting [max_attempts delay should_retry ->
+    create_task_effect_lifting(
+      "RetryTask",
+      [task -> 
+        @Task.create_task([->
+          let attempts = 0 in
+          let result = null in
+          let success = false in
+          
+          while attempts < max_attempts && !success {
+            try {
+              result = @Task.await(task, null, task.scheduler)
+              success = true
+            } catch err {
+              attempts = attempts + 1
+              if attempts < max_attempts && should_retry(err) {
+                @Task.yield(delay, task.scheduler)
+              } else {
+                error(err)
+              }
+            }
+          }
+          
+          result
+        ], task.scheduler)
+      ],
+      [task -> add_retry(task, max_attempts, delay, should_retry)]
+    )
+  ]
+
+  --[[
+    add_logging adds logging to a task
+  ]]--
+  add_logging: @Task.Task.a * (a -> ()) * (a -> ()) * (Any -> ()) -> LoggingTask.a [
+    task log_start log_success log_error ->
+    {
+      _type: "LoggingTask",
+      base_task: task,
+      log_start: log_start,
+      log_success: log_success,
+      log_error: log_error
+    }
+  ]
+
+  --[[
+    logging_task_lifting creates a lifting for logging tasks
+  ]]--
+  logging_task_lifting: (a -> ()) * (a -> ()) * (Any -> ()) -> TaskEffectLifting [
+    log_start log_success log_error ->
+    create_task_effect_lifting(
+      "LoggingTask",
+      [task -> 
+        @Task.create_task([->
+          log_start(task)
+          try {
+            let result = @Task.await(task, null, task.scheduler) in
+            log_success(result)
+            result
+          } catch err {
+            log_error(err)
+            error(err)
+          }
+        ], task.scheduler)
+      ],
+      [task -> add_logging(task, log_start, log_success, log_error)]
+    )
+  ]
+
+  --------------------------------------------------
+  -- Adjunction Functions
+  --------------------------------------------------
+
+  --[[
+    task_adjunction creates an adjunction between task categories
+  ]]--
+  task_adjunction: TaskTransformation * TaskTransformation * (a -> @Task.TaskArrow) * (a -> @Task.TaskArrow) -> TaskAdjunction [
+    left right unit counit ->
+    {
+      left: left,
+      right: right,
+      unit: unit,
+      counit: counit
+    }
+  ]
+
+  --[[
+    verify_adjunction checks if a task adjunction satisfies the triangle identities
+  ]]--
+  verify_adjunction: TaskAdjunction -> Bool [adj ->
+    let left_identity = forall [a ->
+      let la = adj.left.map_obj(a) in
+      compose(adj.left.map_morph(adj.unit(a)), adj.counit(la)) == identity(la)
+    ] in
+    
+    let right_identity = forall [a ->
+      let ra = adj.right.map_obj(a) in
+      compose(adj.unit(ra), adj.right.map_morph(adj.counit(a))) == identity(ra)
+    ] in
+    
+    left_identity && right_identity
+  ]
+
+  --[[
+    compose is a helper function to compose task arrows
+  ]]--
+  compose: @Task.TaskArrow * @Task.TaskArrow -> @Task.TaskArrow [f g ->
+    @Task.compose_tasks(f, g)
+  ]
+
+  --[[
+    identity is a helper function to create identity task arrows
+  ]]--
+  identity: a -> @Task.TaskArrow [a ->
+    @Task.id_task(a, @Task.default_scheduler())
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping to Categorical Semantics
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @TaskXf as a category of transformations
+    between task categories.
+    
+    In this categorical structure:
+    - Objects are task categories
+    - Morphisms are functors between task categories
+    - Composition is functor composition
+    - Adjunctions capture relationships between different task effect regimes
+    
+    This structure formalizes how different asynchronous computation effects
+    interact and transform into each other.
+  ]]--
+  structure: {
+    -- Category of task transformations
+    objects: TaskTransformation,
+    morphisms: [a b -> a -> b],
+    dom: [f -> f.source],
+    cod: [f -> f.target],
+    id: [obj -> task_transformation(obj, obj, [x -> x], [f -> f])],
+    compose: [f g -> [x -> g(f(x))]],
+    
+    -- Task effect lifting structure
+    task_effect_liftings: TaskEffectLifting,
+    apply_lifting: [el task -> transform_task(el, task)],
+    lift: [el task -> lift_effect_to_task(el, task)],
+    
+    -- Specific task transformations
+    state_task: [s -> state_task_lifting(s)],
+    timeout_task: [t d -> timeout_task_lifting(t, d)],
+    retry_task: [m d p -> retry_task_lifting(m, d, p)],
+    logging_task: [start success error -> logging_task_lifting(start, success, error)],
+    
+    -- Adjunctions between task categories
+    adjunctions: TaskAdjunction,
+    is_adjunction: [adj -> verify_adjunction(adj)],
+    
+    -- Laws for task transformations
+    law: {
+      -- Functor laws
+      preserve_id: [tf a ->
+        tf.map_morph(identity(a)) == identity(tf.map_obj(a))
+      ],
+      
+      preserve_comp: [tf f g ->
+        tf.map_morph(compose(f, g)) == compose(tf.map_morph(f), tf.map_morph(g))
+      ],
+      
+      -- Task effect lifting laws
+      lift_pure: [el a scheduler ->
+        el.lift(@Task.pure(a, scheduler)) == @Task.pure(a, scheduler)
+      ],
+      
+      -- Adjunction laws
+      adjunction_left_identity: [adj a ->
+        let la = adj.left.map_obj(a) in
+        compose(adj.left.map_morph(adj.unit(a)), adj.counit(la)) == identity(la)
+      ],
+      
+      adjunction_right_identity: [adj a ->
+        let ra = adj.right.map_obj(a) in
+        compose(adj.unit(ra), adj.right.map_morph(adj.counit(a))) == identity(ra)
+      ]
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    -- Example 1: Adding timeout to a task
+    timeout_example: () -> @Task.Task.Z [->
+      let scheduler = @Task.default_scheduler() in
+      
+      -- Create a task that will take a long time
+      let slow_task = @Task.create_task([->
+        @Task.yield(1000, scheduler)  -- Simulate a long operation
+        42
+      ], scheduler) in
+      
+      -- Add a timeout transformation that returns -1 on timeout
+      let timeout_lifting = timeout_task_lifting(500, -1) in
+      let with_timeout = lift_effect_to_task(timeout_lifting, slow_task) in
+      
+      -- The resulting task will timeout and return -1
+      with_timeout
+    ],
+    
+    -- Example 2: Adding retry behavior to a task
+    retry_example: () -> @Task.Task.S [->
+      let scheduler = @Task.default_scheduler() in
+      
+      -- Create a task that fails on first attempt
+      let attempts = 0 in
+      let flaky_task = @Task.create_task([->
+        attempts = attempts + 1
+        if attempts < 3 {
+          error("Failed attempt " + attempts)
+        } else {
+          "Success on attempt " + attempts
+        }
+      ], scheduler) in
+      
+      -- Add retry behavior
+      let retry_lifting = retry_task_lifting(
+        5,            -- Max 5 attempts
+        100,          -- 100ms delay between retries
+        [_ -> true]   -- Always retry on error
+      ) in
+      
+      let with_retry = lift_effect_to_task(retry_lifting, flaky_task) in
+      
+      -- The resulting task will succeed after retrying
+      with_retry
+    ],
+    
+    -- Example 3: Composing task transformations (retry + timeout)
+    composed_example: () -> @Task.Task.Z [->
+      let scheduler = @Task.default_scheduler() in
+      
+      -- Create a task
+      let base_task = @Task.create_task([->
+        @Task.yield(200, scheduler)
+        42
+      ], scheduler) in
+      
+      -- Create transformations
+      let timeout_lifting = timeout_task_lifting(1000, -1) in
+      let retry_lifting = retry_task_lifting(3, 50, [_ -> true]) in
+      
+      -- Apply transformations in sequence
+      let with_timeout = lift_effect_to_task(timeout_lifting, base_task) in
+      let with_timeout_and_retry = lift_effect_to_task(retry_lifting, with_timeout) in
+      
+      with_timeout_and_retry
+    ]
+  }
+} 
