@@ -11,12 +11,12 @@
     -- Core transformation types
     PiTransform
     DependencyTransform
-    
+
     -- Specific transformations
     PiToFunction
     FunctionToPi
     PiToProd
-    
+
     -- Context transformations
     ContextTransform
     ProofTransform
@@ -25,10 +25,10 @@
   op: {
     -- Transformation operators
     ==> <== <=> ~~
-    
+
     -- Composition operators
     >>> <<< +++ &&&
-    
+
     -- Dependency operators
     erase reify
   }
@@ -38,14 +38,14 @@
     to_function from_function
     to_prod from_prod
     to_sigma from_sigma
-    
+
     -- Type transformations
     pi_to_function_type function_to_pi_type
     pi_to_prod_type prod_to_pi_type
-    
+
     -- Dependency operations
     erase_dependency reify_dependency
-    
+
     -- Context transformations
     transform_context convert_assumptions
   }
@@ -78,17 +78,17 @@
       -- Transform dependent type to function type
       | { _type: "PiType" } ->
           pi_to_function_type(pi_val)
-      
+
       -- Transform dependent function to regular function
       | { type: typ, body: bod } ->
           @Unrestricted.unrestricted_fn(
-            "x", 
+            "x",
             pi_to_function_type(typ),
             [x -> erase_dependency(bod)(x)]
           )
-      
+
       -- Default for other values
-      | _ -> 
+      | _ ->
           -- Pass through with dependency erased
           erase_dependency_value(pi_val)
   ]
@@ -102,7 +102,7 @@
       -- Transform function type to dependent type
       | { _type: "UnrestrictedType", base: (@T.Function(_, _)) } ->
           function_to_pi_type(fn_val)
-      
+
       -- Transform regular function to dependent function
       | { domain: dom, codomain: cod, body: bod } ->
           @Pi.pi_fn(
@@ -111,9 +111,9 @@
             [_ -> function_to_pi_type(cod)],
             bod
           )
-      
+
       -- Default for other values
-      | _ -> 
+      | _ ->
           -- Pass through with trivial dependency added
           reify_dependency_value(fn_val)
   ]
@@ -125,7 +125,7 @@
     -- Extract a representative return type by applying to a placeholder
     let placeholder = create_placeholder(pi_type.param_type) in
     let return_type = pi_type.return_type_fn(placeholder) in
-    
+
     {
       base: @T.Function(
         extract_base_type(pi_type.param_type),
@@ -142,7 +142,7 @@
   function_to_pi_type: @Unrestricted.UnrestrictedType -> @Pi.PiType [fn_type ->
     -- Extract domain and codomain from the function type
     let (domain, codomain) = extract_function_types(fn_type.base) in
-    
+
     @Pi.pi_type(
       "x",
       create_simple_type_expr(domain),
@@ -195,13 +195,13 @@
       -- Transform non-dependent Pi type to product type
       | { _type: "PiType", return_type_fn: rtf } if is_constant(rtf) ->
           pi_to_prod_type(pi_val)
-      
+
       -- Transform dependent function to higher-order function returning products
       | { type: typ, body: bod } ->
           transform_to_prod(typ, bod)
-      
+
       -- Default for other Pi values (can't transform)
-      | _ -> 
+      | _ ->
           to_function(pi_val)
   ]
 
@@ -214,9 +214,9 @@
       -- Transform product type to dependent type
       | { _type: "UnrestrictedType", base: (@T.Product(_, _)) } ->
           prod_to_pi_type(prod_val)
-      
+
       -- Default for other values
-      | _ -> 
+      | _ ->
           -- Try to treat as function instead
           from_function(prod_val)
   ]
@@ -230,7 +230,7 @@
       -- Get representative return type
       let placeholder = create_placeholder(pi_type.param_type) in
       let return_type = pi_type.return_type_fn(placeholder) in
-      
+
       {
         base: @T.Product(
           extract_base_type(pi_type.param_type),
@@ -251,7 +251,7 @@
   prod_to_pi_type: @Unrestricted.UnrestrictedType -> @Pi.PiType [prod_type ->
     -- Extract product components
     let (first, second) = extract_product_types(prod_type.base) in
-    
+
     @Pi.pi_type(
       "x",
       create_simple_type_expr(first),
@@ -306,7 +306,7 @@
     match type_expr with
       | { base: b } -> b
       | _ -> @T.Any
-    
+
   ]
 
   --[[
@@ -316,7 +316,7 @@
     match type with
       | @T.Function(dom, cod) -> (dom, cod)
       | _ -> (@T.Any, @T.Any)
-    
+
   ]
 
   --[[
@@ -326,7 +326,7 @@
     match type with
       | @T.Product(fst, snd) -> (fst, snd)
       | _ -> (@T.Any, @T.Any)
-    
+
   ]
 
   --[[
@@ -476,14 +476,14 @@
   --------------------------------------------------
   -- Examples of Pi Transformations
   --------------------------------------------------
-  
+
   --[[
     Example: Transform a dependent length-indexed vector type to a product type
   ]]--
   example.vector_to_product: () -> PiTransform [->
     -- Get the vector type from Pi module
     let vector_type = @Pi.example.vector() in
-    
+
     -- Create transform from dependent vector type to product of nat and list
     {
       source_type: vector_type,
@@ -496,14 +496,14 @@
       preserves_semantics: true
     }
   ]
-  
+
   --[[
     Example: Transform a dependent lookup function to a function with runtime checks
   ]]--
   example.safe_lookup_transform: () -> PiTransform [->
     -- Get the vector access function from Pi module
     let vector_nth = @Pi.example.vector_nth() in
-    
+
     -- Create transform from safe lookup to checked lookup
     {
       source_type: vector_nth.type,
@@ -529,7 +529,7 @@
       preserves_semantics: true
     }
   ]
-  
+
   --[[
     Helper function to calculate the length of a collection
   ]]--
@@ -537,7 +537,7 @@
     -- In a real implementation, this would calculate the collection length
     0
   ]
-  
+
   --[[
     Helper function to convert a vector to a list
   ]]--
@@ -545,7 +545,7 @@
     -- In a real implementation, this would convert a vector to a list
     []
   ]
-  
+
   --[[
     Helper function to convert a list to a vector of given length
   ]]--
@@ -558,7 +558,7 @@
     -- Map Pi to a locally cartesian closed category
     objects: [ctx:PiCtx, type:TypeExpr],  -- Types in contexts
     morphisms: [a b -> [pifn | source(pifn) == a && target(pifn) == b]],
-    
+
     -- Pi transformation to Context category
     pi_context_functor: @CatXf.Functor [
       {
@@ -570,7 +570,7 @@
         preserves_composition: true
       }
     ],
-    
+
     -- Context transformation to Pi category
     context_pi_functor: @CatXf.Functor [
       {
@@ -582,7 +582,7 @@
         preserves_composition: true
       }
     ],
-    
+
     -- Natural transformation connecting the functors
     pi_context_transform: @CatXf.NaturalTransformation [
       {
@@ -592,7 +592,7 @@
         naturality: true
       }
     ],
-    
+
     -- Connection to the ContextXf structures
     adj_equivalence: @CatXf.NaturalIsomorphism [
       {
@@ -626,4 +626,4 @@
       [x -> x]
     )
   ]
-} 
+}

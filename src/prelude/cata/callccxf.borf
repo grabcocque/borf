@@ -14,11 +14,11 @@
     ContinuationTransformation
     KleisliContTransformation
     DirectStyleTransformation
-    
+
     -- Control flow transformations
     ResetShiftToKleisli
     KleisliToResetShift
-    
+
     -- Effect transformations
     StateToShift
     ExceptionToShift
@@ -27,7 +27,7 @@
   op: {
     -- Transformation operators
     to_cps from_cps
-    
+
     -- Conversion operators
     direct_style cps_style
   }
@@ -35,13 +35,13 @@
   fn: {
     -- Core transformation functions
     cont_to_kleisli kleisli_to_cont
-    
+
     -- CPS transformation functions
     cps_transform direct_transform
-    
+
     -- Control effects functions
     reset_shift_to_monad monad_to_reset_shift
-    
+
     -- Effect transformation functions
     state_to_shift exception_to_shift
   }
@@ -116,7 +116,7 @@
   cont_to_kleisli: @CallCC.Cont -> @Kleisli.KleisliArrow [cont ->
     let r = cont.prompt.answer_type in
     let cont_effect = @Kleisli.cont_effect(r) in
-    
+
     @Kleisli.create_kleisli_arrow(
       cont.answer_type,
       cont.result_type,
@@ -132,10 +132,10 @@
     if arrow.effect.name != "Cont" {
       error("Can only convert Cont effect Kleisli arrows to continuations")
     }
-    
+
     let r = detect_answer_type(arrow.effect) in
     let prompt = @CallCC.create_prompt(r, arrow.target) in
-    
+
     @CallCC.create_cont(
       [k -> [x -> arrow.function(x)([v -> k(v)(x)])]],
       arrow.source,
@@ -164,8 +164,8 @@
     direct_transform transforms a CPS-style function back to direct style
   ]]--
   direct_transform: ((a -> (b -> r) -> r) -> r) -> (a -> b) [f ->
-    [x -> 
-      @CallCC.reset([-> 
+    [x ->
+      @CallCC.reset([->
         @CallCC.shift([k -> f([y -> [c -> k(c(y))]])], create_identity_prompt())
       ], create_identity_prompt())
     ]
@@ -188,21 +188,21 @@
   reset_shift_to_arrows: @CallCC.Reset * @CallCC.Shift -> (@Kleisli.KleisliArrow * @Kleisli.KleisliArrow) [reset shift ->
     let r = reset.prompt.result_type in
     let cont_effect = @Kleisli.cont_effect(r) in
-    
+
     let reset_arrow = @Kleisli.create_kleisli_arrow(
       r,
       r,
       cont_effect,
       [x -> [k -> reset.body()]]
     ) in
-    
+
     let shift_arrow = @Kleisli.create_kleisli_arrow(
       shift.result_type,
       shift.answer_type,
       cont_effect,
       [x -> [k -> shift.body([v -> [c -> c(v)]])]]
     ) in
-    
+
     (reset_arrow, shift_arrow)
   ]
 
@@ -211,20 +211,20 @@
   ]]--
   arrows_to_reset_shift: @Kleisli.KleisliArrow * @Kleisli.KleisliArrow -> (@CallCC.Reset * @CallCC.Shift) [pure_arrow bind_arrow ->
     let prompt = @CallCC.create_prompt(pure_arrow.target, pure_arrow.source) in
-    
+
     let reset_op = {
       body: [-> pure_arrow.function],
       prompt: prompt,
       result_type: pure_arrow.target
     } in
-    
+
     let shift_op = {
       body: [k -> bind_arrow.function([x -> k(x)])],
       prompt: prompt,
       result_type: bind_arrow.source,
       answer_type: bind_arrow.target
     } in
-    
+
     (reset_op, shift_op)
   ]
 
@@ -233,11 +233,11 @@
   ]]--
   state_to_shift: a -> (@CallCC.Prompt * (() -> a) * (a -> ()) * (b -> b)) [s ->
     let prompt = @CallCC.create_prompt(s, s) in
-    
+
     let get = [-> @CallCC.shift([k -> [state -> k(state)(state)]], prompt)] in
     let put = [new_state -> @CallCC.shift([k -> [_ -> k(())(new_state)]], prompt)] in
     let run = [init_state f -> @CallCC.reset([-> f()], prompt)(init_state)] in
-    
+
     (prompt, get, put, run)
   ]
 
@@ -246,13 +246,13 @@
   ]]--
   exception_to_shift: () -> (@CallCC.Prompt * (a -> b) * (a -> b) * ((()->a) -> a)) [->
     let prompt = @CallCC.create_prompt("Exception", "Exception") in
-    
+
     let throw = [e -> @CallCC.abort(e, prompt)] in
-    let catch = [handler -> [e -> 
+    let catch = [handler -> [e ->
       if is_exception(e) then handler(e) else e
     ]] in
     let try_block = [body -> @CallCC.reset([-> body()], prompt)] in
-    
+
     (prompt, throw, catch, try_block)
   ]
 
@@ -273,7 +273,7 @@
     between different control effect representations. This structure formalizes
     the relationship between direct-style code with delimited continuations and
     continuation-passing style code.
-    
+
     Key relationships formalized here:
     1. Correspondence between delimited continuations and the continuation monad
     2. Transformations between direct style and CPS
@@ -283,29 +283,29 @@
     -- Map CallCCXf to a category
     objects: @CallCC.Cont | @Kleisli.KleisliArrow,
     morphisms: [obj1 obj2 -> obj1 -> obj2],
-    
+
     -- Core category structure
     dom: [f -> f.source],
     cod: [f -> f.target],
     id: [obj -> [x -> x]],
     compose: [f g -> [x -> g(f(x))]],
-    
+
     -- Continuation transformations
     cont_to_kleisli: cont_to_kleisli,
     kleisli_to_cont: kleisli_to_cont,
-    
+
     -- CPS transformations
     cps_transform: cps_transform,
     direct_transform: direct_transform,
-    
+
     -- Reset/shift to Kleisli and back
     reset_shift_to_kleisli: [reset shift -> reset_shift_to_arrows(reset, shift)],
     kleisli_to_reset_shift: [pure_arrow bind_arrow -> arrows_to_reset_shift(pure_arrow, bind_arrow)],
-    
+
     -- Computational effects as continuations
     state_as_cont: state_to_shift,
     exception_as_cont: exception_to_shift,
-    
+
     -- Adjunctions
     cont_kleisli_adjunction: @KleisliXf.kleisli_adjunction(
       -- Functors between categories
@@ -315,24 +315,24 @@
       create_cont_kleisli_unit(),
       create_cont_kleisli_counit()
     ),
-    
+
     -- Laws
     law: {
       -- CPS transform / direct transform are inverses
       cps_direct_inverse: forall [f ->
         direct_transform(cps_transform(f)) == f
       ],
-      
+
       -- Kleisli continuation correspondence
       kleisli_cont_correspondence: forall [cont ->
         kleisli_to_cont(cont_to_kleisli(cont)) == cont
       ],
-      
+
       -- Reset/shift and Kleisli operations
       reset_shift_arrows: forall [reset shift ->
         let (reset_a, shift_a) = reset_shift_to_kleisli(reset, shift) in
         let (reset2, shift2) = kleisli_to_reset_shift(reset_a, shift_a) in
-        
+
         reset2 == reset && shift2 == shift
       ]
     }
@@ -408,7 +408,7 @@
     -- Example: State monad as delimited continuations
     state_example: [->
       let (prompt, get, put, run) = state_to_shift("StateType") in
-      
+
       run("initial", [->
         let x = get() in
         put(x + " modified") |> [_ ->
@@ -416,48 +416,48 @@
       ])
       -- Returns "initial modified"
     ],
-    
+
     -- Example: CPS transform of a simple function
     cps_example: [->
       let direct_fn = [x -> x + 1] in
       let cps_fn = cps_transform(direct_fn) in
-      
+
       cps_fn([x -> [k -> k(x + 1)]])([y -> y])
       -- Returns 2
     ],
-    
+
     -- Example: Direct-style code using shift/reset equivalent to arrow-based code
     equivalence_example: [->
       -- Direct style with delimited continuations
       let reset_code = [->
         1 + @CallCC.shift([k -> k(2) + k(3)], create_identity_prompt())
       ] in
-      
+
       let direct_result = @CallCC.reset(reset_code, create_identity_prompt()) in
-      
+
       -- Same code with Kleisli arrows
       let cont_effect = @Kleisli.cont_effect("AnswerType") in
-      
+
       let bind_arrow = @Kleisli.create_kleisli_arrow(
         "Int",
         "Int",
         cont_effect,
         [x -> [k -> k(2) + k(3)]]
       ) in
-      
+
       let map_arrow = @Kleisli.create_kleisli_arrow(
         "Int",
         "Int",
         cont_effect,
         [y -> [k -> k(1 + y)]]
       ) in
-      
+
       let composed = @Kleisli.compose_arrows(bind_arrow, map_arrow) in
-      
+
       let arrow_result = @Kleisli.apply_effect(composed, "input")([x -> x]) in
-      
+
       -- Both approaches yield the same result: 6
       (direct_result, arrow_result)
     ]
   }
-} 
+}

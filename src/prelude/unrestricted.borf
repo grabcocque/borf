@@ -10,13 +10,13 @@
   typ: {
     -- Core unrestricted types
     UnrestrictedType UnrestrictedFn UnrestrictedCtx
-    
+
     -- Type constructors
     Product Sum Function Option List
-    
+
     -- Type operations
     TypeOp TypeEquiv TypeSub
-    
+
     -- Proof terms
     Proof Judgment Derivation
   }
@@ -24,10 +24,10 @@
   op: {
     -- Type operators
     * + -> ?
-    
+
     -- Judgment operators
     ⊢ ⊣ ⊨
-    
+
     -- Resource tracking
     copy drop
   }
@@ -36,11 +36,11 @@
     -- Core type functions
     unrestricted_fn unrestricted_app copy drop
     product_intro product_elim
-    
+
     -- Context operations
     ctx_empty ctx_extend ctx_merge
     ctx_weaken ctx_contract
-    
+
     -- Proof operations
     derive check infer
     prove subst
@@ -179,7 +179,7 @@
     if not resource.contraction {
       error("Cannot copy a resource that does not support contraction")
     }
-    
+
     -- Return two copies of the resource
     (resource, resource)
   ]
@@ -192,7 +192,7 @@
     if not resource.weakening {
       error("Cannot drop a resource that does not support weakening")
     }
-    
+
     -- Return unit to indicate resource was discarded
     ()
   ]
@@ -256,7 +256,7 @@
     if not typ.weakening {
       error("Cannot weaken variable of type that does not support weakening")
     }
-    
+
     -- Remove variable from context
     {
       bindings: ctx.bindings - var,
@@ -273,7 +273,7 @@
     if not typ.contraction {
       error("Cannot contract variable of type that does not support contraction")
     }
-    
+
     -- Mark the variable as supporting multiple uses
     ctx
   ]
@@ -283,12 +283,12 @@
   ]]--
   merge_usage_counts: (S:-> Z) * (S:-> Z) -> (S:-> Z) [counts1 counts2 ->
     let result = {} in
-    
+
     -- Add all keys from counts1
     keys(counts1) |> foreach [key ->
       result = result cup { key: counts1[key] }
     ] in
-    
+
     -- Add all keys from counts2, summing if already present
     keys(counts2) |> foreach [key ->
       if key in result {
@@ -297,7 +297,7 @@
         result = result cup { key: counts2[key] }
       }
     ] in
-    
+
     result
   ]
 
@@ -320,7 +320,7 @@
 
   --[[
     Structure mapping that establishes @Unrestricted as a cartesian closed category.
-    
+
     In this categorical structure:
     - Objects are unrestricted types
     - Morphisms are unrestricted functions between types
@@ -333,68 +333,68 @@
     -- Map Unrestricted to a cartesian closed category
     objects: UnrestrictedType,
     morphisms: [a b -> UnrestrictedFn],
-    
+
     -- Base category structure
     dom: [f -> f.domain],
     cod: [f -> f.codomain],
     id: [a -> unrestricted_fn("x", a, [x -> x])],
     compose: [f g -> unrestricted_fn("x", f.domain, [x -> g(f(x))])],
-    
+
     -- Cartesian structure
     product: [a b -> Product(a, b)],
     proj1: [a b -> unrestricted_fn("p", Product(a, b), [p -> let (x, _) = p in x])],
     proj2: [a b -> unrestricted_fn("p", Product(a, b), [p -> let (_, y) = p in y])],
     pair: [f g -> unrestricted_fn("x", f.domain, [x -> (f(x), g(x))])],
-    
+
     -- Terminal object
     terminal: { base: (), weakening: true, contraction: true },
     terminal_map: [a -> unrestricted_fn("x", a, [_ -> ()])],
-    
+
     -- Closed structure
     internal_hom: [a b -> Function(a, b)],
-    eval: [a b -> unrestricted_fn("p", Product(Function(a, b), a), [p -> 
-      let (f, x) = p in 
+    eval: [a b -> unrestricted_fn("p", Product(Function(a, b), a), [p ->
+      let (f, x) = p in
       f(x)
     ])],
-    curry: [a b c f -> unrestricted_fn("x", a, [x -> 
+    curry: [a b c f -> unrestricted_fn("x", a, [x ->
       unrestricted_fn("y", b, [y -> f((x, y))])
     ])],
-    
+
     -- Unrestricted structure (allows both weakening and contraction)
     discard: [a -> unrestricted_fn("x", a, [x -> drop(x)])],
-    duplicate: [a -> unrestricted_fn("x", a, [x -> 
-      let (x1, x2) = copy(x) in 
+    duplicate: [a -> unrestricted_fn("x", a, [x ->
+      let (x1, x2) = copy(x) in
       (x1, x2)
     ])],
-    
+
     -- Laws for unrestricted category
     laws: {
       -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
       associativity: forall [f g h ->
         compose(compose(f, g), h) == compose(f, compose(g, h))
       ],
-      
+
       -- Identity: id ∘ f = f = f ∘ id
       identity: forall [f ->
         compose(id(dom(f)), f) == f && compose(f, id(cod(f))) == f
       ],
-      
+
       -- Cartesian laws
       cartesian: forall [a b c f g ->
         compose(pair(f, g), proj1(b, c)) == f &&
         compose(pair(f, g), proj2(b, c)) == g
       ],
-      
+
       -- Closed category laws
       closed: forall [a b c f ->
         eval(b, c)(curry(a, b, c, f)(x), y) == f((x, y))
       ],
-      
+
       -- Unrestricted laws (weakening and contraction)
       weakening: forall [a f ->
         compose(f, discard(cod(f))) == discard(dom(f))
       ],
-      
+
       contraction: forall [a f ->
         let diag = duplicate(a) in
         let f_pair = pair(f, f) in
@@ -402,29 +402,29 @@
       ]
     }
   }
-  
+
   --------------------------------------------------
   -- Example Unrestricted Programs
   --------------------------------------------------
-  
+
   --[[
     Example: Standard function that uses arguments freely
   ]]--
   example.standard_function: () -> (Z -> Z) [->
     -- Create a standard unrestricted function
     let int_type = { base: Z, weakening: true, contraction: true } in
-    
+
     -- Define a function that uses its argument multiple times
     let square = unrestricted_fn("x", int_type, [x ->
       -- Use x twice (copying)
       let (x1, x2) = copy(x) in
       x1 * x2
     ]) in
-    
+
     -- Return the function
     square
   ]
-  
+
   --[[
     Example: Complex data processing with unrestricted types
   ]]--
@@ -432,33 +432,33 @@
     -- Define types
     let int_type = { base: Z, weakening: true, contraction: true } in
     let list_type = { base: [Z], weakening: true, contraction: true } in
-    
+
     -- Define processing functions
     let sum = unrestricted_fn("list", list_type, [list ->
       -- Implement sum using fold
       fold([acc x -> acc + x], 0, list)
     ]) in
-    
+
     let avg = unrestricted_fn("list", list_type, [list ->
       -- Make multiple uses of the list (contraction)
       let (list1, list2) = copy(list) in
-      
+
       -- Calculate sum and length
       let s = sum(list1) in
       let len = length(list2) in
-      
+
       -- Calculate average
       if len == 0 then 0 else s / len
     ]) in
-    
+
     -- Process the data (using it in multiple ways)
     let (data1, data2) = copy(data) in
     let result = avg(data1) in
-    
+
     -- Optionally use data2 or discard it (weakening)
     drop(data2)
-    
+
     -- Return result
     result
   ]
-} 
+}

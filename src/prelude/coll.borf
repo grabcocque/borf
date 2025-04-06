@@ -61,8 +61,7 @@
 
   deps: {
     (@Coll, @Prim, true),
-    (@Coll, @T, false),
-    (@Coll, @Seq, true)  -- Add dependency on Seq module
+    (@Coll, @T, false)
   }
 
   --------------------------------------------------
@@ -81,7 +80,6 @@
     This category captures the rich structure of collections, including:
     - Natural transformations between collection types (e.g., List to Set)
     - Functorial relationships (e.g., mapping over collections)
-    - Monadic structures (e.g., binding operations on collections)
     - Resource-aware transformations that track linearity
   ]]--
   structure: {
@@ -124,10 +122,6 @@
       Queue: [xs -> xs]  -- Queue is already a list internally
     },
 
-    -- Monadic structure
-    return: [a -> [a]],  -- Singleton collection
-    bind: [c f -> c |> List.map(f) |> List.fold(List.concat, List.empty)],  -- flatMap operation
-
     -- Linear resource structure
     consume: [!c f -> f(c)],  -- Linear consumption of a collection
     share: [c -> (c, c)],     -- Non-linear sharing (for non-linear collections)
@@ -167,19 +161,6 @@
 
       functor_compose: forall [f g c ->
         fmap.List(compose(f, g))(c) == compose(fmap.List(f), fmap.List(g))(c)
-      ],
-
-      -- Monadic laws
-      monad_left_id: forall [a f ->
-        bind(return(a), f) == f(a)
-      ],
-
-      monad_right_id: forall [m ->
-        bind(m, return) == m
-      ],
-
-      monad_associativity: forall [m f g ->
-        bind(bind(m, f), g) == bind(m, [x -> bind(f(x), g)])
       ],
 
       -- Monoidal laws

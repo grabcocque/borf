@@ -1,0 +1,1079 @@
+--[[
+  Optics
+  
+  This module defines various optical structures (lenses, prisms, etc.)
+  for accessing and manipulating nested data structures in a composable way.
+  
+  Optics are a practical application of category theory that provide
+  bidirectional access to data, allowing both getting and setting of values.
+]]--
+
+@Optics: {
+  typ: {
+    -- Core optic types
+    Lens
+    Prism
+    Traversal
+    Iso
+    Getter
+    Setter
+    Optional
+    
+    -- Compound optic types
+    Optic
+    AffineTraversal
+  }
+
+  op: {
+    -- Composition operator
+    .
+    
+    -- Record field accessor
+    ^
+  }
+
+  fn: {
+    -- Lens constructors
+    lens
+    lens_from_path
+    lens_from_accessors
+    field
+    
+    -- Prism constructors
+    prism
+    prism_from_predicates
+    prism_for_type
+    
+    -- Traversal constructors
+    traversal
+    traversal_from_paths
+    each
+    filtered
+    
+    -- Iso constructors
+    iso
+    iso_from_functions
+    reversed
+    
+    -- Optional constructors
+    optional
+    at_index
+    
+    -- Optic operations
+    view
+    set
+    over
+    preview
+    review
+    collect
+    modify
+    
+    -- Composition
+    compose
+    
+    -- Utilities
+    to_path
+    from_path
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Optics, @T, true),      -- Add dependency on Type system
+    (@Optics, @Cat, true)     -- Add dependency on Category
+  }
+
+  --------------------------------------------------
+  -- Core Optic Types
+  --------------------------------------------------
+
+  --[[
+    Lens focuses on a single element within a larger structure.
+    It provides bidirectional access for getting and setting.
+  ]]--
+  Lens: {
+    _type: "Lens",
+    get: (s -> a),              -- Getter function
+    set: (s * a -> s)           -- Setter function
+  }
+
+  --[[
+    Prism focuses on a case within a sum type.
+    It provides bidirectional access when the case matches.
+  ]]--
+  Prism: {
+    _type: "Prism",
+    preview: (s -> a | Null),   -- Attempts to extract value if case matches
+    review: (a -> s)            -- Constructs the full structure from a value
+  }
+
+  --[[
+    Traversal focuses on multiple elements within a structure.
+    It allows accessing and modifying multiple values at once.
+  ]]--
+  Traversal: {
+    _type: "Traversal",
+    collect: (s -> [a]),        -- Collects all focused values
+    update: (s * [a] -> s)      -- Updates focused values with new values
+  }
+
+  --[[
+    Iso represents an isomorphism between two types.
+    It allows converting in both directions without loss of information.
+  ]]--
+  Iso: {
+    _type: "Iso",
+    from: (s -> a),             -- Convert from s to a
+    to: (a -> s)                -- Convert from a to s
+  }
+
+  --[[
+    Getter is a read-only optic that extracts values.
+  ]]--
+  Getter: {
+    _type: "Getter",
+    get: (s -> a)               -- Function to extract value
+  }
+
+  --[[
+    Setter is a write-only optic that updates values.
+  ]]--
+  Setter: {
+    _type: "Setter",
+    set: (s * a -> s)           -- Function to update value
+  }
+
+  --[[
+    Optional focuses on a value that might not exist.
+    It combines aspects of Lens and Prism.
+  ]]--
+  Optional: {
+    _type: "Optional",
+    preview: (s -> a | Null),   -- Try to get value if it exists
+    set: (s * a -> s)           -- Set value if position exists
+  }
+
+  --[[
+    Optic is a general type that can represent any kind of optic.
+  ]]--
+  Optic: {
+    _type: S,                   -- Type of optic
+    impl: Any                   -- Implementation details
+  }
+
+  --[[
+    AffineTraversal focuses on at most one element within a structure.
+    It combines aspects of Lens and Prism.
+  ]]--
+  AffineTraversal: {
+    _type: "AffineTraversal",
+    preview: (s -> a | Null),   -- Try to get value if it exists
+    set: (s * a -> s)           -- Set value if position exists
+  }
+
+  --------------------------------------------------
+  -- Lens Constructors
+  --------------------------------------------------
+
+  --[[
+    lens creates a new lens from get and set functions.
+  ]]--
+  lens: (s -> a) * (s * a -> s) -> Lens.s.a [get set ->
+    {
+      _type: "Lens",
+      get: get,
+      set: set
+    }
+  ]
+
+  --[[
+    lens_from_path creates a lens that focuses on a path in a nested structure.
+  ]]--
+  lens_from_path: [S] -> Lens.{}.Any [path ->
+    lens(
+      [s -> 
+        let current = s in
+        for key in path {
+          current = current ? {} in
+          current = current[key]
+        }
+        current
+      ],
+      [s new_value -> 
+        let result = s ? {} in
+        
+        if path == [] {
+          return new_value
+        }
+        
+        let nested_set = [obj remaining_path idx val ->
+          if idx >= Prim.length(remaining_path) {
+            return val
+          }
+          
+          let key = remaining_path[idx] in
+          let updated = obj ? {} in
+          updated[key] = nested_set(updated[key], remaining_path, idx + 1, val)
+          
+          updated
+        ] in
+        
+        nested_set(result, path, 0, new_value)
+      ]
+    )
+  ]
+
+  --[[
+    lens_from_accessors creates a lens from accessor strings.
+  ]]--
+  lens_from_accessors: [S] -> Lens.{}.Any [accessors ->
+    lens_from_path(accessors)
+  ]
+
+  --[[
+    field creates a lens focusing on a specific field of a record.
+  ]]--
+  field: S -> Lens.{}.Any [field_name ->
+    lens(
+      [obj -> obj[field_name]],
+      [obj value -> 
+        let result = obj ? {} in
+        result[field_name] = value
+        result
+      ]
+    )
+  ]
+
+  --------------------------------------------------
+  -- Prism Constructors
+  --------------------------------------------------
+
+  --[[
+    prism creates a new prism from preview and review functions.
+  ]]--
+  prism: (s -> a | Null) * (a -> s) -> Prism.s.a [preview review ->
+    {
+      _type: "Prism",
+      preview: preview,
+      review: review
+    }
+  ]
+
+  --[[
+    prism_from_predicates creates a prism from a predicate and extraction/construction functions.
+  ]]--
+  prism_from_predicates: (s -> Bool) * (s -> a) * (a -> s) -> Prism.s.a [matches extract construct ->
+    prism(
+      [s -> matches(s) ? extract(s) : null],
+      construct
+    )
+  ]
+
+  --[[
+    prism_for_type creates a prism that focuses on a specific type in a variant.
+  ]]--
+  prism_for_type: S -> Prism.{}.Any [type_name ->
+    prism(
+      [s -> s && s._type == type_name ? s : null],
+      [a -> { _type: type_name, ...a }]
+    )
+  ]
+
+  --------------------------------------------------
+  -- Traversal Constructors
+  --------------------------------------------------
+
+  --[[
+    traversal creates a new traversal from collect and update functions.
+  ]]--
+  traversal: (s -> [a]) * (s * [a] -> s) -> Traversal.s.a [collect update ->
+    {
+      _type: "Traversal",
+      collect: collect,
+      update: update
+    }
+  ]
+
+  --[[
+    traversal_from_paths creates a traversal that focuses on multiple paths.
+  ]]--
+  traversal_from_paths: [[S]] -> Traversal.{}.Any [paths ->
+    traversal(
+      [s -> 
+        let result = [] in
+        
+        for path in paths {
+          let value = s in
+          let valid = true in
+          
+          for key in path {
+            if value == null || value[key] == null {
+              valid = false
+              break
+            }
+            value = value[key]
+          }
+          
+          if valid {
+            result = result + [value]
+          }
+        }
+        
+        result
+      ],
+      [s values -> 
+        let result = s ? {} in
+        let value_index = 0 in
+        
+        for path in paths {
+          if value_index >= Prim.length(values) {
+            break
+          }
+          
+          let nested_set = [obj remaining_path idx val ->
+            if idx >= Prim.length(remaining_path) {
+              return val
+            }
+            
+            let key = remaining_path[idx] in
+            let updated = obj ? {} in
+            updated[key] = nested_set(updated[key], remaining_path, idx + 1, val)
+            
+            updated
+          ] in
+          
+          result = nested_set(result, path, 0, values[value_index])
+          value_index = value_index + 1
+        }
+        
+        result
+      ]
+    )
+  ]
+
+  --[[
+    each creates a traversal that focuses on each element of an array.
+  ]]--
+  each: () -> Traversal.[a].a [->
+    traversal(
+      [arr -> arr],
+      [arr values -> 
+        if Prim.length(arr) != Prim.length(values) {
+          arr
+        } else {
+          values
+        }
+      ]
+    )
+  ]
+
+  --[[
+    filtered creates a traversal that focuses on elements that satisfy a predicate.
+  ]]--
+  filtered: (a -> Bool) -> Traversal.[a].a [predicate ->
+    traversal(
+      [arr -> 
+        let result = [] in
+        
+        for item in arr {
+          if predicate(item) {
+            result = result + [item]
+          }
+        }
+        
+        result
+      ],
+      [arr values -> 
+        let result = [] in
+        let value_index = 0 in
+        
+        for item in arr {
+          if predicate(item) {
+            if value_index < Prim.length(values) {
+              result = result + [values[value_index]]
+              value_index = value_index + 1
+            } else {
+              result = result + [item]
+            }
+          } else {
+            result = result + [item]
+          }
+        }
+        
+        result
+      ]
+    )
+  ]
+
+  --------------------------------------------------
+  -- Iso Constructors
+  --------------------------------------------------
+
+  --[[
+    iso creates a new isomorphism from functions in both directions.
+  ]]--
+  iso: (s -> a) * (a -> s) -> Iso.s.a [from to ->
+    {
+      _type: "Iso",
+      from: from,
+      to: to
+    }
+  ]
+
+  --[[
+    iso_from_functions creates an isomorphism from conversion functions.
+  ]]--
+  iso_from_functions: (s -> a) * (a -> s) -> Iso.s.a [from to ->
+    iso(from, to)
+  ]
+
+  --[[
+    reversed creates an isomorphism between an array and its reversed form.
+  ]]--
+  reversed: () -> Iso.[a].[a] [->
+    iso(
+      [arr -> {
+        let result = [] in
+        let len = Prim.length(arr) in
+        
+        for i in 0..(len - 1) {
+          result = result + [arr[len - 1 - i]]
+        }
+        
+        result
+      }],
+      [arr -> {
+        let result = [] in
+        let len = Prim.length(arr) in
+        
+        for i in 0..(len - 1) {
+          result = result + [arr[len - 1 - i]]
+        }
+        
+        result
+      }]
+    )
+  ]
+
+  --------------------------------------------------
+  -- Optional Constructors
+  --------------------------------------------------
+
+  --[[
+    optional creates a new optional from preview and set functions.
+  ]]--
+  optional: (s -> a | Null) * (s * a -> s) -> Optional.s.a [preview set ->
+    {
+      _type: "Optional",
+      preview: preview,
+      set: set
+    }
+  ]
+
+  --[[
+    at_index creates an optional focusing on an element at a specific index.
+  ]]--
+  at_index: Z -> Optional.[a].a [idx ->
+    optional(
+      [arr -> 
+        if idx >= 0 && idx < Prim.length(arr) {
+          arr[idx]
+        } else {
+          null
+        }
+      ],
+      [arr value -> 
+        if idx >= 0 && idx < Prim.length(arr) {
+          let result = [] in
+          
+          for i in 0..(Prim.length(arr) - 1) {
+            if i == idx {
+              result = result + [value]
+            } else {
+              result = result + [arr[i]]
+            }
+          }
+          
+          result
+        } else {
+          arr
+        }
+      ]
+    )
+  ]
+
+  --------------------------------------------------
+  -- Optic Operations
+  --------------------------------------------------
+
+  --[[
+    view extracts the value focused by an optic.
+  ]]--
+  view: Any * s -> a | Null [optic s ->
+    match optic._type {
+      "Lens" => optic.get(s),
+      "Getter" => optic.get(s),
+      "Iso" => optic.from(s),
+      "Prism" => optic.preview(s),
+      "Optional" => optic.preview(s),
+      "AffineTraversal" => optic.preview(s),
+      "Traversal" => {
+        let values = optic.collect(s) in
+        if Prim.length(values) > 0 {
+          values[0]
+        } else {
+          null
+        }
+      },
+      "Optic" => view(optic.impl, s),
+      _ => null
+    }
+  ]
+
+  --[[
+    set updates the value focused by an optic.
+  ]]--
+  set: Any * s * a -> s [optic s a ->
+    match optic._type {
+      "Lens" => optic.set(s, a),
+      "Setter" => optic.set(s, a),
+      "Iso" => optic.to(a),
+      "Prism" => {
+        let existing = optic.preview(s) in
+        if existing != null {
+          optic.review(a)
+        } else {
+          s
+        }
+      },
+      "Optional" => optic.set(s, a),
+      "AffineTraversal" => optic.set(s, a),
+      "Traversal" => {
+        let values = optic.collect(s) in
+        let new_values = [] in
+        
+        for _ in values {
+          new_values = new_values + [a]
+        }
+        
+        optic.update(s, new_values)
+      },
+      "Optic" => set(optic.impl, s, a),
+      _ => s
+    }
+  ]
+
+  --[[
+    over applies a function to the value focused by an optic.
+  ]]--
+  over: Any * s * (a -> a) -> s [optic s f ->
+    match optic._type {
+      "Lens" => optic.set(s, f(optic.get(s))),
+      "Setter" => optic.set(s, f(view(optic, s))),
+      "Iso" => optic.to(f(optic.from(s))),
+      "Prism" => {
+        let existing = optic.preview(s) in
+        if existing != null {
+          optic.review(f(existing))
+        } else {
+          s
+        }
+      },
+      "Optional" => {
+        let existing = optic.preview(s) in
+        if existing != null {
+          optic.set(s, f(existing))
+        } else {
+          s
+        }
+      },
+      "AffineTraversal" => {
+        let existing = optic.preview(s) in
+        if existing != null {
+          optic.set(s, f(existing))
+        } else {
+          s
+        }
+      },
+      "Traversal" => {
+        let values = optic.collect(s) in
+        let new_values = [] in
+        
+        for value in values {
+          new_values = new_values + [f(value)]
+        }
+        
+        optic.update(s, new_values)
+      },
+      "Optic" => over(optic.impl, s, f),
+      _ => s
+    }
+  ]
+
+  --[[
+    preview tries to extract the value focused by an optic.
+  ]]--
+  preview: Any * s -> a | Null [optic s ->
+    match optic._type {
+      "Prism" => optic.preview(s),
+      "Optional" => optic.preview(s),
+      "AffineTraversal" => optic.preview(s),
+      "Traversal" => {
+        let values = optic.collect(s) in
+        if Prim.length(values) > 0 {
+          values[0]
+        } else {
+          null
+        }
+      },
+      "Lens" => optic.get(s),
+      "Getter" => optic.get(s),
+      "Iso" => optic.from(s),
+      "Optic" => preview(optic.impl, s),
+      _ => null
+    }
+  ]
+
+  --[[
+    review creates a structure from a value using an optic.
+  ]]--
+  review: Any * a -> s [optic a ->
+    match optic._type {
+      "Prism" => optic.review(a),
+      "Iso" => optic.to(a),
+      "Optic" => review(optic.impl, a),
+      _ => null
+    }
+  ]
+
+  --[[
+    collect gathers all values focused by an optic.
+  ]]--
+  collect: Any * s -> [a] [optic s ->
+    match optic._type {
+      "Traversal" => optic.collect(s),
+      "Lens" => [optic.get(s)],
+      "Getter" => [optic.get(s)],
+      "Prism" => {
+        let value = optic.preview(s) in
+        value != null ? [value] : []
+      },
+      "Optional" => {
+        let value = optic.preview(s) in
+        value != null ? [value] : []
+      },
+      "AffineTraversal" => {
+        let value = optic.preview(s) in
+        value != null ? [value] : []
+      },
+      "Iso" => [optic.from(s)],
+      "Optic" => collect(optic.impl, s),
+      _ => []
+    }
+  ]
+
+  --[[
+    modify updates multiple values focused by an optic using a function.
+  ]]--
+  modify: Any * s * (a -> a) -> s [optic s f ->
+    match optic._type {
+      "Traversal" => {
+        let values = optic.collect(s) in
+        let new_values = [] in
+        
+        for value in values {
+          new_values = new_values + [f(value)]
+        }
+        
+        optic.update(s, new_values)
+      },
+      "Lens" => optic.set(s, f(optic.get(s))),
+      "Prism" => {
+        let value = optic.preview(s) in
+        if value != null {
+          optic.review(f(value))
+        } else {
+          s
+        }
+      },
+      "Optional" => {
+        let value = optic.preview(s) in
+        if value != null {
+          optic.set(s, f(value))
+        } else {
+          s
+        }
+      },
+      "AffineTraversal" => {
+        let value = optic.preview(s) in
+        if value != null {
+          optic.set(s, f(value))
+        } else {
+          s
+        }
+      },
+      "Iso" => optic.to(f(optic.from(s))),
+      "Setter" => optic.set(s, f(view(optic, s))),
+      "Optic" => modify(optic.impl, s, f),
+      _ => s
+    }
+  ]
+
+  --------------------------------------------------
+  -- Composition
+  --------------------------------------------------
+
+  --[[
+    compose composes two optics.
+  ]]--
+  compose: Any * Any -> Optic [optic1 optic2 ->
+    let compose_lens_lens = [l1 l2 ->
+      lens(
+        [s -> l2.get(l1.get(s))],
+        [s a -> l1.set(s, l2.set(l1.get(s), a))]
+      )
+    ] in
+    
+    let compose_lens_prism = [l p ->
+      optional(
+        [s -> p.preview(l.get(s))],
+        [s a -> l.set(s, p.preview(l.get(s)) != null ? p.review(a) : l.get(s))]
+      )
+    ] in
+    
+    let compose_prism_lens = [p l ->
+      optional(
+        [s -> {
+          let inner = p.preview(s) in
+          inner != null ? l.get(inner) : null
+        }],
+        [s a -> {
+          let inner = p.preview(s) in
+          inner != null ? p.review(l.set(inner, a)) : s
+        }]
+      )
+    ] in
+    
+    let compose_prism_prism = [p1 p2 ->
+      prism(
+        [s -> {
+          let inner = p1.preview(s) in
+          inner != null ? p2.preview(inner) : null
+        }],
+        [a -> p1.review(p2.review(a))]
+      )
+    ] in
+    
+    let compose_lens_traversal = [l t ->
+      traversal(
+        [s -> t.collect(l.get(s))],
+        [s as -> l.set(s, t.update(l.get(s), as))]
+      )
+    ] in
+    
+    let compose_traversal_lens = [t l ->
+      traversal(
+        [s -> {
+          let collected = t.collect(s) in
+          let result = [] in
+          
+          for item in collected {
+            result = result + [l.get(item)]
+          }
+          
+          result
+        }],
+        [s as -> {
+          let collected = t.collect(s) in
+          
+          if Prim.length(collected) != Prim.length(as) {
+            return s
+          }
+          
+          let updated = [] in
+          
+          for i in 0..(Prim.length(collected) - 1) {
+            updated = updated + [l.set(collected[i], as[i])]
+          }
+          
+          t.update(s, updated)
+        }]
+      )
+    ] in
+    
+    -- Determine the composition based on the optic types
+    match (optic1._type, optic2._type) {
+      ("Lens", "Lens") => compose_lens_lens(optic1, optic2),
+      ("Lens", "Prism") => compose_lens_prism(optic1, optic2),
+      ("Prism", "Lens") => compose_prism_lens(optic1, optic2),
+      ("Prism", "Prism") => compose_prism_prism(optic1, optic2),
+      ("Lens", "Traversal") => compose_lens_traversal(optic1, optic2),
+      ("Traversal", "Lens") => compose_traversal_lens(optic1, optic2),
+      -- More compositions could be added here
+      _ => {
+        -- Generic composition for other cases
+        {
+          _type: "Optic",
+          impl: {
+            first: optic1,
+            second: optic2,
+            view: [s -> view(optic2, view(optic1, s))],
+            set: [s a -> set(optic1, s, set(optic2, view(optic1, s), a))]
+          }
+        }
+      }
+    }
+  ]
+
+  --------------------------------------------------
+  -- Operators
+  --------------------------------------------------
+
+  --[[
+    . composes two optics.
+  ]]--
+  .: Any * Any -> Optic [o1 o2 ->
+    compose(o1, o2)
+  ]
+
+  --[[
+    ^ creates a lens focusing on a specific field.
+  ]]--
+  ^: {} * S -> Lens.{}.Any [obj field_name ->
+    field(field_name)
+  ]
+
+  --------------------------------------------------
+  -- Utility Functions
+  --------------------------------------------------
+
+  --[[
+    to_path converts a dot-separated string path to an array of keys.
+  ]]--
+  to_path: S -> [S] [path_str ->
+    let parts = Prim.split(path_str, ".") in
+    
+    let result = [] in
+    for part in parts {
+      if part != "" {
+        result = result + [part]
+      }
+    }
+    
+    result
+  ]
+
+  --[[
+    from_path converts an array of keys to a dot-separated string path.
+  ]]--
+  from_path: [S] -> S [path ->
+    Prim.join(path, ".")
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes the categorical structure
+    of optics.
+    
+    Optics form a category with:
+    - Objects: Types
+    - Morphisms: Various optics between types
+    - Identity: Identity optic (lens that gets and sets the same value)
+    - Composition: Optic composition
+  ]]--
+  structure: {
+    -- Categorical structure
+    objects: a,
+    morphisms: Optic,
+    
+    id: [a -> 
+      lens(
+        [x -> x],
+        [_ x -> x]
+      )
+    ],
+    compose: [o1 o2 -> compose(o1, o2)],
+    
+    -- Lens structure
+    lens: lens,
+    field: field,
+    
+    -- Prism structure
+    prism: prism,
+    prism_for_type: prism_for_type,
+    
+    -- Traversal structure
+    traversal: traversal,
+    each: each,
+    filtered: filtered,
+    
+    -- Iso structure
+    iso: iso,
+    
+    -- Optional structure
+    optional: optional,
+    at_index: at_index,
+    
+    -- Operations
+    view: view,
+    set: set,
+    over: over,
+    
+    -- Laws
+    law: {
+      -- Lens laws
+      get_set: [l s a ->
+        view(l, set(l, s, a)) == a
+      ],
+      
+      set_get: [l s ->
+        set(l, s, view(l, s)) == s
+      ],
+      
+      set_set: [l s a b ->
+        set(l, set(l, s, a), b) == set(l, s, b)
+      ],
+      
+      -- Prism laws
+      preview_review: [p a ->
+        preview(p, review(p, a)) == a
+      ],
+      
+      review_preview: [p s ->
+        let v = preview(p, s) in
+        v != null ? review(p, v) == s : true
+      ],
+      
+      -- Iso laws
+      from_to: [i a ->
+        view(i, review(i, a)) == a
+      ],
+      
+      to_from: [i s ->
+        review(i, view(i, s)) == s
+      ],
+      
+      -- Composition law
+      compose_law: [o1 o2 o3 ->
+        compose(compose(o1, o2), o3) == compose(o1, compose(o2, o3))
+      ]
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    --[[
+      Example 1: Using lenses to access and update nested fields
+    ]]--
+    lens_example: () -> {} [->
+      -- Create a nested data structure
+      let data = {
+        user: {
+          name: "Alice",
+          contact: {
+            email: "alice@example.com",
+            phone: "555-1234"
+          }
+        },
+        settings: {
+          theme: "dark",
+          notifications: true
+        }
+      } in
+      
+      -- Create lenses for accessing fields
+      let user_lens = field("user") in
+      let name_lens = field("name") in
+      let user_name_lens = compose(user_lens, name_lens) in
+      
+      let email_lens = lens_from_path(["user", "contact", "email"]) in
+      
+      -- Use lenses to view and update fields
+      let name = view(user_name_lens, data) in
+      let updated = set(email_lens, data, "alice.new@example.com") in
+      
+      updated
+    ],
+    
+    --[[
+      Example 2: Using prisms to handle variant types
+    ]]--
+    prism_example: () -> {} [->
+      -- Define a simple variant type
+      let shape = {
+        _type: "circle",
+        radius: 5
+      } in
+      
+      -- Create prisms for each shape type
+      let circle_prism = prism_for_type("circle") in
+      let rectangle_prism = prism_for_type("rectangle") in
+      
+      -- Create lenses for shape properties
+      let radius_lens = field("radius") in
+      let width_lens = field("width") in
+      
+      -- Combine prism and lens
+      let circle_radius = compose(circle_prism, radius_lens) in
+      let rectangle_width = compose(rectangle_prism, width_lens) in
+      
+      -- Use the optics
+      let radius = view(circle_radius, shape) in
+      let with_bigger_radius = over(circle_radius, shape, [r -> r * 2]) in
+      
+      -- This does nothing since the shape is not a rectangle
+      let with_bigger_width = over(rectangle_width, shape, [w -> w * 2]) in
+      
+      with_bigger_radius
+    ],
+    
+    --[[
+      Example 3: Using traversals for collections
+    ]]--
+    traversal_example: () -> [{}] [->
+      -- Define an array of users
+      let users = [
+        { name: "Alice", age: 30, active: true },
+        { name: "Bob", age: 25, active: false },
+        { name: "Charlie", age: 35, active: true }
+      ] in
+      
+      -- Create traversal for all elements
+      let users_traversal = each() in
+      
+      -- Create lens for the age field
+      let age_lens = field("age") in
+      
+      -- Create traversal for all users' ages
+      let ages_traversal = compose(users_traversal, age_lens) in
+      
+      -- Create traversal only for active users
+      let active_traversal = compose(
+        users_traversal,
+        compose(
+          filtered([user -> user.active]),
+          age_lens
+        )
+      ) in
+      
+      -- Get all ages
+      let all_ages = collect(ages_traversal, users) in
+      
+      -- Increase all ages by 1
+      let older_users = over(ages_traversal, users, [age -> age + 1]) in
+      
+      -- Increase only active users' ages by 5
+      let older_active_users = over(active_traversal, users, [age -> age + 5]) in
+      
+      older_active_users
+    ]
+  }
+} 

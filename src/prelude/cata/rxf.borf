@@ -5,7 +5,7 @@
   allowing for categorical representation of relations, equivalences, and orders.
 ]]--
 
-@RelXf: {
+@RXf: {
   typ: {
     -- Transformation types
     RelationTransformation Functor Natural Isomorphism

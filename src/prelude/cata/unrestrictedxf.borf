@@ -12,12 +12,12 @@
     UnrestrictedTransform
     ResourceTransform
     TypeTransform
-    
+
     -- Specific transformations
     UnrestrictedToLinear
     UnrestrictedToAffine
     UnrestrictedToRelevant
-    
+
     -- Context transformations
     ContextTransform
     ProofTransform
@@ -26,10 +26,10 @@
   op: {
     -- Transformation operators
     ==> <== <=> ~~
-    
+
     -- Composition operators
     >>> <<< +++ &&&
-    
+
     -- Resource tracking operators
     bang promote demote
   }
@@ -39,19 +39,19 @@
     to_linear from_linear
     to_affine from_affine
     to_relevant from_relevant
-    
+
     -- Type transformations
     unrestricted_to_linear_type linear_to_unrestricted_type
     unrestricted_to_affine_type affine_to_unrestricted_type
     unrestricted_to_relevant_type relevant_to_unrestricted_type
-    
+
     -- Promotion and demotion operations
     promote_type demote_type
     bang box unbox
-    
+
     -- Resource operations
     track_usage remove_constraints
-    
+
     -- Context transformations
     transform_context convert_bindings
   }
@@ -87,7 +87,7 @@
       -- Transform unrestricted type to linear type
       | { _type: "UnrestrictedType" } ->
           unrestricted_to_linear_type(unrestricted_val)
-      
+
       -- Transform unrestricted function to linear function
       | { domain: _, codomain: _ } ->
           @Linear.linear_fn(
@@ -95,9 +95,9 @@
             transform_body(unrestricted_val.codomain),
             [x -> add_linear_constraints(unrestricted_val.body, x)]
           )
-      
+
       -- Default for values
-      | _ -> 
+      | _ ->
           -- Wrap in linear wrapper for linear usage tracking
           @Linear.make_linear(unrestricted_val)
   ]
@@ -111,7 +111,7 @@
       -- Transform linear type to unrestricted type
       | { _type: "LinearType" } ->
           linear_to_unrestricted_type(linear_val)
-      
+
       -- Transform linear function to unrestricted function
       | { domain: _, codomain: _ } ->
           @Unrestricted.unrestricted_fn(
@@ -119,9 +119,9 @@
             transform_body(linear_val.codomain),
             [x -> remove_linear_constraints(linear_val.body, x)]
           )
-      
+
       -- Default for values
-      | _ -> 
+      | _ ->
           -- Wrap in unrestricted wrapper allowing unlimited usage
           @Unrestricted.make_unrestricted(linear_val)
   ]
@@ -157,7 +157,7 @@
     -- 1. Track all resources in the context
     -- 2. Enforce exactly-once usage for all resources
     -- 3. Insert necessary runtime checks for linear usage
-    
+
     body(convert_context_linear(ctx))
   ]
 
@@ -169,7 +169,7 @@
     -- In a real implementation, this would:
     -- 1. Convert linear usage tracking to unrestricted tracking
     -- 2. Remove linearity constraints
-    
+
     body(convert_context_linear_reverse(ctx))
   ]
 
@@ -210,7 +210,7 @@
       -- Transform unrestricted type to affine type
       | { _type: "UnrestrictedType" } ->
           unrestricted_to_affine_type(unrestricted_val)
-      
+
       -- Transform unrestricted function to affine function
       | { domain: _, codomain: _ } ->
           @Affine.affine_fn(
@@ -218,9 +218,9 @@
             transform_body(unrestricted_val.codomain),
             [x -> restrict_copying(unrestricted_val.body, x)]
           )
-      
+
       -- Default for values
-      | _ -> 
+      | _ ->
           -- Wrap in affine wrapper to prevent copying
           @Affine.make_affine(unrestricted_val)
   ]
@@ -234,7 +234,7 @@
       -- Transform affine type to unrestricted type
       | { _type: "AffineType" } ->
           affine_to_unrestricted_type(affine_val)
-      
+
       -- Transform affine function to unrestricted function
       | { domain: _, codomain: _ } ->
           @Unrestricted.unrestricted_fn(
@@ -242,9 +242,9 @@
             transform_body(affine_val.codomain),
             [x -> allow_copying(affine_val.body, x)]
           )
-      
+
       -- Default for values
-      | _ -> 
+      | _ ->
           -- Wrap in unrestricted wrapper enabling copying
           @Unrestricted.make_unrestricted(affine_val)
   ]
@@ -280,7 +280,7 @@
     -- 1. Track all resources in the context
     -- 2. Prevent any resource from being used more than once
     -- 3. Allow resources to be dropped
-    
+
     body(convert_context_affine(ctx))
   ]
 
@@ -292,7 +292,7 @@
     -- In a real implementation, this would:
     -- 1. Convert affine usage tracking to unrestricted tracking
     -- 2. Add support for copying resources
-    
+
     body(convert_context_affine_reverse(ctx))
   ]
 
@@ -333,7 +333,7 @@
       -- Transform unrestricted type to relevant type
       | { _type: "UnrestrictedType" } ->
           unrestricted_to_relevant_type(unrestricted_val)
-      
+
       -- Transform unrestricted function to relevant function
       | { domain: _, codomain: _ } ->
           @Relevant.relevant_fn(
@@ -341,9 +341,9 @@
             transform_body(unrestricted_val.codomain),
             [x -> require_usage(unrestricted_val.body, x)]
           )
-      
+
       -- Default for values
-      | _ -> 
+      | _ ->
           -- Wrap in relevant wrapper to require usage
           @Relevant.make_relevant(unrestricted_val)
   ]
@@ -357,7 +357,7 @@
       -- Transform relevant type to unrestricted type
       | { _type: "RelevantType" } ->
           relevant_to_unrestricted_type(relevant_val)
-      
+
       -- Transform relevant function to unrestricted function
       | { domain: _, codomain: _ } ->
           @Unrestricted.unrestricted_fn(
@@ -365,9 +365,9 @@
             transform_body(relevant_val.codomain),
             [x -> allow_dropping(relevant_val.body, x)]
           )
-      
+
       -- Default for values
-      | _ -> 
+      | _ ->
           -- Wrap in unrestricted wrapper enabling dropping
           @Unrestricted.make_unrestricted(relevant_val)
   ]
@@ -403,7 +403,7 @@
     -- 1. Track all resources in the context
     -- 2. Ensure each resource is used at least once
     -- 3. Allow resources to be used multiple times
-    
+
     body(convert_context_relevant(ctx))
   ]
 
@@ -415,7 +415,7 @@
     -- In a real implementation, this would:
     -- 1. Convert relevant usage tracking to unrestricted tracking
     -- 2. Add support for dropping resources
-    
+
     body(convert_context_relevant_reverse(ctx))
   ]
 
@@ -466,7 +466,7 @@
     -- In a real implementation, this would:
     -- 1. Create a special boxed value using the bang operator
     -- 2. Enable special usage patterns in the linear system
-    
+
     @Linear.make_linear(val)
   ]
 
@@ -477,7 +477,7 @@
     -- In a real implementation, this would:
     -- 1. Extract the value from the boxed representation
     -- 2. Enforce appropriate usage patterns based on context
-    
+
     @Unrestricted.make_unrestricted(boxed_val)
   ]
 
@@ -582,4 +582,4 @@
     -- In a real implementation, this would transform return types
     body
   ]
-} 
+}

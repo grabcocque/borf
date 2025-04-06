@@ -4,7 +4,7 @@
   This module defines transformations between context categories, including
   the fibration of types over contexts. These structures form the foundation
   for dependent type theory and establish the relationship between Pi and Sigma
-  types as adjoints in the category of contexts.
+  types as dual constructs in the category of contexts.
 ]]--
 
 @ContextXf: {
@@ -13,39 +13,39 @@
     ContextTransform
     TypeFibration
     TermFibration
-    
+
     -- Specific transformations
     ContextSubstitution
     TypeReindexing
     TermReindexing
-    
+
     -- Fibration types
     Fiber CartesianLift
   }
 
   op: {
     -- Fibration operators
-    π p ⨯ △
-    
+    pi p x triangle
+
     -- Substitution operators
-    ∘ σ τ δ
-    
+    compose sigma tau delta
+
     -- Dependency operators
-    Γ.A Γ⊢A
+    Gamma.A Gamma_A
   }
 
   fn: {
     -- Core fibration functions
     total_category fiber_over base_of
     reindex cartesian_lift
-    
+
     -- Context transformations
     context_substitution apply_substitution
     context_projection context_extension
-    
+
     -- Type operations
     type_reindexing dependent_product dependent_sum
-    
+
     -- Structure transformations
     ctx_to_pi ctx_to_sigma
   }
@@ -127,16 +127,16 @@
         substitution: @Context.Substitution,  -- Context substitution
         type_map: @Context.TypeExpr          -- Additional type transformation
       }],
-      
+
       -- Basic category structure
       dom: [morph -> morph.substitution.source],
       cod: [morph -> morph.substitution.target],
-      
+
       id: [obj -> {
         substitution: @Context.id_subst(obj[0]),
         type_map: obj[1]
       }],
-      
+
       compose: [f g -> {
         substitution: @Context.compose_subst(f.substitution, g.substitution),
         type_map: apply_type_map(g.type_map, f)
@@ -151,10 +151,10 @@
     {
       source_category: create_types_in_context_category(),
       target_category: @Context.structure,
-      
+
       map_obj: [obj -> obj[0]],  -- Take just the context
       map_morph: [morph -> morph.substitution],  -- Take just the substitution
-      
+
       preserves_id: true,
       preserves_composition: true
     }
@@ -182,7 +182,7 @@
   ]]--
   cartesian_lift: TypeFibration * @Context.Substitution * @Context.TypeExpr -> CartesianLift [fib subst type ->
     let reindexed_type = reindex(type, subst) in
-    
+
     {
       substitution: subst,
       morphism: {
@@ -216,7 +216,7 @@
   context_projection: @Context.Ctx * @Context.TypeExpr -> @Context.Substitution [ctx type ->
     -- Create a weakening substitution that forgets the last variable
     let extended = context_extension(ctx, type) in
-    
+
     {
       source: extended,
       target: ctx,
@@ -278,7 +278,7 @@
     let param_type = convert_type_expr(pi_type.param_type) in
     let extended_ctx = context_extension(ctx, param_type) in
     let return_type = convert_type_expr(pi_type.return_type_fn(create_placeholder(pi_type.param_type))) in
-    
+
     (ctx, param_type, return_type)
   ]
 
@@ -298,7 +298,7 @@
     let param_type = convert_type_expr(sigma_type.fst_type) in
     let extended_ctx = context_extension(ctx, param_type) in
     let return_type = convert_type_expr(sigma_type.snd_type_fn(create_placeholder(sigma_type.fst_type))) in
-    
+
     (ctx, param_type, return_type)
   ]
 
@@ -323,93 +323,93 @@
   --------------------------------------------------
 
   --[[
-    Structure that captures the fibration of types over contexts and 
+    Structure that captures the fibration of types over contexts and
     establishes the relationship between contexts and dependent types.
-    
+
     Key relationships formalized here:
     1. The context category as base of the fibration
     2. The types-in-context category as total space of the fibration
-    3. The adjunctions between context extension and Π/Σ types
+    3. The dual transformations between context extension and Pi/Sigma types
   ]]--
   structure: {
     -- The fibration of types over contexts
     type_fibration: create_type_fibration(),
-    
+
     -- Category of contexts
     context_category: @Context.structure,
-    
-    -- Dependent function adjunction (Pi types)
-    dependent_product_adjunction: {
-      left_functor: [ctx -> context_extension(ctx)],
-      right_functor: [ctx -> dependent_product(ctx)],
-      unit: [ctx -> create_unit_transformation(ctx)],
-      counit: [ctx -> create_counit_transformation(ctx)],
-      
-      -- Adjunction law: context extension ⊣ dependent product
-      is_adjunction: true
+
+    -- Dependent function type transformation
+    dependent_product_transformation: {
+      ctx_to_pi_transform: [ctx -> context_extension(ctx)],
+      pi_to_ctx_transform: [ctx -> dependent_product(ctx)],
+      forward_transform: [ctx -> create_forward_transform(ctx)],
+      backward_transform: [ctx -> create_backward_transform(ctx)],
+
+      -- Dual transformation law: context extension relates to dependent product
+      is_dual_transform: true
     },
-    
-    -- Dependent pair adjunction (Sigma types)
-    dependent_sum_adjunction: {
-      left_functor: [ctx -> dependent_sum(ctx)],
-      right_functor: [ctx -> context_extension(ctx)],
-      unit: [ctx -> create_sum_unit_transformation(ctx)],
-      counit: [ctx -> create_sum_counit_transformation(ctx)],
-      
-      -- Adjunction law: dependent sum ⊣ context extension
-      is_adjunction: true
+
+    -- Dependent pair type transformation
+    dependent_sum_transformation: {
+      ctx_to_sigma_transform: [ctx -> dependent_sum(ctx)],
+      sigma_to_ctx_transform: [ctx -> context_extension(ctx)],
+      forward_transform: [ctx -> create_sum_forward_transform(ctx)],
+      backward_transform: [ctx -> create_sum_backward_transform(ctx)],
+
+      -- Dual transformation law: dependent sum relates to context extension
+      is_dual_transform: true
     },
-    
+
     -- Cartesian fibration property (reindexing preserves pullbacks)
     cartesian_property: forall [subst type ->
       is_cartesian_lift(cartesian_lift(type_fibration, subst, type))
     ],
-    
+
     -- Beck-Chevalley condition for dependent product
     beck_chevalley_product: forall [subst type ctx ->
       reindex(dependent_product(ctx, type), subst) ==
       dependent_product(base_of(subst), reindex(type, apply_substitution(subst)))
     ],
-    
+
     -- Beck-Chevalley condition for dependent sum
     beck_chevalley_sum: forall [subst type ctx ->
       reindex(dependent_sum(ctx, type), subst) ==
       dependent_sum(base_of(subst), reindex(type, apply_substitution(subst)))
     ]
   }
-  
+
   --[[
-    Helper function to create unit transformation for Pi-adjunction
+    Helper function to create forward transformation for Pi-type relationship
   ]]--
-  create_unit_transformation: @Context.Ctx -> a [ctx ->
-    -- In a real implementation, this would create the unit natural transformation
+  create_forward_transform: @Context.Ctx -> a [ctx ->
+    -- In a real implementation, this would create the forward transformation
     null
   ]
-  
+
   --[[
-    Helper function to create counit transformation for Pi-adjunction
+    Helper function to create backward transformation for Pi-type relationship
   ]]--
-  create_counit_transformation: @Context.Ctx -> a [ctx ->
-    -- In a real implementation, this would create the counit natural transformation
+  create_backward_transform: @Context.Ctx -> a [ctx ->
+    -- In a real implementation, this would create the backward transformation
     null
   ]
-  
+
   --[[
-    Helper function to create unit transformation for Sigma-adjunction
+    Helper function to create forward transformation for Sigma-type relationship
   ]]--
-  create_sum_unit_transformation: @Context.Ctx -> a [ctx ->
-    -- In a real implementation, this would create the unit natural transformation
+  create_sum_forward_transform: @Context.Ctx -> a [ctx ->
+    -- In a real implementation, this would create the forward transformation
     null
   ]
-  
+
   --[[
-    Helper function to create counit transformation for Sigma-adjunction
+    Helper function to create backward transformation for Sigma-type relationship
   ]]--
-  create_sum_counit_transformation: @Context.Ctx -> a [ctx ->
-    -- In a real implementation, this would create the counit natural transformation
+  create_sum_backward_transform: @Context.Ctx -> a [ctx ->
+    -- In a real implementation, this would create the backward transformation
     null
   ]
-  
+
   --[[
     Helper function to check if a lift is cartesian
   ]]--
@@ -417,21 +417,21 @@
     -- In a real implementation, this would verify the cartesian property
     true
   ]
-  
+
   --[[
     Helper function to get the base of a substitution
   ]]--
   base_of: @Context.Substitution -> @Context.Ctx [subst ->
     subst.source
   ]
-  
+
   --[[
     Helper function to apply a substitution
   ]]--
   apply_substitution: @Context.Substitution -> @Context.Substitution [subst ->
     subst
   ]
-  
+
   --[[
     Helper function to get length of a list
   ]]--
@@ -440,7 +440,7 @@
       | [] -> 0
       | [_ @ rest] -> 1 + length(rest)
   ]
-  
+
   --[[
     Helper function to take first n elements of a list
   ]]--
@@ -453,7 +453,7 @@
         | [first @ rest] -> [first] + take(n - 1, rest)
     }
   ]
-  
+
   --[[
     Helper function to map a function over a list
   ]]--
@@ -462,4 +462,4 @@
       | [] -> []
       | [first @ rest] -> [f(first)] + map(rest, f)
   ]
-} 
+}

@@ -4,8 +4,8 @@
   This module defines the category of asynchronous tasks (coroutines) using
   Kleisli arrows. Tasks represent computations that may suspend, yield control,
   and resume later, with the ability to produce a value of a specific type.
-  
-  The category structure allows for elegant composition of asynchronous 
+
+  The category structure allows for elegant composition of asynchronous
   computations without callback hell or complex promise chaining.
 ]]--
 
@@ -13,18 +13,18 @@
   typ: {
     -- Core task types
     Task TaskArrow Scheduler
-    
+
     -- Task status types
     Running Suspended Completed Failed Cancelled
-    
+
     -- Primitive operations
     Yield Await Spawn Cancel
   }
 
   op: {
     -- Task composition operators
-    >>= >=> <=< |>
-    
+    >=> <=< |>
+
     -- Parallel operators
     <&> &> <&
   }
@@ -32,13 +32,13 @@
   fn: {
     -- Core task functions
     create_task run_task pure suspend resume
-    
+
     -- Arrow functions
     task_arrow compose_tasks id_task lift_function
-    
+
     -- Primitive operations
     yield await spawn cancel
-    
+
     -- Control flow
     sequence_tasks parallel_tasks race all
   }
@@ -51,6 +51,7 @@
 
   deps: {
     (@Task, @T, true)        -- Add dependency on Type system
+    (@Prim, true)            -- Add dependency on Prim
   }
 
   --------------------------------------------------
@@ -184,36 +185,36 @@
   run_task: Task.a -> Task.a [task ->
     -- Set as current task in scheduler
     task.scheduler.current = task
-    
+
     -- Run the task's continuation
     try {
       let result = task.continuation() in
-      
+
       -- If we got here, the task completed successfully
       task.state = { _type: "Completed" }
       task.result = result
-      
+
       -- Move to completed list in scheduler
       task.scheduler.completed = task.scheduler.completed + [task]
       task.scheduler.current = null
-      
+
       -- Schedule dependent tasks
-      task.dependencies |> iter [dep -> 
+      task.dependencies |> iter [dep ->
         if dep.state._type == "Suspended" && dep.state.resume_after == task {
           resume(dep)
         }
       ]
-      
+
       task
     } catch err {
       -- Task failed
       task.state = { _type: "Failed" }
       task.error = err
-      
+
       -- Move to failed list in scheduler
       task.scheduler.failed = task.scheduler.failed + [task]
       task.scheduler.current = null
-      
+
       task
     }
   ]
@@ -270,12 +271,12 @@
     if f.target != g.source {
       error("Cannot compose task arrows: target of first must equal source of second")
     }
-    
+
     -- Compose using task binding
     task_arrow(
       f.source,
       g.target,
-      [a -> 
+      [a ->
         let task_b = f.function(a) in
         -- Execute f, then use its result to execute g
         task_b |> [b -> g.function(b)]
@@ -324,20 +325,20 @@
   ]]--
   yield: Z | Null * Scheduler -> Task.Null [timeout scheduler ->
     let current = scheduler.current in
-    
+
     if current == null {
       error("Cannot yield outside of a task")
     }
-    
-    suspend(current, { 
+
+    suspend(current, {
       _type: "Suspended",
       resume_after: null,
       timeout: timeout
     })
-    
+
     -- Schedule the next task
     scheduler.dispatch()
-    
+
     -- This null is never reached in actual execution,
     -- as we've already suspended the task
     null
@@ -348,28 +349,28 @@
   ]]--
   await: Task.a * Z | Null * Scheduler -> Task.a [task timeout scheduler ->
     let current = scheduler.current in
-    
+
     if current == null {
       error("Cannot await outside of a task")
     }
-    
+
     if task.state._type == "Completed" {
       -- Task is already completed, return its result immediately
       task.result
     } else {
       -- Register the current task as dependent on the awaited task
       task.dependencies = task.dependencies + [current]
-      
+
       -- Suspend the current task
       suspend(current, {
         _type: "Suspended",
         resume_after: task,
         timeout: timeout
       })
-      
+
       -- Schedule the next task
       scheduler.dispatch()
-      
+
       -- This is never reached in actual execution,
       -- as we've already suspended the task
       null
@@ -407,7 +408,7 @@
       pure([], scheduler)
     } else {
       let results = [] in
-      
+
       create_task([->
         for task in tasks {
           let result = await(task, null, scheduler) in
@@ -424,18 +425,18 @@
   parallel_tasks: [Task.a] * Scheduler -> Task.[a] [tasks scheduler ->
     create_task([->
       let results = [] in
-      
-      -- Spawn all tasks 
+
+      -- Spawn all tasks
       for task in tasks {
         spawn([-> task], scheduler)
       }
-      
+
       -- Await all tasks
       for task in tasks {
         let result = await(task, null, scheduler) in
         results = results + [result]
       }
-      
+
       results
     ], scheduler)
   ]
@@ -447,15 +448,15 @@
     if tasks == [] {
       error("Cannot race an empty list of tasks")
     }
-    
+
     create_task([->
       -- Create a special task that will complete when any input task completes
       let race_complete = false in
       let result = null in
-      
+
       -- Start all tasks
       for task in tasks {
-        spawn([-> 
+        spawn([->
           try {
             let r = await(task, null, scheduler) in
             if !race_complete {
@@ -473,12 +474,12 @@
           }
         ], scheduler)
       }
-      
+
       -- Wait until any task completes
       while !race_complete {
         yield(10, scheduler)  -- Check every 10ms
       }
-      
+
       result
     ], scheduler)
   ]
@@ -503,13 +504,6 @@
       let task_b = f(a) in
       await(task_b, null, scheduler)
     ], scheduler)
-  ]
-
-  --[[
-    infix_bind provides an infix bind operation for tasks (>>=)
-  ]]--
-  infix_bind: Task.a * (a -> Task.b) -> Task.b [task f ->
-    apply_task(task, f, task.scheduler)
   ]
 
   --[[
@@ -539,43 +533,43 @@
 
   --[[
     Structure mapping that establishes @Task as a category of asynchronous computations.
-    
+
     In this categorical structure:
     - Objects are types
     - Morphisms are TaskArrows (functions a -> Task b)
     - Identity is the pure function that lifts a value into a Task
     - Composition sequences tasks using bind
-    
+
     This captures the essence of asynchronous computation in a composable way.
   ]]--
   structure: {
     -- Map Task to a category
     objects: T.Type,
     morphisms: TaskArrow,
-    
+
     -- Base category structure
     dom: [arrow -> arrow.source],
     cod: [arrow -> arrow.target],
     id: [a -> id_task(a, default_scheduler())],
     compose: [f g -> compose_tasks(f, g)],
-    
+
     -- Task-specific structure
     task_constructor: [a -> task_constructor_for(a)],
     pure: [a scheduler -> pure(a, scheduler)],
     apply: [task f scheduler -> apply_task(task, f, scheduler)],
-    
+
     -- Primitive operations
     yield: yield,
     await: await,
     spawn: spawn,
     cancel: cancel,
-    
+
     -- Combinators
     sequence: sequence_tasks,
     parallel: parallel_tasks,
     race: race,
     all: all,
-    
+
     -- Laws for task category
     law: {
       -- Associativity: (f >=> g) >=> h = f >=> (g >=> h)
@@ -583,13 +577,13 @@
         compose_tasks(compose_tasks(f, g), h) ==
         compose_tasks(f, compose_tasks(g, h))
       ],
-      
+
       -- Left identity: pure >=> f = f
       left_identity: [a f scheduler ->
         let pure_arrow = id_task(a, scheduler) in
         compose_tasks(pure_arrow, f) == f
       ],
-      
+
       -- Right identity: f >=> pure = f
       right_identity: [f scheduler ->
         let pure_arrow = id_task(f.target, scheduler) in
@@ -610,16 +604,16 @@
       schedule: null,
       dispatch: null
     } in
-    
+
     scheduler.schedule = [task ->
       scheduler.queue = scheduler.queue + [task]
-      
+
       -- If there's no current task, dispatch right away
       if scheduler.current == null {
         scheduler.dispatch()
       }
     ]
-    
+
     scheduler.dispatch = [->
       if scheduler.queue != [] {
         let next = scheduler.queue[0] in
@@ -628,7 +622,7 @@
       }
       null
     ]
-    
+
     scheduler
   ]
 
@@ -647,69 +641,69 @@
     -- Example 1: Simple sequential tasks
     sequential_example: () -> Task.Z [->
       let scheduler = default_scheduler() in
-      
+
       let task1 = pure(1, scheduler) in
       let task2 = pure(2, scheduler) in
-      
+
       -- Use composition to sequence the tasks
-      apply_task(task1, [x -> 
-        apply_task(task2, [y -> 
+      apply_task(task1, [x ->
+        apply_task(task2, [y ->
           pure(x + y, scheduler)
         ], scheduler)
       ], scheduler)
-      
+
       -- Result: Task(3)
     ],
-    
+
     -- Example 2: Using yield to simulate async delay
     delay_example: () -> Task.S [->
       let scheduler = default_scheduler() in
-      
+
       create_task([->
         let result = "Starting" in
-        
+
         -- Simulate async delay
         yield(100, scheduler)
         result = result + " after delay"
-        
+
         -- Another delay
         yield(100, scheduler)
         result = result + ", finished!"
-        
+
         result
       ], scheduler)
-      
+
       -- Result: Task("Starting after delay, finished!")
     ],
-    
+
     -- Example 3: Parallel task execution
     parallel_example: () -> Task.[Z] [->
       let scheduler = default_scheduler() in
-      
-      let task1 = create_task([-> 
+
+      let task1 = create_task([->
         yield(100, scheduler)
         1
       ], scheduler) in
-      
-      let task2 = create_task([-> 
+
+      let task2 = create_task([->
         yield(50, scheduler)
         2
       ], scheduler) in
-      
+
       parallel_tasks([task1, task2], scheduler)
-      
+
       -- Result: Task([1, 2])
     ],
-    
+
     -- Example 4: Error handling
     error_example: () -> Task.Z [->
       let scheduler = default_scheduler() in
-      
+
       let failing_task = create_task([->
         yield(50, scheduler)
         error("This task fails")
       ], scheduler) in
-      
+
       create_task([->
         try {
           await(failing_task, null, scheduler)
@@ -718,8 +712,8 @@
           -1  -- Return -1 on error
         }
       ], scheduler)
-      
+
       -- Result: Task(-1)
     ]
   }
-} 
+}

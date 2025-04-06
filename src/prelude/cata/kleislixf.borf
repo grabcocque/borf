@@ -13,7 +13,7 @@
     EffectTransformation
     EffectLifting
     KleisliTransformation
-    
+
     -- Specific transformations
     StateTransformation
     ReaderTransformation
@@ -23,7 +23,7 @@
   op: {
     -- Effect transformation operators
     lift liftA
-    
+
     -- Category conversion operators
     to_kleisli from_kleisli
   }
@@ -31,13 +31,13 @@
   fn: {
     -- Core transformation functions
     effect_transform kleisli_functor
-    
+
     -- Effect transformation functions
     lift_effect transform_effect
-    
+
     -- Structure conversion functions
     to_kleisli from_kleisli
-    
+
     -- Adjunction functions
     kleisli_adjunction
   }
@@ -130,12 +130,12 @@
   state_transformation: a -> EffectLifting [s ->
     create_effect_lifting(
       "StateT",
-      [effect -> 
+      [effect ->
         @Kleisli.create_type_constructor(
           "StateT(" + effect.name + ")",
           [a -> (s -> effect.apply.(a * s))],  -- State over effect
           [a -> [s -> effect.pure((a, s))]],  -- Pure in transformed effect
-          [(ma, f) -> [s -> 
+          [(ma, f) -> [s ->
             ma(s) |> effect.bind([(a, s') -> f(a)(s')])
           ]]  -- Bind threads state through inner effect
         )
@@ -150,12 +150,12 @@
   reader_transformation: a -> EffectLifting [e ->
     create_effect_lifting(
       "ReaderT",
-      [effect -> 
+      [effect ->
         @Kleisli.create_type_constructor(
           "ReaderT(" + effect.name + ")",
           [a -> (e -> effect.apply.a)],  -- Reader over effect
           [a -> [_ -> effect.pure(a)]],  -- Pure in transformed effect
-          [(ma, f) -> [env -> 
+          [(ma, f) -> [env ->
             ma(env) |> effect.bind([a -> f(a)(env)])
           ]]  -- Bind threads environment through inner effect
         )
@@ -170,12 +170,12 @@
   cont_transformation: a -> EffectLifting [r ->
     create_effect_lifting(
       "ContT",
-      [effect -> 
+      [effect ->
         @Kleisli.create_type_constructor(
           "ContT(" + effect.name + ")",
           [a -> ((a -> effect.apply.r) -> effect.apply.r)],  -- Cont over effect
           [a -> [k -> k(a)]],  -- Pure in transformed effect
-          [(ma, f) -> [k -> 
+          [(ma, f) -> [k ->
             ma([a -> f(a)([b -> k(b)])])
           ]]  -- Bind composes continuations through inner effect
         )
@@ -207,12 +207,12 @@
   kleisli_functor: EffectTransformation -> KleisliTransformation [transform ->
     let source_kleisli = @Kleisli.create_kleisli_category(transform.source) in
     let target_kleisli = @Kleisli.create_kleisli_category(transform.target) in
-    
+
     kleisli_transformation(
       source_kleisli,
       target_kleisli,
       [a -> a],  -- Objects are preserved
-      [arrow -> 
+      [arrow ->
         @Kleisli.create_kleisli_arrow(
           arrow.source,
           arrow.target,
@@ -242,7 +242,7 @@
     if f.source != g.target {
       error("Cannot compose transformations: source of first must equal target of second")
     }
-    
+
     kleisli_transformation(
       g.source,
       f.target,
@@ -276,12 +276,12 @@
       let la = adj.left.map_obj(a) in
       compose(adj.left.map_morph(adj.unit(a)), adj.counit(la)) == identity(la)
     ] in
-    
+
     let right_identity = forall [a ->
       let ra = adj.right.map_obj(a) in
       compose(adj.unit(ra), adj.right.map_morph(adj.counit(a))) == identity(ra)
     ] in
-    
+
     left_identity && right_identity
   ]
 
@@ -322,7 +322,7 @@
   ]]--
   lift_kleisli_arrow: EffectLifting * @Kleisli.KleisliArrow -> @Kleisli.KleisliArrow [transformer arrow ->
     let transformed_effect = transformer.transform(arrow.effect) in
-    
+
     @Kleisli.create_kleisli_arrow(
       arrow.source,
       arrow.target,
@@ -338,13 +338,13 @@
   --[[
     Structure mapping that establishes @KleisliXf as a category of transformations
     between Kleisli arrow categories.
-    
+
     In this categorical structure:
     - Objects are Kleisli arrow categories
     - Morphisms are functors between Kleisli arrow categories
     - Composition is functor composition
     - Adjunctions capture relationships between computational effects
-    
+
     This structure formalizes how different computational effects interact
     and transform into each other.
   ]]--
@@ -356,53 +356,53 @@
     cod: [f -> f.target],
     id: [k -> identity_transformation(k)],
     compose: [f g -> compose_transformations(f, g)],
-    
+
     -- Effect transformation structure
     effect_transformations: EffectTransformation,
     effect_to_functor: [et -> kleisli_functor(et)],
-    
+
     -- Effect lifting structure
     effect_liftings: EffectLifting,
     apply_lifting: [el e -> transform_effect(el, e)],
     lift: [el e ea -> lift_effect(el, e, ea)],
-    
+
     -- Specific effect transformations
     state_t: [s -> state_transformation(s)],
     reader_t: [e -> reader_transformation(e)],
     cont_t: [r -> cont_transformation(r)],
-    
+
     -- Adjunctions between Kleisli arrow categories
     adjunctions: KleisliAdjunction,
     is_adjunction: [adj -> verify_adjunction(adj)],
-    
+
     -- Laws for effect transformations
     law: {
       -- Effect transformation preserves effect structure
       preserve_pure: forall [et a ->
         et.transform(et.source.pure(a)) == et.target.pure(a)
       ],
-      
+
       preserve_bind: forall [et ea f ->
-        et.transform(et.source.bind(ea, f)) == 
+        et.transform(et.source.bind(ea, f)) ==
         et.target.bind(et.transform(ea), [a -> et.transform(f(a))])
       ],
-      
+
       -- Kleisli transformation preserves category structure
       functor_id: forall [kt a ->
         kt.map_morph(identity(a)) == identity(kt.map_obj(a))
       ],
-      
+
       functor_compose: forall [kt f g ->
         kt.map_morph(compose(f, g)) == compose(kt.map_morph(f), kt.map_morph(g))
       ],
-      
+
       -- Effect lifting laws
       lift_pure: forall [el e a ->
         el.lift(e, e.pure(a)) == el.transform(e).pure(a)
       ],
-      
+
       lift_bind: forall [el e ea f ->
-        el.lift(e, e.bind(ea, f)) == 
+        el.lift(e, e.bind(ea, f)) ==
         el.transform(e).bind(el.lift(e, ea), [a -> el.lift(e, f(a))])
       ]
     }
@@ -419,11 +419,11 @@
       @Kleisli.list_effect(),
       [ma -> if ma is Null then [] else [ma]]
     ),
-    
+
     -- Example of combining state and error handling effects
     stateful_maybe: transform_effect(
       state_transformation("MyState"),
       @Kleisli.maybe_effect()
     )
   }
-} 
+}

@@ -12,12 +12,12 @@
     RelevantTransform
     ResourceTransform
     TypeTransform
-    
+
     -- Specific transformations
     RelevantToLinear
     RelevantToAffine
     RelevantToPrim
-    
+
     -- Context transformations
     ContextTransform
     ProofTransform
@@ -26,10 +26,10 @@
   op: {
     -- Transformation operators
     ==> <== <=> ~~
-    
+
     -- Composition operators
     >>> <<< +++ &&&
-    
+
     -- Resource tracking operators
     copy contract
   }
@@ -39,18 +39,18 @@
     to_linear from_linear
     to_affine from_affine
     to_prim from_prim
-    
+
     -- Type transformations
     relevant_to_linear_type linear_to_relevant_type
     relevant_to_affine_type affine_to_relevant_type
-    
+
     -- Function transformations
     transform_relevant_fn transform_relevant_app
-    
+
     -- Resource operations
     insert_copies
     ensure_usage track_usage
-    
+
     -- Proof transformations
     transform_proof transform_judgment
     embed_relevant_proof extract_relevant_proof
@@ -85,7 +85,7 @@
       -- Transform relevant type to linear type
       | { _type: "RelevantType" } ->
           relevant_to_linear_type(relevant_val)
-      
+
       -- Transform relevant function to linear function
       | { domain: _, codomain: _ } ->
           @Linear.linear_fn(
@@ -93,9 +93,9 @@
             transform_body(relevant_val.codomain),
             [x -> restrict_contraction(relevant_val.body, x)]
           )
-      
+
       -- Default for values
-      | _ -> 
+      | _ ->
           -- Wrap in linear wrapper to ensure linear usage
           @Linear.make_linear(relevant_val)
   ]
@@ -109,7 +109,7 @@
       -- Transform linear type to relevant type
       | { _type: "LinearType" } ->
           linear_to_relevant_type(linear_val)
-      
+
       -- Transform linear function to relevant function
       | { domain: _, codomain: _ } ->
           @Relevant.relevant_fn(
@@ -117,9 +117,9 @@
             transform_body(linear_val.codomain),
             [x -> ensure_usage(linear_val.body, x)]
           )
-      
+
       -- Default for values
-      | _ -> 
+      | _ ->
           -- Wrap in relevant wrapper requiring usage
           @Relevant.make_relevant(linear_val)
   ]
@@ -155,7 +155,7 @@
     -- 1. Track all resources in the context
     -- 2. Ensure each resource is used exactly once
     -- 3. Prevent any implicit copying of resources
-    
+
     body(convert_context(ctx))
   ]
 
@@ -167,7 +167,7 @@
     -- In a real implementation, this would:
     -- 1. Convert linear usage tracking to relevant tracking
     -- 2. Add support for contraction where appropriate
-    
+
     body(convert_context(ctx))
   ]
 
@@ -196,7 +196,7 @@
       -- Transform relevant type to affine type
       | { _type: "RelevantType" } ->
           relevant_to_affine_type(relevant_val)
-      
+
       -- Transform relevant function to affine function
       | { domain: _, codomain: _ } ->
           @Affine.affine_fn(
@@ -204,9 +204,9 @@
             transform_body(relevant_val.codomain),
             [x -> add_weakening(relevant_val.body, x)]
           )
-      
+
       -- Default for values
-      | _ -> 
+      | _ ->
           -- Wrap in affine wrapper allowing dropping
           @Affine.make_affine(relevant_val)
   ]
@@ -220,7 +220,7 @@
       -- Transform affine type to relevant type
       | { _type: "AffineType" } ->
           affine_to_relevant_type(affine_val)
-      
+
       -- Transform affine function to relevant function
       | { domain: _, codomain: _ } ->
           @Relevant.relevant_fn(
@@ -228,9 +228,9 @@
             transform_body(affine_val.codomain),
             [x -> enforce_usage(affine_val.body, x)]
           )
-      
+
       -- Default for values
-      | _ -> 
+      | _ ->
           -- Wrap in relevant wrapper requiring usage
           @Relevant.make_relevant(affine_val)
   ]
@@ -258,14 +258,14 @@
   ]
 
   --[[
-    add_weakening transforms a relevant function body to allow 
+    add_weakening transforms a relevant function body to allow
     optional dropping of resources in an affine context
   ]]--
   add_weakening: (@Relevant.RelevantCtx -> a) -> (@Affine.AffineCtx -> a) [body ctx ->
     -- In a real implementation, this would:
     -- 1. Convert relevant usage tracking to affine tracking
     -- 2. Add support for dropping resources where needed
-    
+
     body(convert_context_affine(ctx))
   ]
 
@@ -278,7 +278,7 @@
     -- 1. Track all resources in the context
     -- 2. Ensure each resource is used at least once
     -- 3. Insert runtime checks for usage if necessary
-    
+
     body(convert_context_affine(ctx))
   ]
 
@@ -307,11 +307,11 @@
       -- Relevant copy operation becomes Prim.clone
       | { _op: "copy", arg: a } ->
           @Prim.clone(to_prim(a))
-      
+
       -- Other relevant-specific operations
       | { _op: "relevant_fn" } ->
           @Prim.fn
-      
+
       -- Default - pass through the underlying value
       | _ ->
           extract_base_value(relevant_val)
@@ -326,11 +326,11 @@
       -- Functions with relevant constraints
       | @Prim.fn ->
           @Relevant.relevant_fn
-      
+
       -- Handle primitive clone operation
       | @Prim.clone ->
           @Relevant.copy
-      
+
       -- Default - wrap in relevant container
       | _ ->
           wrap_as_relevant(prim_op)
@@ -456,4 +456,4 @@
     -- In a real implementation, this would transform return types
     body
   ]
-} 
+}

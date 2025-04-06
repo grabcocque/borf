@@ -12,12 +12,12 @@
     AffineTransform
     ResourceTransform
     TypeTransform
-    
+
     -- Specific transformations
     AffineToLinear
     AffineToUnrestricted
     AffineToPrim
-    
+
     -- Context transformations
     ContextTransform
     ProofTransform
@@ -26,10 +26,10 @@
   op: {
     -- Transformation operators
     ==> <== <=> ~~
-    
+
     -- Composition operators
     >>> <<< +++ &&&
-    
+
     -- Resource tracking operators
     drop weaken contract
   }
@@ -39,18 +39,18 @@
     to_linear from_linear
     to_unrestricted from_unrestricted
     to_prim from_prim
-    
+
     -- Type transformations
     affine_to_linear_type linear_to_affine_type
     affine_to_unrestricted_type unrestricted_to_affine_type
-    
+
     -- Function transformations
     transform_affine_fn transform_affine_app
-    
+
     -- Resource operations
     insert_drops insert_copies
     preserve_usage track_usage
-    
+
     -- Proof transformations
     transform_proof transform_judgment
     embed_affine_proof extract_affine_proof
@@ -83,7 +83,7 @@
       -- Transform affine type to linear type
       | { _type: "AffineType" } ->
           affine_to_linear_type(affine_val)
-      
+
       -- Transform affine function to linear function
       | { domain: _, codomain: _ } ->
           @Linear.linear_fn(
@@ -91,9 +91,9 @@
             transform_body(affine_val.codomain),
             [x -> transform_with_explicit_usage(affine_val.body, x)]
           )
-      
+
       -- Default for values
-      | _ -> 
+      | _ ->
           -- Wrap in linear wrapper to ensure linear usage
           @Linear.make_linear(affine_val)
   ]
@@ -107,7 +107,7 @@
       -- Transform linear type to affine type
       | { _type: "LinearType" } ->
           linear_to_affine_type(linear_val)
-      
+
       -- Transform linear function to affine function
       | { domain: _, codomain: _ } ->
           @Affine.affine_fn(
@@ -115,9 +115,9 @@
             transform_body(linear_val.codomain),
             [x -> relax_linear_constraints(linear_val.body, x)]
           )
-      
+
       -- Default for values
-      | _ -> 
+      | _ ->
           -- Wrap in affine wrapper allowing potential dropping
           @Affine.make_affine(linear_val)
   ]
@@ -153,7 +153,7 @@
     -- 1. Track all resources in the context
     -- 2. Ensure each resource is explicitly consumed or passed on
     -- 3. Insert necessary error handling for resources that might be implicitly dropped
-    
+
     body(convert_context(ctx))
   ]
 
@@ -165,7 +165,7 @@
     -- In a real implementation, this would:
     -- 1. Convert linear usage tracking to affine tracking
     -- 2. Insert optional drop operations where resources might not be used
-    
+
     body(convert_context(ctx))
   ]
 
@@ -194,13 +194,13 @@
       -- Transform affine type to unrestricted type
       | { _type: "AffineType" } ->
           affine_to_unrestricted_type(affine_val)
-      
+
       -- Transform affine function to unrestricted function
       | { domain: _, codomain: _ } ->
           [x -> transform_body_unrestricted(affine_val.body, x)]
-      
+
       -- Default for values
-      | _ -> 
+      | _ ->
           -- Simply unwrap affine container
           affine_val.base
   ]
@@ -218,9 +218,9 @@
             unrestricted_to_affine_type(domain_of(f)),
             [x -> f(x)]
           )
-      
+
       -- Default for values
-      | _ -> 
+      | _ ->
           -- Wrap in affine container
           {
             base: unrestricted_val,
@@ -257,7 +257,7 @@
     -- 1. Convert the unrestricted arg to an affine value
     -- 2. Create a suitable affine context
     -- 3. Execute the affine body in this context
-    
+
     body({ bindings: { "x": from_unrestricted(arg) }, used: { "x": false } })
   ]
 
@@ -274,11 +274,11 @@
       -- Affine drop operation becomes Prim.drop, which is a no-op in Prim
       | { _op: "drop", arg: a } ->
           @Prim.drop
-      
+
       -- Other affine-specific operations
       | { _op: "affine_fn" } ->
           @Prim.fn
-      
+
       -- Default - pass through the underlying value
       | _ ->
           extract_base_value(affine_val)
@@ -293,11 +293,11 @@
       -- Functions with affine constraints
       | @Prim.fn ->
           @Affine.affine_fn
-      
+
       -- Handle primitive drop operation
       | @Prim.drop ->
           @Affine.drop
-      
+
       -- Default - wrap in affine container
       | _ ->
           wrap_as_affine(prim_op)
@@ -423,4 +423,4 @@
       | @T.Function(dom, _) -> dom
       | _ -> @T.Any  -- Default if not a function type
   ]
-} 
+}

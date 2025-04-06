@@ -13,7 +13,7 @@
     TaskTransformation
     TaskEffectLifting
     TaskAdjunction
-    
+
     -- Specific transformations
     StateTask
     TimeoutTask
@@ -24,7 +24,7 @@
   op: {
     -- Task transformation operators
     >>^ ^<< |>^
-    
+
     -- Effect lifting operators
     lift_task
   }
@@ -32,13 +32,13 @@
   fn: {
     -- Core transformation functions
     task_transformation task_functor
-    
+
     -- Task effect functions
     lift_effect_to_task transform_task
-    
+
     -- Specific transformations
     add_state add_timeout add_retry add_logging
-    
+
     -- Adjunction functions
     task_adjunction verify_adjunction
   }
@@ -156,7 +156,7 @@
       "SourceTask",
       "TargetTask",
       [a -> a],  -- Objects are preserved
-      [arrow -> 
+      [arrow ->
         @Task.task_arrow(
           arrow.source,
           arrow.target,
@@ -230,7 +230,7 @@
   state_task_lifting: s -> TaskEffectLifting [initial_state ->
     create_task_effect_lifting(
       "StateTask",
-      [task -> 
+      [task ->
         @Task.create_task([->
           let result = @Task.await(task, null, task.scheduler) in
           let state = initial_state in
@@ -260,7 +260,7 @@
   timeout_task_lifting: Z * (a | Null) -> TaskEffectLifting [timeout default_value ->
     create_task_effect_lifting(
       "TimeoutTask",
-      [task -> 
+      [task ->
         @Task.create_task([->
           try {
             @Task.await(task, timeout, task.scheduler)
@@ -293,12 +293,12 @@
   retry_task_lifting: Z * Z * (Any -> Bool) -> TaskEffectLifting [max_attempts delay should_retry ->
     create_task_effect_lifting(
       "RetryTask",
-      [task -> 
+      [task ->
         @Task.create_task([->
           let attempts = 0 in
           let result = null in
           let success = false in
-          
+
           while attempts < max_attempts && !success {
             try {
               result = @Task.await(task, null, task.scheduler)
@@ -312,7 +312,7 @@
               }
             }
           }
-          
+
           result
         ], task.scheduler)
       ],
@@ -341,7 +341,7 @@
     log_start log_success log_error ->
     create_task_effect_lifting(
       "LoggingTask",
-      [task -> 
+      [task ->
         @Task.create_task([->
           log_start(task)
           try {
@@ -383,12 +383,12 @@
       let la = adj.left.map_obj(a) in
       compose(adj.left.map_morph(adj.unit(a)), adj.counit(la)) == identity(la)
     ] in
-    
+
     let right_identity = forall [a ->
       let ra = adj.right.map_obj(a) in
       compose(adj.unit(ra), adj.right.map_morph(adj.counit(a))) == identity(ra)
     ] in
-    
+
     left_identity && right_identity
   ]
 
@@ -413,13 +413,13 @@
   --[[
     Structure mapping that establishes @TaskXf as a category of transformations
     between task categories.
-    
+
     In this categorical structure:
     - Objects are task categories
     - Morphisms are functors between task categories
     - Composition is functor composition
     - Adjunctions capture relationships between different task effect regimes
-    
+
     This structure formalizes how different asynchronous computation effects
     interact and transform into each other.
   ]]--
@@ -431,44 +431,44 @@
     cod: [f -> f.target],
     id: [obj -> task_transformation(obj, obj, [x -> x], [f -> f])],
     compose: [f g -> [x -> g(f(x))]],
-    
+
     -- Task effect lifting structure
     task_effect_liftings: TaskEffectLifting,
     apply_lifting: [el task -> transform_task(el, task)],
     lift: [el task -> lift_effect_to_task(el, task)],
-    
+
     -- Specific task transformations
     state_task: [s -> state_task_lifting(s)],
     timeout_task: [t d -> timeout_task_lifting(t, d)],
     retry_task: [m d p -> retry_task_lifting(m, d, p)],
     logging_task: [start success error -> logging_task_lifting(start, success, error)],
-    
+
     -- Adjunctions between task categories
     adjunctions: TaskAdjunction,
     is_adjunction: [adj -> verify_adjunction(adj)],
-    
+
     -- Laws for task transformations
     law: {
       -- Functor laws
       preserve_id: [tf a ->
         tf.map_morph(identity(a)) == identity(tf.map_obj(a))
       ],
-      
+
       preserve_comp: [tf f g ->
         tf.map_morph(compose(f, g)) == compose(tf.map_morph(f), tf.map_morph(g))
       ],
-      
+
       -- Task effect lifting laws
       lift_pure: [el a scheduler ->
         el.lift(@Task.pure(a, scheduler)) == @Task.pure(a, scheduler)
       ],
-      
+
       -- Adjunction laws
       adjunction_left_identity: [adj a ->
         let la = adj.left.map_obj(a) in
         compose(adj.left.map_morph(adj.unit(a)), adj.counit(la)) == identity(la)
       ],
-      
+
       adjunction_right_identity: [adj a ->
         let ra = adj.right.map_obj(a) in
         compose(adj.unit(ra), adj.right.map_morph(adj.counit(a))) == identity(ra)
@@ -484,25 +484,25 @@
     -- Example 1: Adding timeout to a task
     timeout_example: () -> @Task.Task.Z [->
       let scheduler = @Task.default_scheduler() in
-      
+
       -- Create a task that will take a long time
       let slow_task = @Task.create_task([->
         @Task.yield(1000, scheduler)  -- Simulate a long operation
         42
       ], scheduler) in
-      
+
       -- Add a timeout transformation that returns -1 on timeout
       let timeout_lifting = timeout_task_lifting(500, -1) in
       let with_timeout = lift_effect_to_task(timeout_lifting, slow_task) in
-      
+
       -- The resulting task will timeout and return -1
       with_timeout
     ],
-    
+
     -- Example 2: Adding retry behavior to a task
     retry_example: () -> @Task.Task.S [->
       let scheduler = @Task.default_scheduler() in
-      
+
       -- Create a task that fails on first attempt
       let attempts = 0 in
       let flaky_task = @Task.create_task([->
@@ -513,39 +513,39 @@
           "Success on attempt " + attempts
         }
       ], scheduler) in
-      
+
       -- Add retry behavior
       let retry_lifting = retry_task_lifting(
         5,            -- Max 5 attempts
         100,          -- 100ms delay between retries
         [_ -> true]   -- Always retry on error
       ) in
-      
+
       let with_retry = lift_effect_to_task(retry_lifting, flaky_task) in
-      
+
       -- The resulting task will succeed after retrying
       with_retry
     ],
-    
+
     -- Example 3: Composing task transformations (retry + timeout)
     composed_example: () -> @Task.Task.Z [->
       let scheduler = @Task.default_scheduler() in
-      
+
       -- Create a task
       let base_task = @Task.create_task([->
         @Task.yield(200, scheduler)
         42
       ], scheduler) in
-      
+
       -- Create transformations
       let timeout_lifting = timeout_task_lifting(1000, -1) in
       let retry_lifting = retry_task_lifting(3, 50, [_ -> true]) in
-      
+
       -- Apply transformations in sequence
       let with_timeout = lift_effect_to_task(timeout_lifting, base_task) in
       let with_timeout_and_retry = lift_effect_to_task(retry_lifting, with_timeout) in
-      
+
       with_timeout_and_retry
     ]
   }
-} 
+}

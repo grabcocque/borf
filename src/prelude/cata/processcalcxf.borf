@@ -4,7 +4,7 @@
   This module defines transformations between process calculi categories,
   including functors between LTS categories, bisimulation morphisms,
   and categorical semantics for process calculi operations.
-  
+
   It formalizes the connection between different process semantics
   and provides tools for reasoning about process equivalence.
 ]]--
@@ -15,14 +15,14 @@
     ProcessTransformation
     ProcessFunctor
     BisimulationMorphism
-    
+
     -- Categorical semantics
     PrefixFunctor
     ChoiceFunctor
     ParallelFunctor
     RestrictionFunctor
     ReplicationFunctor
-    
+
     -- Process models
     DomainModel
     PetriNetModel
@@ -40,17 +40,17 @@
     process_transformation
     process_functor
     bisimulation_morphism
-    
+
     -- Semantic mapping functions
     domain_model
     petri_net_model
     event_structure_model
     presheaf_model
-    
+
     -- Categorical operations
     compose_functors
     restrict_functor
-    
+
     -- Equivalence checking
     check_bisimulation
     check_weak_bisimulation
@@ -356,14 +356,14 @@
   restrict_functor: ProcessFunctor * [a] -> ProcessFunctor [functor objects ->
     process_functor(
       "Restricted" + functor.name,
-      [p -> 
+      [p ->
         if contains(objects, p) {
           functor.map_obj(p)
         } else {
           p
         }
       ],
-      [a -> 
+      [a ->
         if contains(objects, a.source) && contains(objects, a.target) {
           functor.map_arrow(a)
         } else {
@@ -454,14 +454,14 @@
         let p_next = @ProcessCalc.step(p, a) in
         if p_next != null {
           let matched = false in
-          
+
           for a_q in q.actions {
             if a.type == a_q.type && (a.channel == a_q.channel || a.type == "tau") {
               let q_next = @ProcessCalc.step(q, a_q) in
               if q_next != null {
                 -- Check if resulting pair is in relation
                 for (p', q') in relation {
-                  if @ProcessCalc.structurally_equal(p', p_next) && 
+                  if @ProcessCalc.structurally_equal(p', p_next) &&
                      @ProcessCalc.structurally_equal(q', q_next) {
                     matched = true
                     break
@@ -473,26 +473,26 @@
               }
             }
           }
-          
+
           if !matched {
             return false
           }
         }
       }
-      
+
       -- Check q's actions
       for a in q.actions {
         let q_next = @ProcessCalc.step(q, a) in
         if q_next != null {
           let matched = false in
-          
+
           for a_p in p.actions {
             if a.type == a_p.type && (a.channel == a_p.channel || a.type == "tau") {
               let p_next = @ProcessCalc.step(p, a_p) in
               if p_next != null {
                 -- Check if resulting pair is in relation
                 for (p', q') in relation {
-                  if @ProcessCalc.structurally_equal(p', p_next) && 
+                  if @ProcessCalc.structurally_equal(p', p_next) &&
                      @ProcessCalc.structurally_equal(q', q_next) {
                     matched = true
                     break
@@ -504,14 +504,14 @@
               }
             }
           }
-          
+
           if !matched {
             return false
           }
         }
       }
     }
-    
+
     true
   ]
 
@@ -525,17 +525,17 @@
         let p_next = @ProcessCalc.step(p, a) in
         if p_next != null {
           let matched = false in
-          
+
           -- For weak bisimulation, allow tau transitions before and after
           -- This is a simplified version that only handles direct matches
           for a_q in q.actions {
-            if (a.type == a_q.type && a.channel == a_q.channel) || 
+            if (a.type == a_q.type && a.channel == a_q.channel) ||
                (a.type == "tau" && a_q.type == "tau") {
               let q_next = @ProcessCalc.step(q, a_q) in
               if q_next != null {
                 -- Check if resulting pair is in relation
                 for (p', q') in relation {
-                  if @ProcessCalc.structurally_equal(p', p_next) && 
+                  if @ProcessCalc.structurally_equal(p', p_next) &&
                      @ProcessCalc.structurally_equal(q', q_next) {
                     matched = true
                     break
@@ -547,27 +547,27 @@
               }
             }
           }
-          
+
           if !matched {
             return false
           }
         }
       }
-      
+
       -- Check q's actions (similar to above)
       for a in q.actions {
         let q_next = @ProcessCalc.step(q, a) in
         if q_next != null {
           let matched = false in
-          
+
           for a_p in p.actions {
-            if (a.type == a_p.type && a.channel == a_p.channel) || 
+            if (a.type == a_p.type && a.channel == a_p.channel) ||
                (a.type == "tau" && a_p.type == "tau") {
               let p_next = @ProcessCalc.step(p, a_p) in
               if p_next != null {
                 -- Check if resulting pair is in relation
                 for (p', q') in relation {
-                  if @ProcessCalc.structurally_equal(p', p_next) && 
+                  if @ProcessCalc.structurally_equal(p', p_next) &&
                      @ProcessCalc.structurally_equal(q', q_next) {
                     matched = true
                     break
@@ -579,14 +579,14 @@
               }
             }
           }
-          
+
           if !matched {
             return false
           }
         }
       }
     }
-    
+
     true
   ]
 
@@ -597,7 +597,7 @@
     -- Get all possible traces for both processes (simplified)
     let p_traces = get_traces(p, []) in
     let q_traces = get_traces(q, []) in
-    
+
     -- Check if each trace in p is also in q
     for p_trace in p_traces {
       let found = false in
@@ -611,7 +611,7 @@
         return false
       }
     }
-    
+
     -- Check if each trace in q is also in p
     for q_trace in q_traces {
       let found = false in
@@ -625,7 +625,7 @@
         return false
       }
     }
-    
+
     true
   ]
 
@@ -634,12 +634,12 @@
   ]]--
   get_traces: @ProcessCalc.Process * [@ProcessCalc.Action] -> [[@ProcessCalc.Action]] [process trace_so_far ->
     let result = [] in
-    
+
     -- Add current trace if it's valid
     if trace_so_far != [] {
       result = result + [trace_so_far]
     }
-    
+
     -- Try to extend the trace with each possible action
     for a in process.actions {
       let next = @ProcessCalc.step(process, a) in
@@ -648,7 +648,7 @@
         result = result + extended_traces
       }
     }
-    
+
     result
   ]
 
@@ -659,17 +659,17 @@
     if Prim.length(t1) != Prim.length(t2) {
       return false
     }
-    
+
     for i in 0..(Prim.length(t1)-1) {
       let a1 = t1[i] in
       let a2 = t2[i] in
-      
-      if a1.type != a2.type || 
+
+      if a1.type != a2.type ||
          (a1.type != "tau" && a1.channel != a2.channel) {
         return false
       }
     }
-    
+
     true
   ]
 
@@ -678,22 +678,22 @@
   --------------------------------------------------
 
   --[[
-    Structure mapping that establishes @ProcessCalcXf as a category of 
+    Structure mapping that establishes @ProcessCalcXf as a category of
     transformations between process categories.
-    
+
     In this categorical structure:
     - Objects are process functors
     - Morphisms are natural transformations between functors
     - Composition is functor composition
-    
-    This captures the essence of transformations between different process 
+
+    This captures the essence of transformations between different process
     calculi models and semantics.
   ]]--
   structure: {
     -- Map ProcessCalcXf to a category
     objects: ProcessFunctor,
     morphisms: [a b -> a -> b],
-    
+
     -- Base category structure
     dom: [f -> f],
     cod: [f -> f],
@@ -703,44 +703,44 @@
       [x -> x]
     )],
     compose: [f g -> compose_functors(f, g)],
-    
+
     -- Process functors for basic operations
     prefix_functor: [a -> prefix_functor(a)],
     choice_functor: [p -> choice_functor(p)],
     parallel_functor: [p -> parallel_functor(p)],
     restriction_functor: [c -> restriction_functor(c)],
     replication_functor: replication_functor,
-    
+
     -- Semantic models
     domain_model: domain_model,
     petri_net_model: petri_net_model,
     event_structure_model: event_structure_model,
     presheaf_model: presheaf_model,
-    
+
     -- Equivalence checks
     bisimulation: check_bisimulation,
     weak_bisimulation: check_weak_bisimulation,
     trace_equivalence: check_trace_equivalence,
-    
+
     -- Laws for process transformations
     law: {
       -- Functor laws
       preserve_id: [fun p ->
-        fun.map_arrow(@ProcessCalc.id_process(p)) == 
+        fun.map_arrow(@ProcessCalc.id_process(p)) ==
         @ProcessCalc.id_process(fun.map_obj(p))
       ],
-      
+
       preserve_comp: [fun f g ->
-        fun.map_arrow(@ProcessCalc.compose_processes(f, g)) == 
+        fun.map_arrow(@ProcessCalc.compose_processes(f, g)) ==
         @ProcessCalc.compose_processes(fun.map_arrow(f), fun.map_arrow(g))
       ],
-      
+
       -- Composition laws
       associativity: [f g h ->
         compose_functors(compose_functors(f, g), h) ==
         compose_functors(f, compose_functors(g, h))
       ],
-      
+
       identity: [f ->
         let id = process_functor(
           "identity",
@@ -749,14 +749,14 @@
         ) in
         compose_functors(f, id) == f && compose_functors(id, f) == f
       ],
-      
+
       -- Process calculus-specific laws
       parallel_commutativity: [p q ->
         let f1 = parallel_functor(q) in
         let f2 = parallel_functor(p) in
         f1.map_obj(p) == f2.map_obj(q)
       ],
-      
+
       choice_commutativity: [p q ->
         let f1 = choice_functor(q) in
         let f2 = choice_functor(p) in
@@ -774,18 +774,18 @@
     ccs_functors_example: () -> ProcessFunctor [->
       -- Create channels
       let a = { name: "a", type: "unit" } in
-      
+
       -- Create action
       let input_a = @ProcessCalc.input(a, null) in
-      
+
       -- Create prefix functor
       let prefix_a = prefix_functor(input_a) in
-      
+
       -- Convert functor to explicit process functor
       process_functor(
         "prefix_a",
         [p -> prefix_map(prefix_a, p)],
-        [arrow -> 
+        [arrow ->
           @ProcessCalc.process_arrow(
             prefix_map(prefix_a, arrow.source),
             prefix_map(prefix_a, arrow.target),
@@ -795,28 +795,28 @@
         ]
       )
     ],
-    
+
     -- Example 2: Composing functors (prefix followed by parallel)
     composing_functors_example: () -> [ProcessFunctor] [->
       -- Create channels
       let a = { name: "a", type: "unit" } in
       let b = { name: "b", type: "unit" } in
-      
+
       -- Create actions
       let input_a = @ProcessCalc.input(a, null) in
-      
+
       -- Create a process
       let Q = @ProcessCalc.prefix(
         @ProcessCalc.input(b, null),
         @ProcessCalc.nil()
       ) in
-      
+
       -- Create functors
       let prefix_a = prefix_functor(input_a) in
       let prefix_a_functor = process_functor(
         "prefix_a",
         [p -> prefix_map(prefix_a, p)],
-        [arrow -> 
+        [arrow ->
           @ProcessCalc.process_arrow(
             prefix_map(prefix_a, arrow.source),
             prefix_map(prefix_a, arrow.target),
@@ -825,12 +825,12 @@
           )
         ]
       ) in
-      
+
       let parallel_Q = parallel_functor(Q) in
       let parallel_Q_functor = process_functor(
         "parallel_Q",
         [p -> parallel_map(parallel_Q, p)],
-        [arrow -> 
+        [arrow ->
           @ProcessCalc.process_arrow(
             parallel_map(parallel_Q, arrow.source),
             parallel_map(parallel_Q, arrow.target),
@@ -839,48 +839,48 @@
           )
         ]
       ) in
-      
+
       -- Compose the functors
       let composed = compose_functors(prefix_a_functor, parallel_Q_functor) in
-      
+
       [prefix_a_functor, parallel_Q_functor, composed]
     ],
-    
+
     -- Example 3: Testing bisimulation using categorical semantics
     bisimulation_example: () -> Bool [->
       -- Create channels
       let a = { name: "a", type: "unit" } in
       let b = { name: "b", type: "unit" } in
-      
+
       -- Create a.0 | b.0
       let P1 = @ProcessCalc.prefix(
         @ProcessCalc.input(a, null),
         @ProcessCalc.nil()
       ) in
-      
+
       let P2 = @ProcessCalc.prefix(
         @ProcessCalc.input(b, null),
         @ProcessCalc.nil()
       ) in
-      
+
       let P = @ProcessCalc.parallel(P1, P2) in
-      
+
       -- Create b.0 | a.0
       let Q1 = @ProcessCalc.prefix(
         @ProcessCalc.input(b, null),
         @ProcessCalc.nil()
       ) in
-      
+
       let Q2 = @ProcessCalc.prefix(
         @ProcessCalc.input(a, null),
         @ProcessCalc.nil()
       ) in
-      
+
       let Q = @ProcessCalc.parallel(Q1, Q2) in
-      
+
       -- Check if P and Q are bisimilar
       let relation = [(P, Q)] in
       check_bisimulation(relation)
     ]
   }
-} 
+}

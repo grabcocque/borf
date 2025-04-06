@@ -4,7 +4,7 @@
   This module defines the category of delimited continuations with shift and reset
   operations. Delimited continuations provide a powerful control mechanism where
   specific portions of a computation can be captured and manipulated.
-  
+
   Unlike regular (undelimited) continuations, delimited continuations represent
   only a portion of the remaining computation up to a specific delimiter.
   This structure is particularly useful for expressing many advanced control
@@ -15,10 +15,10 @@
   typ: {
     -- Core continuation types
     Cont Prompt SubCont
-    
+
     -- Continuation operators
     Shift Reset Control Run
-    
+
     -- Effect tracking
     PromptType AnswerType
   }
@@ -26,7 +26,7 @@
   op: {
     -- Delimited continuation operators
     shift reset
-    
+
     -- Composition operators
     @ @@
   }
@@ -34,13 +34,13 @@
   fn: {
     -- Core continuation functions
     call_cc shift reset control_prompt abort
-    
+
     -- Conversion functions
     cont_to_fun fun_to_cont
-    
+
     -- Composition functions
     compose_cont sequence_cont parallel_cont
-    
+
     -- Utility functions
     prompt prompt_run
   }
@@ -230,11 +230,11 @@
     if f.prompt.id != g.prompt.id {
       error("Cannot compose continuations with different prompts")
     }
-    
+
     if f.result_type != g.answer_type {
       error("Type mismatch in continuation composition")
     }
-    
+
     create_cont(
       [x -> f.body([y -> g.body(y)(x)])],
       g.answer_type,
@@ -250,7 +250,7 @@
     if f.prompt_dst.id != g.prompt_src.id {
       error("Cannot compose sub-continuations: prompt mismatch")
     }
-    
+
     create_subcont(
       [x -> f.body(g.body(x))],
       g.prompt_src,
@@ -307,13 +307,13 @@
 
   --[[
     Structure mapping that establishes @CallCC as a category of delimited continuations.
-    
+
     In this categorical structure:
     - Objects are prompt types (pairs of answer and result types)
     - Morphisms are delimited continuations between prompt types
     - Composition is continuation composition
     - Identity is the identity continuation
-    
+
     This categorical structure captures the computational model of
     delimited continuations, providing a foundation for advanced
     control flow operators.
@@ -322,23 +322,23 @@
     -- Map CallCC to a category
     objects: PromptType,
     morphisms: Cont,
-    
+
     -- Base category structure
     dom: [cont -> { answer: cont.answer_type, result: cont.result_type }],
     cod: [cont -> { answer: cont.prompt.answer_type, result: cont.prompt.result_type }],
     id: [t -> create_cont([k -> k], t.answer, t.result, create_prompt(t.answer, t.result))],
     compose: [f g -> compose_cont(f, g)],
-    
+
     -- Delimited continuation structure
     shift_op: [f prompt -> shift(f, prompt)],
     reset_op: [body prompt -> reset(body, prompt)],
     control_op: [f prompt -> control_prompt(f, prompt)],
     abort_op: [val prompt -> abort(val, prompt)],
-    
+
     -- Prompt structure
     new_prompt: [a r -> create_prompt(a, r)],
     prompt_run: prompt_run,
-    
+
     -- Kleisli structure (connection to continuation effect)
     to_kleisli: [r ->
       @Kleisli.cont_effect(r)
@@ -351,11 +351,11 @@
         [x -> [k -> cont.body([y -> k(y)])(x)]]
       )
     ],
-    
+
     -- Extra composition structures
     sequence: [f g -> sequence_cont(f, g)],
     parallel: [f g -> parallel_cont(f, g)],
-    
+
     -- Laws for delimited continuations
     law: {
       -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
@@ -363,19 +363,19 @@
         compose_cont(compose_cont(f, g), h) ==
         compose_cont(f, compose_cont(g, h))
       ],
-      
+
       -- Identity: id ∘ f = f = f ∘ id
       identity: forall [f ->
         compose_cont(id(dom(f)), f) == f &&
         compose_cont(f, id(cod(f))) == f
       ],
-      
+
       -- Reset-Shift law: reset(shift(f)) = f(id)
       reset_shift: forall [f prompt ->
         reset([-> shift(f, prompt)], prompt) ==
         f([x -> x])
       ],
-      
+
       -- Shift and Subcontinuation
       subcont_law: forall [f k prompt ->
         shift([c -> f(compose_subcont(k, create_subcont(c, prompt, prompt)))], prompt) ==
@@ -392,14 +392,14 @@
     -- Example: Simple state management using delimited continuations
     state_management: () -> Z [->
       let p = create_prompt("StateResult", "StateResult") in
-      
+
       let get = [-> shift([k -> [s -> k(s)(s)]], p)] in
       let put = [s -> shift([k -> [_ -> k(null)(s)]], p)] in
-      
-      let run_state = [init_state f -> 
+
+      let run_state = [init_state f ->
         reset([-> f()], p)(init_state)
       ] in
-      
+
       run_state(42, [->
         let x = get() in
         put(x + 1) |> [_ ->
@@ -408,12 +408,12 @@
       ])
       -- Returns 43
     ],
-    
+
     -- Example: Exception handling with delimited continuations
     exception_handling: () -> S [->
       let p = create_prompt("ExceptionResult", "ExceptionResult") in
-      
-      let try_catch = [body handler -> 
+
+      let try_catch = [body handler ->
         reset([-> body()], p) |> [result ->
           if result is { _type: "Exception", message: m } then
             handler(m)
@@ -421,11 +421,11 @@
             result
         ]
       ] in
-      
-      let throw = [msg -> 
+
+      let throw = [msg ->
         abort({ _type: "Exception", message: msg }, p)
       ] in
-      
+
       try_catch(
         [-> "Result: " + (
           100 / 0 |> [_ -> "Success"]
@@ -435,15 +435,15 @@
       )
       -- Returns "Caught exception: Division by zero"
     ],
-    
+
     -- Example: Cooperative multitasking with delimited continuations
     cooperative_multitasking: () -> [Z] [->
       let p = create_prompt([Z], Z) in
-      
+
       let yield = [value -> shift([k -> k(value) @ [value]], p)] in
-      
+
       let run = [f -> reset([-> f() @ []], p)] in
-      
+
       run([->
         yield(1) |> [_ ->
         yield(2) |> [_ ->
@@ -452,4 +452,4 @@
       -- Returns [1, 2, 3]
     ]
   }
-} 
+}

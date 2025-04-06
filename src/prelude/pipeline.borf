@@ -52,7 +52,7 @@
     measure trace log cache benchmark
 
     -- High-level pipelines
-    process_files safe_pipeline full_pipeline
+    safe_pipeline full_pipeline
     incremental_transform cached_transform syntax_pipeline
   }
 
@@ -333,10 +333,19 @@
   benchmark: [!Pipeline] * a -> [{!Pipeline, metrics: {}}]
 
   -- High-level pipelines
-  process_files: [S] * (S -> S) -> [S]
   safe_pipeline: S -> Result(Any)
   full_pipeline: S -> Result(S)
   incremental_transform: a * (a -> b) * (a -> a -> Bool) * (b -> b -> b) * b -> b
   cached_transform: (a -> b) * (a -> a -> Bool) -> (a -> b)
   syntax_pipeline: S * (Any -> Any) -> Result(Any)
+
+  --[[
+    benchmark provides performance metrics for a pipeline
+  ]]--
+  benchmark: [!Pipeline] * a -> [{!Pipeline, metrics: {}}]
+
+  --[[
+    process_files creates a pipeline for processing files
+  ]]--
+  process_files: [S] * (S -> S) -> [S]
 }

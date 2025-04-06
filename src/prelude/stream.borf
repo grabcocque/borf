@@ -1,0 +1,304 @@
+--[[
+  Streams
+  
+  A friendly, fluent interface for working with generators.
+  This module provides a simpler way to create and manipulate data streams
+  without having to understand the underlying implementation details.
+]]--
+
+@Stream: {
+  typ: {
+    -- Core types
+    Stream
+  }
+
+  op: {}
+
+  fn: {
+    -- Factory functions
+    stream
+    from_array
+    from_range
+    from_function
+    repeat
+    cycle
+    
+    -- Instance methods for Stream
+    map
+    filter
+    take
+    drop
+    skip
+    limit
+    zip
+    concat
+    flatten
+    
+    -- Terminal operations
+    collect
+    to_array
+    reduce
+    for_each
+    find
+    any
+    all
+    count
+    is_empty
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Stream, @Generator, true), -- Add dependency on Generator module
+    (@Stream, @T, true)          -- Add dependency on Type system
+  }
+
+  --------------------------------------------------
+  -- Core Types
+  --------------------------------------------------
+
+  --[[
+    Stream represents a fluent wrapper around a Generator.
+  ]]--
+  Stream: {
+    generator: @Generator.Generator.a
+  }
+
+  --------------------------------------------------
+  -- Factory Functions
+  --------------------------------------------------
+
+  --[[
+    stream creates a new Stream from a Generator.
+  ]]--
+  stream: @Generator.Generator.a -> Stream.a [generator ->
+    {
+      generator: generator
+    }
+  ]
+
+  --[[
+    from_array creates a Stream from an array.
+  ]]--
+  from_array: [a] -> Stream.a [arr ->
+    stream(@Generator.from_array(arr))
+  ]
+
+  --[[
+    from_range creates a Stream from a range of numbers.
+  ]]--
+  from_range: Z * (Z | Null) * Z -> Stream.Z [start end step ->
+    stream(@Generator.range(start, end, step))
+  ]
+
+  --[[
+    from_function creates a Stream from a function.
+  ]]--
+  from_function: (Any -> a | Null) * Any -> Stream.a [fn initial_state ->
+    stream(@Generator.from_function(fn, initial_state))
+  ]
+
+  --[[
+    repeat creates a Stream that repeats a value.
+  ]]--
+  repeat: a * (Z | Null) -> Stream.a [value count ->
+    stream(@Generator.repeat(value, count))
+  ]
+
+  --[[
+    cycle creates a Stream that cycles through an array.
+  ]]--
+  cycle: [a] -> Stream.a [values ->
+    stream(@Generator.cycle(values))
+  ]
+
+  --------------------------------------------------
+  -- Stream Instance Methods
+  --------------------------------------------------
+
+  --[[
+    map applies a function to each value in the Stream.
+  ]]--
+  map: Stream.a * (a -> b) -> Stream.b [strm transform ->
+    stream(@Generator.map(strm.generator, transform))
+  ]
+
+  --[[
+    filter keeps only values that satisfy a predicate.
+  ]]--
+  filter: Stream.a * (a -> Bool) -> Stream.a [strm predicate ->
+    stream(@Generator.filter(strm.generator, predicate))
+  ]
+
+  --[[
+    take limits the Stream to a certain number of values.
+  ]]--
+  take: Stream.a * Z -> Stream.a [strm count ->
+    stream(@Generator.take(strm.generator, count))
+  ]
+
+  --[[
+    drop skips a certain number of values in the Stream.
+  ]]--
+  drop: Stream.a * Z -> Stream.a [strm count ->
+    stream(@Generator.drop(strm.generator, count))
+  ]
+
+  --[[
+    skip is an alias for drop.
+  ]]--
+  skip: Stream.a * Z -> Stream.a [strm count ->
+    drop(strm, count)
+  ]
+
+  --[[
+    limit is an alias for take.
+  ]]--
+  limit: Stream.a * Z -> Stream.a [strm count ->
+    take(strm, count)
+  ]
+
+  --[[
+    zip combines two Streams into one that produces pairs of values.
+  ]]--
+  zip: Stream.a * Stream.b -> Stream.(a * b) [strm1 strm2 ->
+    stream(@Generator.zip(strm1.generator, strm2.generator))
+  ]
+
+  --[[
+    concat appends one Stream to another.
+  ]]--
+  concat: Stream.a * Stream.a -> Stream.a [strm1 strm2 ->
+    stream(strm1.generator ++ strm2.generator)
+  ]
+
+  --[[
+    flatten turns a Stream of Streams into a single Stream.
+  ]]--
+  flatten: Stream.(Stream.a) -> Stream.a [strm ->
+    stream(
+      @Generator.flatMap(
+        strm.generator,
+        [inner_stream -> inner_stream.generator]
+      )
+    )
+  ]
+
+  --------------------------------------------------
+  -- Terminal Operations
+  --------------------------------------------------
+
+  --[[
+    collect gathers all values from a Stream into an array.
+  ]]--
+  collect: Stream.a -> [a] [strm ->
+    @Generator.collect(strm.generator)
+  ]
+
+  --[[
+    to_array is an alias for collect.
+  ]]--
+  to_array: Stream.a -> [a] [strm ->
+    collect(strm)
+  ]
+
+  --[[
+    reduce folds the Stream values into a single result.
+  ]]--
+  reduce: Stream.a * (b * a -> b) * b -> b [strm reducer initial ->
+    @Generator.reduce(strm.generator, reducer, initial)
+  ]
+
+  --[[
+    for_each executes a function for each value in the Stream.
+  ]]--
+  for_each: Stream.a * (a -> ()) -> () [strm fn ->
+    @Generator.for_each(strm.generator, fn)
+  ]
+
+  --[[
+    find searches for a value in the Stream that matches a predicate.
+  ]]--
+  find: Stream.a * (a -> Bool) -> a | Null [strm predicate ->
+    @Generator.find(strm.generator, predicate)
+  ]
+
+  --[[
+    any checks if any value in the Stream satisfies a predicate.
+  ]]--
+  any: Stream.a * (a -> Bool) -> Bool [strm predicate ->
+    @Generator.any(strm.generator, predicate)
+  ]
+
+  --[[
+    all checks if all values in the Stream satisfy a predicate.
+  ]]--
+  all: Stream.a * (a -> Bool) -> Bool [strm predicate ->
+    @Generator.all(strm.generator, predicate)
+  ]
+
+  --[[
+    count returns the number of elements in a Stream.
+  ]]--
+  count: Stream.a -> Z [strm ->
+    @Generator.count(strm.generator)
+  ]
+
+  --[[
+    is_empty checks if a Stream is empty.
+  ]]--
+  is_empty: Stream.a -> Bool [strm ->
+    @Generator.is_empty(strm.generator)
+  ]
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    --[[
+      Example 1: Basic Stream operations
+    ]]--
+    basic_usage: () -> [Z] [->
+      from_range(1, 10, 1)
+        |> [s -> map(s, [x -> x * 2])]
+        |> [s -> filter(s, [x -> x > 5])]
+        |> collect
+    ],
+    
+    --[[
+      Example 2: Combining Streams
+    ]]--
+    combining_streams: () -> [(S * Z)] [->
+      let letters = from_array(["a", "b", "c"]) in
+      let numbers = from_range(1, 4, 1) in
+      
+      zip(letters, numbers)
+        |> collect
+    ],
+    
+    --[[
+      Example 3: Processing a large dataset
+    ]]--
+    process_dataset: () -> Z [->
+      -- Simulate a large dataset
+      let data = from_range(1, 1000000, 1) in
+      
+      -- Process it efficiently
+      data
+        |> [s -> filter(s, [x -> x % 2 == 0])]
+        |> [s -> map(s, [x -> x * x])]
+        |> [s -> reduce(s, [acc x -> acc + x], 0)]
+    ],
+    
+    --[[
+      Example 4: Infinite stream with termination
+    ]]--
+    infinite_stream: () -> Z | Null [->
+      from_function([n -> n * n], 1)
+        |> [s -> find(s, [x -> x > 1000])]
+    ]
+  }
+} 

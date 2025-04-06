@@ -3,7 +3,7 @@
 
   This module defines a categorical framework for process calculi,
   modeling concurrent systems with labeled transition systems (LTS).
-  
+
   It formalizes the connection between operational semantics (LTS)
   and categorical structure, implementing both CCS-like and π-calculus-like
   operations within a categorical framework.
@@ -25,12 +25,12 @@
     Parallel
     Restriction
     Replication
-    
+
     -- LTS structure
     LTS
     Transition
     Trace
-    
+
     -- Bisimulation
     Bisimulation
     Simulation
@@ -39,7 +39,7 @@
   op: {
     -- Process operators
     + | &
-    
+
     -- Action operators
     ! ?
   }
@@ -47,13 +47,13 @@
   fn: {
     -- Process constructors
     nil prefix choice parallel restrict replicate
-    
+
     -- LTS functions
     transition step trace
-    
+
     -- Bisimulation functions
     bisimilar simulates
-    
+
     -- Category structure
     process_arrow compose_processes id_process
   }
@@ -353,14 +353,14 @@
     -- Implement operational semantics based on process type
     match process.constructor {
       "Nil" => null,
-      
-      "Prefix" => 
+
+      "Prefix" =>
         if eq(process.actions[0], action) {
           process.next[0]
         } else {
           null
         },
-      
+
       "Choice" =>
         let left_result = step(process.next[0], action) in
         if left_result != null {
@@ -368,12 +368,12 @@
         } else {
           step(process.next[1], action)
         },
-      
+
       "Parallel" =>
         -- Handle interleaving and communication
         let left = process.next[0] in
         let right = process.next[1] in
-        
+
         -- Try left transition
         let left_result = step(left, action) in
         if left_result != null {
@@ -401,7 +401,7 @@
             null
           }
         },
-      
+
       "Restriction" =>
         if action.channel != process.channels[0] {
           let inner_result = step(process.next[0], action) in
@@ -413,7 +413,7 @@
         } else {
           null
         },
-      
+
       "Replication" =>
         let base_result = step(process.next[0], action) in
         if base_result != null {
@@ -421,7 +421,7 @@
         } else {
           null
         },
-      
+
       _ => null
     }
   ]
@@ -430,7 +430,7 @@
     can_communicate checks if two actions can communicate
   ]]--
   can_communicate: Action * Action -> Bool [a1 a2 ->
-    a1.type == "input" && a2.type == "output" && 
+    a1.type == "input" && a2.type == "output" &&
     a1.channel == a2.channel
   ]
 
@@ -447,7 +447,7 @@
     } else {
       let action = actions[0] in
       let rest = Prim.slice(actions, 1, Prim.length(actions)) in
-      
+
       let next_process = step(process, action) in
       if next_process == null {
         null
@@ -477,17 +477,17 @@
     -- Create bisimulation relation
     let relation = [(p, q)] in
     let to_check = [(p, q)] in
-    
+
     while to_check != [] {
       let (curr_p, curr_q) = to_check[0] in
       to_check = Prim.slice(to_check, 1, Prim.length(to_check))
-      
+
       -- Check p's actions
       for a in curr_p.actions {
         let p_next = step(curr_p, a) in
         if p_next != null {
           let matched = false in
-          
+
           -- Find matching q action
           for a_q in curr_q.actions {
             if a.type == a_q.type && (a.channel == a_q.channel || a.type == "tau") {
@@ -501,30 +501,30 @@
                     break
                   }
                 }
-                
+
                 if !already_related {
                   relation = relation + [(p_next, q_next)]
                   to_check = to_check + [(p_next, q_next)]
                 }
-                
+
                 matched = true
                 break
               }
             }
           }
-          
+
           if !matched {
             return false
           }
         }
       }
-      
+
       -- Check q's actions
       for a in curr_q.actions {
         let q_next = step(curr_q, a) in
         if q_next != null {
           let matched = false in
-          
+
           -- Find matching p action
           for a_p in curr_p.actions {
             if a.type == a_p.type && (a.channel == a_p.channel || a.type == "tau") {
@@ -538,25 +538,25 @@
                     break
                   }
                 }
-                
+
                 if !already_related {
                   relation = relation + [(p_next, q_next)]
                   to_check = to_check + [(p_next, q_next)]
                 }
-                
+
                 matched = true
                 break
               }
             }
           }
-          
+
           if !matched {
             return false
           }
         }
       }
     }
-    
+
     true
   ]
 
@@ -575,17 +575,17 @@
     -- Create simulation relation
     let relation = [(p, q)] in
     let to_check = [(p, q)] in
-    
+
     while to_check != [] {
       let (curr_p, curr_q) = to_check[0] in
       to_check = Prim.slice(to_check, 1, Prim.length(to_check))
-      
+
       -- For each action of p, q must be able to match it
       for a in curr_p.actions {
         let p_next = step(curr_p, a) in
         if p_next != null {
           let matched = false in
-          
+
           -- Find matching q action
           for a_q in curr_q.actions {
             if a.type == a_q.type && (a.channel == a_q.channel || a.type == "tau") {
@@ -599,25 +599,25 @@
                     break
                   }
                 }
-                
+
                 if !already_related {
                   relation = relation + [(p_next, q_next)]
                   to_check = to_check + [(p_next, q_next)]
                 }
-                
+
                 matched = true
                 break
               }
             }
           }
-          
+
           if !matched {
             return false
           }
         }
       }
     }
-    
+
     true
   ]
 
@@ -645,11 +645,11 @@
     if f.target != g.source {
       error("Cannot compose process arrows: target of first must equal source of second")
     }
-    
+
     process_arrow(
       f.source,
       g.target,
-      [label -> 
+      [label ->
         let intermediate = f.label_map(label) in
         if intermediate == null {
           null
@@ -679,13 +679,13 @@
 
   --[[
     Structure mapping that establishes @ProcessCalc as a category of processes.
-    
+
     In this categorical structure:
     - Objects are processes
     - Morphisms are process arrows (transitions or traces)
     - Identity is the empty transition
     - Composition is path concatenation
-    
+
     This captures the essence of LTS as a category, with additional structure
     for the specific process calculi operations.
   ]]--
@@ -693,13 +693,13 @@
     -- Map ProcessCalc to a category
     objects: Process,
     morphisms: ProcessArrow,
-    
+
     -- Base category structure
     dom: [arrow -> arrow.source],
     cod: [arrow -> arrow.target],
     id: [p -> id_process(p)],
     compose: [f g -> compose_processes(f, g)],
-    
+
     -- LTS structure
     lts: [processes labels transitions initial ->
       {
@@ -709,7 +709,7 @@
         initial: initial
       }
     ],
-    
+
     -- Process constructors
     nil: nil,
     prefix: prefix,
@@ -717,20 +717,20 @@
     parallel: parallel,
     restrict: restrict,
     replicate: replicate,
-    
+
     -- Action constructors
     input: input,
     output: output,
     tau: tau,
-    
+
     -- LTS operations
     step: step,
     trace: trace,
-    
+
     -- Equivalence relations
     bisimilar: bisimilar,
     simulates: simulates,
-    
+
     -- Laws for process category
     law: {
       -- Associativity of composition
@@ -738,12 +738,12 @@
         compose_processes(compose_processes(f, g), h) ==
         compose_processes(f, compose_processes(g, h))
       ],
-      
+
       -- Left identity
       left_identity: [f ->
         compose_processes(id_process(f.source), f) == f
       ],
-      
+
       -- Right identity
       right_identity: [f ->
         compose_processes(f, id_process(f.target)) == f
@@ -761,7 +761,7 @@
       -- Create channels
       let a = { name: "a", type: "unit" } in
       let b = { name: "b", type: "unit" } in
-      
+
       -- P = a.b.0
       let P = prefix(
         input(a, null),
@@ -770,34 +770,34 @@
           nil()
         )
       ) in
-      
+
       -- Q = a.0 | b.0
       let Q1 = prefix(
         input(a, null),
         nil()
       ) in
-      
+
       let Q2 = prefix(
         input(b, null),
         nil()
       ) in
-      
+
       let Q = parallel(Q1, Q2) in
-      
+
       -- Return the two processes for comparison
       (P, Q)
     ],
-    
+
     -- Example 2: π-calculus-like processes with name passing
     pi_example: () -> Process [->
       -- Create channels
       let a = { name: "a", type: "channel" } in
       let b = { name: "b", type: "channel" } in
       let c = { name: "c", type: "channel" } in
-      
+
       -- P = a(x).x<b>.0
       let x = { name: "x", type: "channel" } in
-      
+
       let P = prefix(
         input(a, x),
         prefix(
@@ -805,32 +805,32 @@
           nil()
         )
       ) in
-      
+
       -- Q = a<c>.0 | c(y).0
       let Q1 = prefix(
         output(a, c),
         nil()
       ) in
-      
+
       let y = { name: "y", type: "channel" } in
-      
+
       let Q2 = prefix(
         input(c, y),
         nil()
       ) in
-      
+
       let Q = parallel(Q1, Q2) in
-      
+
       -- Full system with restriction: (νc)(P | Q)
       restrict(c, parallel(P, Q))
     ],
-    
+
     -- Example 3: Testing bisimulation
     bisimulation_example: () -> Bool [->
       -- Create channels
       let a = { name: "a", type: "unit" } in
       let b = { name: "b", type: "unit" } in
-      
+
       -- P = a.b.0 + a.c.0
       let P1 = prefix(
         input(a, null),
@@ -839,9 +839,9 @@
           nil()
         )
       ) in
-      
+
       let c = { name: "c", type: "unit" } in
-      
+
       let P2 = prefix(
         input(a, null),
         prefix(
@@ -849,9 +849,9 @@
           nil()
         )
       ) in
-      
+
       let P = choice(P1, P2) in
-      
+
       -- Q = a.(b.0 + c.0)
       let Q_inner = choice(
         prefix(
@@ -863,14 +863,14 @@
           nil()
         )
       ) in
-      
+
       let Q = prefix(
         input(a, null),
         Q_inner
       ) in
-      
+
       -- Check if P and Q are bisimilar
       bisimilar(P, Q)
     ]
   }
-} 
+}

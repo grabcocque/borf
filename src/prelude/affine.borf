@@ -10,13 +10,13 @@
   typ: {
     -- Core affine types
     AffineType AffineFn AffineCtx
-    
+
     -- Type constructors
     Tensor Unit Impl Par Bang
-    
+
     -- Type operations
     TypeOp TypeEquiv TypeSub
-    
+
     -- Proof terms
     Proof Judgment Derivation
   }
@@ -24,10 +24,10 @@
   op: {
     -- Type operators
     ⊗ ⊸ & ⊕ !
-    
+
     -- Judgment operators
     ⊢ ⊣ ⊨
-    
+
     -- Resource tracking
     drop
   }
@@ -37,11 +37,11 @@
     affine_fn affine_app drop
     tensor_intro tensor_elim
     unit_intro unit_elim
-    
+
     -- Context operations
     ctx_empty ctx_extend ctx_merge
     ctx_weaken ctx_contract
-    
+
     -- Proof operations
     derive check infer
     prove subst
@@ -168,7 +168,7 @@
   affine_app: AffineFn * a -> b [fn arg ->
     -- Check that argument is used at most once
     check_affine_usage(arg)
-    
+
     -- Apply the function
     fn.body(arg)
   ]
@@ -181,7 +181,7 @@
     if not resource.weakening {
       error("Cannot drop a resource that does not support weakening")
     }
-    
+
     -- Return unit value to indicate resource was consumed
     ()
   ]
@@ -193,7 +193,7 @@
     -- Check that a and b are used at most once
     check_affine_usage(a)
     check_affine_usage(b)
-    
+
     -- Create tensor product
     (a, b)
   ]
@@ -239,7 +239,7 @@
     if shared != [] {
       error("Cannot merge contexts with shared variables: " + shared)
     }
-    
+
     {
       bindings: ctx1.bindings cup ctx2.bindings,
       used: ctx1.used cup ctx2.used
@@ -255,7 +255,7 @@
     if not typ.weakening {
       error("Cannot weaken variable of type that does not support weakening")
     }
-    
+
     -- Remove variable from context
     {
       bindings: ctx.bindings - var,
@@ -291,7 +291,7 @@
   --[[
     Structure mapping that establishes @Affine as a symmetric monoidal category
     with additional structure for affine mappings.
-    
+
     In this categorical structure:
     - Objects are affine types
     - Morphisms are affine functions between types
@@ -303,64 +303,64 @@
     -- Map Affine to a symmetric monoidal category
     objects: AffineType,
     morphisms: [a b -> AffineFn],
-    
+
     -- Base category structure
     dom: [f -> f.domain],
     cod: [f -> f.codomain],
     id: [a -> affine_fn("x", a, [x -> x])],
     compose: [f g -> affine_fn("x", f.domain, [x -> g(f(x))])],
-    
+
     -- Monoidal structure
     tensor_objects: [a b -> Tensor(a, b)],
-    tensor_morphisms: [f g -> affine_fn("p", Tensor(f.domain, g.domain), [p -> 
-      let (x, y) = p in 
+    tensor_morphisms: [f g -> affine_fn("p", Tensor(f.domain, g.domain), [p ->
+      let (x, y) = p in
       (f(x), g(y))
     ])],
     unit: Unit,
-    
+
     -- Symmetric structure
-    swap: [a b -> affine_fn("p", Tensor(a, b), [p -> 
-      let (x, y) = p in 
+    swap: [a b -> affine_fn("p", Tensor(a, b), [p ->
+      let (x, y) = p in
       (y, x)
     ])],
-    
+
     -- Affine structure (allows weakening)
     discard: [a -> affine_fn("x", a, [x -> drop(x)])],
-    
+
     -- Laws for affine category
     laws: {
       -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
       associativity: forall [f g h ->
         compose(compose(f, g), h) == compose(f, compose(g, h))
       ],
-      
+
       -- Identity: id ∘ f = f = f ∘ id
       identity: forall [f ->
         compose(id(dom(f)), f) == f && compose(f, id(cod(f))) == f
       ],
-      
+
       -- Functoriality of tensor
       tensor_functorial: forall [f1 f2 g1 g2 ->
         tensor_morphisms(compose(f1, f2), compose(g1, g2)) ==
         compose(tensor_morphisms(f1, g1), tensor_morphisms(f2, g2))
       ],
-      
+
       -- Symmetric monoidal coherence
       symmetry: forall [a b ->
         compose(swap(a, b), swap(b, a)) == id(tensor_objects(a, b))
       ],
-      
+
       -- Affine laws (weakening)
       weakening: forall [a f ->
         compose(discard(dom(f)), id(unit)) == compose(f, discard(cod(f)))
       ]
     }
   }
-  
+
   --------------------------------------------------
   -- Example Affine Programs
   --------------------------------------------------
-  
+
   --[[
     Example: Affine file handle usage
   ]]--
@@ -370,20 +370,20 @@
     let open_file = affine_fn("path", { base: "String", affine: false, weakening: true }, [path ->
       { _type: "File", handle: "FileHandle:123" }
     ]) in
-    
+
     -- Use the file and then close it (handle is used exactly once)
     let file = open_file("example.txt") in
-    
+
     -- Read from file (consuming file handle)
     let close_file = affine_fn("file", file_type, [file ->
       -- Close file handle
       ()
     ]) in
-    
+
     -- File is used linearly and then closed
     close_file(file)
   ]
-  
+
   --[[
     Example: Optional resource usage with explicit drop
   ]]--
@@ -393,10 +393,10 @@
     let create_resource = affine_fn("unit", Unit, [unit ->
       { _type: "Resource", data: "ResourceData:456" }
     ]) in
-    
+
     -- Create resource
     let resource = create_resource(()) in
-    
+
     -- Conditional usage with explicit drop if unused
     if condition {
       -- Use resource
@@ -410,4 +410,4 @@
       drop(resource)
     }
   ]
-} 
+}

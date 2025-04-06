@@ -1,0 +1,394 @@
+--[[
+  Stream Transformations
+  
+  This module defines transformations between stream categories,
+  providing compatibility with our naming conventions.
+  
+  While streams are a user-friendly wrapper around generators,
+  maintaining a consistent naming pattern with dedicated transformation
+  modules is valuable for code organization and discoverability.
+]]--
+
+@StreamXf: {
+  typ: {
+    -- Core transformation types
+    StreamFunctor
+    StreamNatTransformation
+    StreamAdjunction
+    
+    -- Special functors
+    MapFunctor
+    FilterFunctor
+    TakeFunctor
+    ZipFunctor
+    FlattenFunctor
+    
+    -- Stream category
+    StreamCategory
+  }
+
+  op: {
+    -- Functor composition
+    ∘
+  }
+
+  fn: {
+    -- Core transformation functions
+    stream_functor
+    stream_nat_transformation
+    stream_adjunction
+    
+    -- Functor constructors
+    map_functor
+    filter_functor
+    take_functor
+    zip_functor
+    flatten_functor
+    
+    -- Functor operations
+    apply_functor
+    compose_functors
+    
+    -- Natural transformation operations
+    apply_nat_transformation
+    vertical_composition
+    horizontal_composition
+    
+    -- Category construction
+    stream_category
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@StreamXf, @GeneratorXf, true), -- Add dependency on GeneratorXf module
+    (@StreamXf, @Stream, true),      -- Add dependency on Stream module
+    (@StreamXf, @Generator, true),   -- Add dependency on Generator module
+    (@StreamXf, @CatXf, true),       -- Add dependency on Category transformations
+    (@StreamXf, @Cat, true),         -- Add dependency on Category
+    (@StreamXf, @T, true)            -- Add dependency on Type system
+  }
+
+  --------------------------------------------------
+  -- Type Aliases from GeneratorXf
+  --------------------------------------------------
+
+  --[[
+    StreamFunctor represents a functor between stream categories.
+    This is an alias for GeneratorFunctor applied to streams.
+  ]]--
+  StreamFunctor: @GeneratorXf.GeneratorFunctor
+
+  --[[
+    StreamNatTransformation represents a natural transformation between stream functors.
+    This is an alias for GeneratorNatTransformation applied to streams.
+  ]]--
+  StreamNatTransformation: @GeneratorXf.GeneratorNatTransformation
+
+  --[[
+    StreamAdjunction represents an adjunction between stream categories.
+    This is an alias for GeneratorAdjunction applied to streams.
+  ]]--
+  StreamAdjunction: @GeneratorXf.GeneratorAdjunction
+
+  --[[
+    MapFunctor represents a functor that maps values in a stream.
+    This is an alias for GeneratorXf.MapFunctor.
+  ]]--
+  MapFunctor: @GeneratorXf.MapFunctor
+
+  --[[
+    FilterFunctor represents a functor that filters values in a stream.
+    This is an alias for GeneratorXf.FilterFunctor.
+  ]]--
+  FilterFunctor: @GeneratorXf.FilterFunctor
+
+  --[[
+    TakeFunctor represents a functor that limits a stream.
+    This is an alias for GeneratorXf.TakeFunctor.
+  ]]--
+  TakeFunctor: @GeneratorXf.TakeFunctor
+
+  --[[
+    ZipFunctor represents a functor that combines two streams.
+    This is an alias for GeneratorXf.ZipFunctor.
+  ]]--
+  ZipFunctor: @GeneratorXf.ZipFunctor
+
+  --[[
+    FlattenFunctor represents a functor that flattens nested streams.
+    This is an alias for GeneratorXf.FlattenFunctor.
+  ]]--
+  FlattenFunctor: @GeneratorXf.FlattenFunctor
+
+  --[[
+    StreamCategory represents a category of streams.
+    This is an alias for GeneratorXf.StreamCategory.
+  ]]--
+  StreamCategory: @GeneratorXf.StreamCategory
+
+  --------------------------------------------------
+  -- Delegating Functions to GeneratorXf
+  --------------------------------------------------
+
+  --[[
+    stream_functor creates a functor between stream categories.
+    This delegates to generator_functor.
+  ]]--
+  stream_functor: S * StreamCategory * StreamCategory * (@Stream.Stream.a -> @Stream.Stream.b) * ((a -> @Generator.GeneratorState.b) -> (c -> @Generator.GeneratorState.d)) -> StreamFunctor [
+    name source_cat target_cat object_map arrow_map ->
+    @GeneratorXf.generator_functor(
+      name,
+      source_cat,
+      target_cat,
+      [stream -> object_map(@Stream.stream(stream.generator)).generator],
+      arrow_map
+    )
+  ]
+
+  --[[
+    stream_nat_transformation creates a natural transformation between stream functors.
+    This delegates to generator_nat_transformation.
+  ]]--
+  stream_nat_transformation: S * StreamFunctor * StreamFunctor * (@Stream.Stream.a -> @Stream.Stream.b) -> StreamNatTransformation [
+    name source_functor target_functor components ->
+    @GeneratorXf.generator_nat_transformation(
+      name,
+      source_functor,
+      target_functor,
+      [gen -> components(@Stream.stream(gen)).generator]
+    )
+  ]
+
+  --[[
+    stream_adjunction creates an adjunction between stream categories.
+    This delegates to generator_adjunction.
+  ]]--
+  stream_adjunction: S * StreamFunctor * StreamFunctor * StreamNatTransformation * StreamNatTransformation -> StreamAdjunction [
+    name left_functor right_functor unit counit ->
+    @GeneratorXf.generator_adjunction(
+      name,
+      left_functor,
+      right_functor,
+      unit,
+      counit
+    )
+  ]
+
+  --[[
+    map_functor creates a functor that maps values in a stream.
+    This delegates to GeneratorXf.map_functor.
+  ]]--
+  map_functor: (a -> b) -> MapFunctor.a.b [transform ->
+    @GeneratorXf.map_functor(transform)
+  ]
+
+  --[[
+    filter_functor creates a functor that filters values in a stream.
+    This delegates to GeneratorXf.filter_functor.
+  ]]--
+  filter_functor: (a -> Bool) -> FilterFunctor.a [predicate ->
+    @GeneratorXf.filter_functor(predicate)
+  ]
+
+  --[[
+    take_functor creates a functor that limits a stream.
+    This delegates to GeneratorXf.take_functor.
+  ]]--
+  take_functor: Z -> TakeFunctor [count ->
+    @GeneratorXf.take_functor(count)
+  ]
+
+  --[[
+    zip_functor creates a functor that combines two streams.
+    This delegates to GeneratorXf.zip_functor after extracting the generator.
+  ]]--
+  zip_functor: @Stream.Stream.b -> ZipFunctor.a.b [second_stream ->
+    @GeneratorXf.zip_functor(second_stream.generator)
+  ]
+
+  --[[
+    flatten_functor creates a functor that flattens nested streams.
+    This delegates to GeneratorXf.flatten_functor.
+  ]]--
+  flatten_functor: () -> FlattenFunctor [->
+    @GeneratorXf.flatten_functor()
+  ]
+
+  --[[
+    apply_functor applies a stream functor to a stream.
+    This delegates to GeneratorXf.apply_functor after extracting the generator,
+    then wraps the result in a Stream.
+  ]]--
+  apply_functor: StreamFunctor * @Stream.Stream.a -> @Stream.Stream.b [functor stream ->
+    @Stream.stream(@GeneratorXf.apply_functor(functor, stream.generator))
+  ]
+
+  --[[
+    compose_functors composes two stream functors.
+    This delegates to GeneratorXf.compose_functors.
+  ]]--
+  compose_functors: StreamFunctor * StreamFunctor -> StreamFunctor [f g ->
+    @GeneratorXf.compose_functors(f, g)
+  ]
+
+  --[[
+    apply_nat_transformation applies a natural transformation to a stream.
+    This delegates to GeneratorXf.apply_nat_transformation after extracting the generator,
+    then wraps the result in a Stream.
+  ]]--
+  apply_nat_transformation: StreamNatTransformation * @Stream.Stream.a -> @Stream.Stream.b [nat stream ->
+    @Stream.stream(@GeneratorXf.apply_nat_transformation(nat, stream.generator))
+  ]
+
+  --[[
+    vertical_composition composes two natural transformations vertically.
+    This delegates to GeneratorXf.vertical_composition.
+  ]]--
+  vertical_composition: StreamNatTransformation * StreamNatTransformation -> StreamNatTransformation [alpha beta ->
+    @GeneratorXf.vertical_composition(alpha, beta)
+  ]
+
+  --[[
+    horizontal_composition composes two natural transformations horizontally.
+    This delegates to GeneratorXf.horizontal_composition.
+  ]]--
+  horizontal_composition: StreamNatTransformation * StreamNatTransformation -> StreamNatTransformation [alpha beta ->
+    @GeneratorXf.horizontal_composition(alpha, beta)
+  ]
+
+  --[[
+    stream_category creates a category of streams.
+    This delegates to GeneratorXf.stream_category.
+  ]]--
+  stream_category: S -> StreamCategory [name ->
+    @GeneratorXf.stream_category(name)
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping to Categorical Semantics
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @StreamXf as a category of 
+    transformations between stream categories.
+    
+    This forwards to the GeneratorXf structure mapping with
+    appropriate adaptations for streams.
+  ]]--
+  structure: {
+    -- Map StreamXf to a category
+    objects: StreamFunctor,
+    morphisms: StreamNatTransformation,
+    
+    -- Base category structure (delegated to GeneratorXf)
+    dom: [nt -> nt.source_functor],
+    cod: [nt -> nt.target_functor],
+    id: [f -> @GeneratorXf.structure.id(f)],
+    compose: [alpha beta -> vertical_composition(alpha, beta)],
+    
+    -- Functor constructors
+    map_functor: map_functor,
+    filter_functor: filter_functor,
+    take_functor: take_functor,
+    zip_functor: zip_functor,
+    flatten_functor: flatten_functor,
+    
+    -- Functor operations
+    apply_functor: apply_functor,
+    compose_functors: compose_functors,
+    
+    -- Category construction
+    stream_category: stream_category,
+    
+    -- Laws are the same as GeneratorXf
+    law: @GeneratorXf.structure.law
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    --[[
+      Example 1: Creating and applying functors to streams
+    ]]--
+    functor_example: () -> @Stream.Stream.Z [->
+      -- Create a stream
+      let numbers = @Stream.from_range(1, 10, 1) in
+      
+      -- Create a map functor
+      let double_functor = map_functor([x -> x * 2]) in
+      
+      -- Apply the specialized functor (converts to generator then back to stream)
+      let gen_result = @GeneratorXf.apply_specialized_functor(
+        double_functor,
+        numbers.generator
+      ) in
+      
+      -- Convert back to stream
+      @Stream.stream(gen_result)
+    ],
+    
+    --[[
+      Example 2: Stream functors with categories
+    ]]--
+    stream_category_example: () -> @Stream.Stream.Z [->
+      -- Create a stream category
+      let stream_cat = stream_category("StreamCat") in
+      
+      -- Create an endofunctor on streams
+      let endo_functor = stream_functor(
+        "StreamEndo",
+        stream_cat,
+        stream_cat,
+        [s -> @Stream.map(s, [x -> x * 3])],
+        [f -> [x -> f(x * 3)]]
+      ) in
+      
+      -- Apply to a stream
+      let numbers = @Stream.from_range(1, 5, 1) in
+      apply_functor(endo_functor, numbers)
+    ],
+    
+    --[[
+      Example 3: Natural transformations between stream functors
+    ]]--
+    nat_transformation_example: () -> @Stream.Stream.Z [->
+      -- Create a stream category
+      let stream_cat = stream_category("StreamCat") in
+      
+      -- Create two endofunctors
+      let double_functor = stream_functor(
+        "Double",
+        stream_cat,
+        stream_cat,
+        [s -> @Stream.map(s, [x -> x * 2])],
+        [f -> [x -> f(x * 2)]]
+      ) in
+      
+      let square_functor = stream_functor(
+        "Square",
+        stream_cat,
+        stream_cat,
+        [s -> @Stream.map(s, [x -> x * x])],
+        [f -> [x -> f(x * x)]]
+      ) in
+      
+      -- Create a natural transformation between them
+      let double_to_square = stream_nat_transformation(
+        "DoubleToSquare",
+        double_functor,
+        square_functor,
+        [s -> s]  -- Identity component with different functors
+      ) in
+      
+      -- Apply to a stream
+      let numbers = @Stream.from_range(1, 5, 1) in
+      let doubled = apply_functor(double_functor, numbers) in
+      apply_nat_transformation(double_to_square, doubled)
+    ]
+  }
+} 

@@ -11,12 +11,12 @@
     -- Core transformation types
     SigmaTransform
     DependencyTransform
-    
+
     -- Specific transformations
     SigmaToProd
     ProdToSigma
     SigmaToExists
-    
+
     -- Context transformations
     ContextTransform
     ProofTransform
@@ -25,10 +25,10 @@
   op: {
     -- Transformation operators
     ==> <== <=> ~~
-    
+
     -- Composition operators
     >>> <<< +++ &&&
-    
+
     -- Dependency operators
     erase reify
   }
@@ -38,14 +38,14 @@
     to_prod from_prod
     to_exists from_exists
     to_pi from_pi
-    
+
     -- Type transformations
     sigma_to_prod_type prod_to_sigma_type
     sigma_to_exists_type exists_to_sigma_type
-    
+
     -- Dependency operations
     erase_dependency reify_dependency
-    
+
     -- Context transformations
     transform_context convert_assumptions
   }
@@ -80,13 +80,13 @@
       -- Transform dependent pair type to product type
       | { _type: "SigmaType" } ->
           sigma_to_prod_type(sigma_val)
-      
+
       -- Transform dependent pair to regular pair
       | { type: typ, fst: first, snd: second } ->
           (erase_dependency_value(first), erase_dependency_value(second))
-      
+
       -- Default for other values
-      | _ -> 
+      | _ ->
           -- Pass through with dependency erased
           erase_dependency_value(sigma_val)
   ]
@@ -100,7 +100,7 @@
       -- Transform product type to dependent pair type
       | { _type: "UnrestrictedType", base: (@T.Product(_, _)) } ->
           prod_to_sigma_type(prod_val)
-      
+
       -- Transform regular pair to dependent pair
       | (first, second) ->
           let sigma_type = infer_sigma_type(first, second) in
@@ -109,9 +109,9 @@
             reify_dependency_value(first),
             reify_dependency_value(second)
           )
-      
+
       -- Default for other values
-      | _ -> 
+      | _ ->
           -- Pass through with trivial dependency added
           reify_dependency_value(prod_val)
   ]
@@ -123,7 +123,7 @@
     -- Extract a representative second type by applying to a placeholder
     let placeholder = create_placeholder(sigma_type.fst_type) in
     let snd_type = sigma_type.snd_type_fn(placeholder) in
-    
+
     {
       base: @T.Product(
         extract_base_type(sigma_type.fst_type),
@@ -140,7 +140,7 @@
   prod_to_sigma_type: @Unrestricted.UnrestrictedType -> @Sigma.SigmaType [prod_type ->
     -- Extract product components
     let (first, second) = extract_product_types(prod_type.base) in
-    
+
     @Sigma.sigma_type(
       "x",
       create_simple_type_expr(first),
@@ -188,13 +188,13 @@
       -- Transform dependent pair type to existential type
       | { _type: "SigmaType", fst_type: { _type: "TypeVar", name: "Type" } } ->
           sigma_to_exists_type(sigma_val)
-      
+
       -- Transform dependent pair with type parameter to existential package
       | { type: typ, fst: t, snd: impl } if is_type(t) ->
           pack_existential(t, impl)
-      
+
       -- Default (not an existential)
-      | _ -> 
+      | _ ->
           to_prod(sigma_val)
   ]
 
@@ -207,14 +207,14 @@
       -- Transform existential type to dependent pair type
       | { _type: "UnrestrictedType", base: (@T.Exists(_, _)) } ->
           exists_to_sigma_type(exists_val)
-      
+
       -- Transform existential package to dependent pair
       | { type_rep: t, impl: v } ->
           let sigma_type = create_existential_sigma_type(t, v) in
           @Sigma.pair(sigma_type, t, v)
-      
+
       -- Default (treat as product)
-      | _ -> 
+      | _ ->
           from_prod(exists_val)
   ]
 
@@ -224,11 +224,11 @@
   sigma_to_exists_type: @Sigma.SigmaType -> @Unrestricted.UnrestrictedType [sigma_type ->
     -- Extract witness type and body type
     let witness_type = extract_base_type(sigma_type.fst_type) in
-    
+
     -- Get a representative of the body type
     let placeholder = create_placeholder(sigma_type.fst_type) in
     let body_type = extract_base_type(sigma_type.snd_type_fn(placeholder)) in
-    
+
     {
       base: @T.Exists(witness_type, body_type),
       weakening: true,
@@ -242,7 +242,7 @@
   exists_to_sigma_type: @Unrestricted.UnrestrictedType -> @Sigma.SigmaType [exists_type ->
     -- Extract existential components
     let (witness_type, body_type) = extract_exists_types(exists_type.base) in
-    
+
     @Sigma.sigma_type(
       "t",
       create_simple_type_expr(witness_type),
@@ -292,11 +292,11 @@
       -- Transform sigma type to pi type
       | { _type: "SigmaType" } ->
           sigma_to_pi_type(sigma_val)
-      
+
       -- Transform dependent pair to dependent function
       | { type: typ, fst: first, snd: second } ->
           curry_dependent_pair(typ, first, second)
-      
+
       -- Default
       | _ ->
           curry_value(sigma_val)
@@ -311,11 +311,11 @@
       -- Transform pi type to sigma type
       | { _type: "PiType" } ->
           pi_to_sigma_type(pi_val)
-      
+
       -- Transform dependent function to dependent pair
       | { type: typ, body: fn } ->
           uncurry_dependent_function(typ, fn)
-      
+
       -- Default
       | _ ->
           uncurry_value(pi_val)
@@ -363,7 +363,7 @@
   uncurry_dependent_function: @Pi.PiType * (a -> b) -> @Sigma.SigmaPair [type fn ->
     -- Choose a representative input
     let input = create_placeholder(type.param_type) in
-    
+
     -- Create the pair
     @Sigma.pair(
       pi_to_sigma_type(type),
@@ -437,7 +437,7 @@
     match type_expr with
       | { base: b } -> b
       | _ -> @T.Any
-    
+
   ]
 
   --[[
@@ -447,7 +447,7 @@
     match type with
       | @T.Product(fst, snd) -> (fst, snd)
       | _ -> (@T.Any, @T.Any)
-    
+
   ]
 
   --[[
@@ -457,7 +457,7 @@
     match type with
       | @T.Exists(witness, body) -> (witness, body)
       | _ -> (@T.Any, @T.Any)
-    
+
   ]
 
   --[[
@@ -655,7 +655,7 @@
         preserves_composition: true
       }
     ],
-    
+
     -- Context transformation to Sigma category
     context_sigma_functor: @CatXf.Functor [
       {
@@ -667,7 +667,7 @@
         preserves_composition: true
       }
     ],
-    
+
     -- Natural transformation connecting the functors
     sigma_context_transform: @CatXf.NaturalTransformation [
       {
@@ -677,7 +677,7 @@
         naturality: true
       }
     ],
-    
+
     -- Connection to the ContextXf structures
     adj_equivalence: @CatXf.NaturalIsomorphism [
       {
@@ -690,14 +690,14 @@
   --------------------------------------------------
   -- Examples of Sigma Transformations
   --------------------------------------------------
-  
+
   --[[
     Example: Transform a subset type to a predicate function
   ]]--
   example.subset_to_predicate: () -> SigmaTransform [->
     -- Get the even numbers subset type from Sigma module
     let even_numbers = @Sigma.example.even_numbers() in
-    
+
     -- Create transform from subset type to predicate function
     {
       source_type: even_numbers,
@@ -710,14 +710,14 @@
       preserves_semantics: true
     }
   ]
-  
+
   --[[
     Example: Transform an existential counter type to a concrete implementation
   ]]--
   example.counter_to_implementation: () -> SigmaTransform [->
     -- Get the counter type from Sigma module
     let counter_type = @Sigma.example.counter() in
-    
+
     -- Create transform from existential counter type to concrete implementation
     {
       source_type: counter_type,
@@ -734,11 +734,11 @@
           )
         )
       ),
-      transform: [existential -> 
+      transform: [existential ->
         let simple_impl = @Sigma.example.simple_counter() in
         (0, ([n -> n + 1], [n -> n]))
       ],
-      inverse: [concrete -> 
+      inverse: [concrete ->
         let (initial, (inc, get)) = concrete in
         @Sigma.pair(
           counter_type,
@@ -749,4 +749,4 @@
       preserves_semantics: true
     }
   ]
-} 
+}

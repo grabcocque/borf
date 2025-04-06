@@ -3,8 +3,8 @@
 
   This module defines the Kleisli arrow category construction.
   A Kleisli arrow from A to B is a function a -> T b, where T is a type constructor
-  representing a computational effect. 
-  
+  representing a computational effect.
+
   Kleisli arrows provide a direct way to compose effectful computations
   without explicitly using monads. This approach focuses on the morphisms
   and their composition rather than the underlying structure.
@@ -16,7 +16,7 @@
     KleisliCategory
     KleisliArrow
     TypeConstructor
-    
+
     -- Specific effect types
     MaybeEffect
     ListEffect
@@ -29,7 +29,7 @@
   op: {
     -- Kleisli composition operators
     <=< >=>
-    
+
     -- Arrow application
     >>> >->
   }
@@ -37,13 +37,13 @@
   fn: {
     -- Core arrow functions
     compose_arrows arr_id pure
-    
+
     -- Effect functions
     apply_effect map_effect sequence_effects
-    
+
     -- Type constructor functions
     create_type_constructor lift_function
-    
+
     -- Specific effects
     maybe_effect list_effect state_effect
     cont_effect reader_effect writer_effect
@@ -230,11 +230,11 @@
     if f.target != g.source {
       error("Cannot compose Kleisli arrows: target of first must equal source of second")
     }
-    
+
     if f.effect.name != g.effect.name {
       error("Cannot compose Kleisli arrows with different effect types")
     }
-    
+
     -- Compose using the bind operation
     create_kleisli_arrow(
       f.source,
@@ -304,12 +304,12 @@
   ]
 
   --[[
-    domain_of gets the domain of a function (placeholder implementation)
+    domain_of gets the domain of a Kleisli arrow function (placeholder implementation)
   ]]--
   domain_of: (a -> b) -> a [f -> null]
 
   --[[
-    codomain_of gets the codomain of a function (placeholder implementation)
+    codomain_of gets the codomain of a Kleisli arrow function (placeholder implementation)
   ]]--
   codomain_of: (a -> b) -> b [f -> null]
 
@@ -328,7 +328,7 @@
   ]
 
   --------------------------------------------------
-  -- Kleisli Arrow Laws
+  -- Category Laws for Kleisli Arrows
   --------------------------------------------------
 
   --[[
@@ -336,21 +336,21 @@
   ]]--
   check_kleisli_laws: TypeConstructor -> Bool [tc ->
     -- Left identity: pure >=> f = f
-    let left_identity_holds = forall [a f -> 
+    let left_identity_holds = forall [a f ->
       compose_arrows(arr_id(tc, a), f) == f
     ] in
-    
+
     -- Right identity: f >=> pure = f
-    let right_identity_holds = forall [f -> 
+    let right_identity_holds = forall [f ->
       compose_arrows(f, arr_id(tc, f.target)) == f
     ] in
-    
+
     -- Associativity: (f >=> g) >=> h = f >=> (g >=> h)
     let associativity_holds = forall [f g h ->
       compose_arrows(compose_arrows(f, g), h) ==
       compose_arrows(f, compose_arrows(g, h))
     ] in
-    
+
     left_identity_holds && right_identity_holds && associativity_holds
   ]
 
@@ -361,19 +361,19 @@
   --[[
     Structure mapping that establishes @Kleisli as a category constructor,
     taking an effect type constructor and producing its Kleisli arrow category.
-    
+
     In this categorical structure:
     - Objects are types
     - Morphisms are functions a -> T b (Kleisli arrows)
     - Composition uses the bind operation of the effect type
     - Identity is the pure function of the effect type
-    
+
     This captures the essence of effectful computation through Kleisli arrows.
   ]]--
   structure: {
     -- Kleisli construction as a category constructor
     category_constructor: [effect -> create_kleisli_category(effect)],
-    
+
     -- Core structure for any Kleisli category
     objects: [kleisli -> kleisli.objects],
     arrows: [kleisli -> kleisli.arrows],
@@ -381,13 +381,13 @@
     cod: [arrow -> arrow.target],
     id: [kleisli a -> arr_id(kleisli.effect, a)],
     compose: [kleisli f g -> kleisli.compose(f, g)],
-    
+
     -- Effect type constructor structure
     effect_pure: [effect -> effect.pure],
     effect_bind: [effect -> effect.bind],
     effect_map: [effect f ta -> effect.bind(ta, [a -> effect.pure(f(a))])],
     effect_join: [effect tta -> effect.bind(tta, [ta -> ta])],
-    
+
     -- Specific effects
     maybe: maybe_effect(),
     list: list_effect(),
@@ -395,34 +395,34 @@
     cont: [r -> cont_effect(r)],
     reader: [e -> reader_effect(e)],
     writer: [w -> writer_effect(w)],
-    
+
     -- Kleisli category properties
     free_extension: true,  -- Kleisli category is the free extension with respect to the effect
-    
+
     -- Kleisli arrow laws
     law: {
       -- Left identity: pure >=> f = f
-      left_identity: [effect a f -> 
+      left_identity: [effect a f ->
         compose_arrows(arr_id(effect, a), f) == f
       ],
-      
+
       -- Right identity: f >=> pure = f
-      right_identity: [effect f -> 
+      right_identity: [effect f ->
         compose_arrows(f, arr_id(effect, f.target)) == f
       ],
-      
+
       -- Associativity: (f >=> g) >=> h = f >=> (g >=> h)
       associativity: [effect f g h ->
         compose_arrows(compose_arrows(f, g), h) ==
         compose_arrows(f, compose_arrows(g, h))
       ],
-      
+
       -- Kleisli category laws
       kleisli_associativity: forall [kleisli f g h ->
         kleisli.compose(kleisli.compose(f, g), h) ==
         kleisli.compose(f, kleisli.compose(g, h))
       ],
-      
+
       kleisli_identity: forall [kleisli f ->
         kleisli.compose(arr_id(kleisli.effect, dom(f)), f) == f &&
         kleisli.compose(f, arr_id(kleisli.effect, cod(f))) == f
@@ -438,23 +438,23 @@
     -- Example of a Kleisli arrow for the Maybe effect
     safe_divide: () -> KleisliArrow [->
       let maybe = maybe_effect() in
-      
+
       create_kleisli_arrow(
         Z * Z,  -- Pair of integers
         Z,      -- Result
         maybe,
-        [(n, d) -> 
-          if d == 0 
-          then null 
+        [(n, d) ->
+          if d == 0
+          then null
           else n / d
         ]
       )
     ],
-    
+
     -- Example of Kleisli composition with the List effect
     flatten_nested_lists: () -> ([Z] -> [[Z]] -> [Z]) [->
       let list = list_effect() in
-      
+
       let singleton = pure(list, [x -> [x]]) in
       let concat = create_kleisli_arrow(
         [[Z]],
@@ -462,21 +462,21 @@
         list,
         [xss -> Prim.fold [acc xs -> acc @ xs] [] xss]
       ) in
-      
+
       -- Compose to get a flattening operation
       let flatten = compose_arrows(singleton, concat) in
-      
+
       -- Return the actual function
-      [xs xss -> 
+      [xs xss ->
         apply_effect(flatten, xs @ xss)
       ]
     ],
-    
+
     -- Example of state management with Kleisli arrows
     counter: () -> KleisliCategory [->
       let state = state_effect(Z) in
       let kat = create_kleisli_category(state) in
-      
+
       -- Define state operations as Kleisli arrows
       let get = create_kleisli_arrow(
         T.Unit,
@@ -484,24 +484,24 @@
         state,
         [_ -> [s -> (s, s)]]
       ) in
-      
+
       let increment = create_kleisli_arrow(
         T.Unit,
         T.Unit,
         state,
         [_ -> [s -> ((), s + 1)]]
       ) in
-      
+
       -- Use Kleisli composition to sequence operations
       let get_after_increment = compose_arrows(increment, get) in
-      
+
       -- Run the composition with initial state 0
       let result = apply_effect(get_after_increment, ())
-      
+
       -- Returns the function: [s -> (s + 1, s + 1)]
       -- When applied with 0: (1, 1)
-      
+
       kat
     ]
   }
-} 
+}

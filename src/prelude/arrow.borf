@@ -1,0 +1,906 @@
+--[[
+  Free Arrow Module - Composable Computation Descriptions
+
+  This module defines free arrows, which are a way to describe computations
+  as data structures that can be interpreted in different ways. Free arrows
+  enable the creation of type-safe, composable domain-specific languages for
+  describing workflows, pipelines, and dataflow.
+]]--
+
+@Arrow: {
+  typ: {
+    !Arrow !Command !Interpreter !ArrowProg
+    !Result !Pipeline !Effect !Domain
+    ArrowRun ArrowPrompt ArrowHandler
+  }
+
+  op: {
+    -- Composition operators
+    >>> +++ *** &&& ||| &&^ |||^ >>> <<<
+    
+    -- Lifting operators
+    ^>> >>^ ^<< <<^
+    
+    -- Effect operators
+    ~> <!> <*> <+> <|>
+  }
+
+  fn: {
+    -- Core arrow operations
+    arrow pure id run interpret
+    
+    -- Arrow combinators
+    compose first second both split
+    fanout fanin left right combine
+    loop feedback iterate retry
+    
+    -- Effect operations
+    effect perform handle try_catch
+    
+    -- Pipeline operations
+    pipeline stage parallel branch fork join
+    
+    -- Domain-specific combinators
+    sequence_steps filter_step map_step fold_step
+    async_step io_step compute_step validate_step
+    
+    -- Interpreter creation
+    make_interpreter compile optimize trace cache
+    
+    -- Laws
+    law.arrow_id law.arrow_compose law.arrow_first
+    law.arrow_association law.arrow_functor
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Arrow, @T, true),         -- Type system
+    (@Arrow, @Cat, true),       -- Category theory
+    (@Arrow, @Pipeline, true),  -- Pipeline abstractions
+    (@Arrow, @Flp, true)        -- Functional programming utilities
+  }
+
+  --------------------------------------------------
+  -- Core Arrow Types
+  --------------------------------------------------
+
+  --[[
+    !Arrow represents a computation from a to b that can be composed
+    in various ways. It's a first-class description of a computation.
+  ]]--
+  !Arrow: {
+    command: !Command,     -- The structure describing the computation
+    _a: T.Type,           -- Phantom type for input
+    _b: T.Type            -- Phantom type for output
+  }
+
+  --[[
+    !Command represents the actual structure of the computation.
+    It's a recursive algebraic data type capturing all possible
+    ways to build up arrow computations.
+  ]]--
+  !Command: !{
+    -- Terminal operations
+    Id: {},
+    Pure: { fn: (a -> b) },
+    
+    -- Sequential flow operations
+    Compose: { first: !Command, second: !Command },
+    
+    -- Parallel flow operations
+    First: { arrow: !Command },
+    Second: { arrow: !Command },
+    
+    -- Branching operations
+    Fanout: { f: !Command, g: !Command },
+    Fanin: { f: !Command, g: !Command },
+    
+    -- Effect operations
+    Effect: { effect_type: S, payload: a },
+    
+    -- Domain-specific operations (examples)
+    FileRead: { path: S },
+    FileWrite: { path: S, content: S },
+    HttpRequest: { url: S, method: S, headers: {S: S}, body: ?S },
+    Compute: { fn: (a -> b) },
+    Validate: { predicate: (a -> Bool), error_msg: S },
+    
+    -- Loop constructs
+    Loop: { body: !Command, condition: (a -> Bool) }
+  }
+
+  --[[
+    !Interpreter is a function that interprets arrow commands
+    in a specific domain, turning descriptions into actions.
+  ]]--
+  !Interpreter: {
+    run: (!Arrow, a) -> b,     -- Run an arrow with an input
+    handle_command: (!Command, a) -> b  -- Handle a specific command
+  }
+
+  --[[
+    !ArrowProg represents a complete arrow-based program
+    with its domain, input and output types.
+  ]]--
+  !ArrowProg: {
+    arrow: !Arrow,        -- The arrow computation
+    domain: !Domain,      -- The domain of the computation
+    input_type: T.Type,   -- Input type
+    output_type: T.Type   -- Output type
+  }
+
+  --[[
+    !Result represents the result of running an arrow
+  ]]--
+  !Result: !{
+    Success: { value: a },
+    Failure: { error: S }
+  }
+
+  --[[
+    !Pipeline represents a multi-stage computation
+  ]]--
+  !Pipeline: {
+    stages: [!Arrow],     -- Sequence of stages
+    _a: T.Type,           -- Input type
+    _b: T.Type            -- Output type
+  }
+
+  --[[
+    !Effect represents a side effect that can be performed
+  ]]--
+  !Effect: {
+    type: S,              -- Effect type identifier
+    payload: a,           -- Effect payload
+    handler: (a -> b)     -- Effect handler function
+  }
+
+  --[[
+    !Domain represents a domain for arrow interpretation
+  ]]--
+  !Domain: {
+    name: S,
+    effects: [!Effect],
+    interpreters: {S: !Interpreter}
+  }
+
+  --[[
+    ArrowRun is a type for arrow execution functions
+  ]]--
+  ArrowRun: a b -> T.Type_0
+
+  --------------------------------------------------
+  -- Core Arrow Operations
+  --------------------------------------------------
+
+  --[[
+    arrow creates a new arrow from a command
+  ]]--
+  arrow: S * (a -> b) -> !Arrow [name f ->
+    {
+      command: !Command.Pure { fn: f },
+      _a: typeof(a),
+      _b: typeof(b)
+    }
+  ]
+
+  --[[
+    pure lifts a regular function into an arrow
+  ]]--
+  pure: (a -> b) -> !Arrow [f ->
+    {
+      command: !Command.Pure { fn: f },
+      _a: typeof(a),
+      _b: typeof(b)
+    }
+  ]
+
+  --[[
+    id creates an identity arrow
+  ]]--
+  id: () -> !Arrow [->
+    {
+      command: !Command.Id {},
+      _a: typeof(a),
+      _b: typeof(a)
+    }
+  ]
+
+  --[[
+    run executes an arrow with a given input
+  ]]--
+  run: !Arrow * a -> b [arr a ->
+    -- In a real implementation, this would pattern match on the command
+    -- and recursively interpret it correctly
+    match arr.command with
+      | !Command.Id {} -> a
+      | !Command.Pure { fn } -> fn(a)
+      | !Command.Compose { first, second } -> 
+          let mid_result = run({ command: first, _a: arr._a, _b: typeof(mid_result) }, a) in
+          run({ command: second, _a: typeof(mid_result), _b: arr._b }, mid_result)
+      | !Command.First { arrow } ->
+          let (x, y) = a in
+          let x2 = run({ command: arrow, _a: typeof(x), _b: typeof(x2) }, x) in
+          (x2, y)
+      | !Command.Second { arrow } ->
+          let (x, y) = a in
+          let y2 = run({ command: arrow, _a: typeof(y), _b: typeof(y2) }, y) in
+          (x, y2)
+      | !Command.Fanout { f, g } ->
+          let result1 = run({ command: f, _a: arr._a, _b: typeof(result1) }, a) in
+          let result2 = run({ command: g, _a: arr._a, _b: typeof(result2) }, a) in
+          (result1, result2)
+      | !Command.Fanin { f, g } ->
+          match a with
+            | Left(x) -> run({ command: f, _a: typeof(x), _b: arr._b }, x)
+            | Right(y) -> run({ command: g, _a: typeof(y), _b: arr._b }, y)
+      | !Command.Effect { effect_type, payload } ->
+          -- In a real implementation, this would dispatch to registered effect handlers
+          error("Unhandled effect: " + effect_type)
+      | _ -> error("Command not implemented")
+  ]
+
+  --[[
+    interpret interprets an arrow with a specific interpreter
+  ]]--
+  interpret: !Interpreter * !Arrow * a -> b [interpreter arr a ->
+    interpreter.run(arr, a)
+  ]
+
+  --------------------------------------------------
+  -- Arrow Combinators
+  --------------------------------------------------
+
+  --[[
+    compose sequentially composes two arrows
+  ]]--
+  compose: !Arrow * !Arrow -> !Arrow [f g ->
+    {
+      command: !Command.Compose { first: f.command, second: g.command },
+      _a: f._a,
+      _b: g._b
+    }
+  ]
+
+  --[[
+    first lifts an arrow to work on the first component of a pair
+  ]]--
+  first: !Arrow -> !Arrow [f ->
+    {
+      command: !Command.First { arrow: f.command },
+      _a: (f._a, c),
+      _b: (f._b, c)
+    }
+  ]
+
+  --[[
+    second lifts an arrow to work on the second component of a pair
+  ]]--
+  second: !Arrow -> !Arrow [f ->
+    {
+      command: !Command.Second { arrow: f.command },
+      _a: (c, f._a),
+      _b: (c, f._b)
+    }
+  ]
+
+  --[[
+    both applies two arrows in parallel to the components of a pair
+  ]]--
+  both: !Arrow * !Arrow -> !Arrow [f g ->
+    {
+      command: !Command.Compose { 
+        first: !Command.First { arrow: f.command },
+        second: !Command.Second { arrow: g.command }
+      },
+      _a: (f._a, g._a),
+      _b: (f._b, g._b)
+    }
+  ]
+
+  --[[
+    split is an alias for both
+  ]]--
+  split: !Arrow * !Arrow -> !Arrow [f g ->
+    both(f, g)
+  ]
+
+  --[[
+    fanout applies two arrows to the same input
+  ]]--
+  fanout: !Arrow * !Arrow -> !Arrow [f g ->
+    {
+      command: !Command.Fanout { f: f.command, g: g.command },
+      _a: f._a, -- assuming f._a == g._a
+      _b: (f._b, g._b)
+    }
+  ]
+
+  --[[
+    fanin applies either of two arrows based on the input type
+  ]]--
+  fanin: !Arrow * !Arrow -> !Arrow [f g ->
+    {
+      command: !Command.Fanin { f: f.command, g: g.command },
+      _a: Either f._a g._a,
+      _b: f._b -- assuming f._b == g._b
+    }
+  ]
+
+  --[[
+    left lifts an arrow to work on the Left component of an Either
+  ]]--
+  left: !Arrow -> !Arrow [f ->
+    {
+      command: !Command.Compose {
+        first: !Command.Fanin {
+          f: f.command,
+          g: !Command.Id {}
+        },
+        second: !Command.Pure { fn: [x -> match x with
+          | Left(a) -> Left(a)
+          | Right(c) -> Right(c)
+        ]}
+      },
+      _a: Either f._a c,
+      _b: Either f._b c
+    }
+  ]
+
+  --[[
+    right lifts an arrow to work on the Right component of an Either
+  ]]--
+  right: !Arrow -> !Arrow [f ->
+    {
+      command: !Command.Compose {
+        first: !Command.Fanin {
+          f: !Command.Id {},
+          g: f.command
+        },
+        second: !Command.Pure { fn: [x -> match x with
+          | Left(c) -> Left(c)
+          | Right(b) -> Right(b)
+        ]}
+      },
+      _a: Either c f._a,
+      _b: Either c f._b
+    }
+  ]
+
+  --[[
+    combine two arrows with a combining function
+  ]]--
+  combine: !Arrow * !Arrow * ((b, c) -> d) -> !Arrow [f g combine_fn ->
+    {
+      command: !Command.Compose {
+        first: !Command.Fanout { f: f.command, g: g.command },
+        second: !Command.Pure { fn: [(b, c) -> combine_fn(b, c)] }
+      },
+      _a: f._a, -- assuming f._a == g._a
+      _b: typeof(d)
+    }
+  ]
+
+  --[[
+    loop creates a feedback loop in an arrow computation
+  ]]--
+  loop: !Arrow * (b -> Bool) -> !Arrow [body condition ->
+    {
+      command: !Command.Loop { body: body.command, condition: condition },
+      _a: body._a,
+      _b: body._b
+    }
+  ]
+
+  --[[
+    feedback creates a feedback connection in an arrow computation
+  ]]--
+  feedback: !Arrow * b -> !Arrow [f init ->
+    -- This is a simplistic implementation; proper feedback is more complex
+    {
+      command: !Command.Compose {
+        first: !Command.Pure { fn: [a -> (a, init)] },
+        second: !Command.Loop {
+          body: !Command.Compose {
+            first: f.command,
+            second: !Command.Pure { fn: [(b, c) -> (b, b)] }
+          },
+          condition: [(a, b) -> false] -- Simplified: only runs once
+        }
+      },
+      _a: f._a,
+      _b: f._b
+    }
+  ]
+
+  --[[
+    iterate creates an iterative computation with an arrow
+  ]]--
+  iterate: !Arrow * (b -> Bool) * (b -> a) -> !Arrow [f continue extract ->
+    {
+      command: !Command.Compose {
+        first: !Command.Loop {
+          body: f.command,
+          condition: continue
+        },
+        second: !Command.Pure { fn: [b -> extract(b)] }
+      },
+      _a: f._a,
+      _b: typeof(extract(f._b))
+    }
+  ]
+
+  --[[
+    retry creates a computation that retries on failure
+  ]]--
+  retry: !Arrow * Z * (b -> Bool) -> !Arrow [f max_attempts is_failure ->
+    -- Simplified implementation
+    {
+      command: !Command.Compose {
+        first: !Command.Pure { fn: [a -> (a, 0)] },
+        second: !Command.Loop {
+          body: !Command.Compose {
+            first: !Command.First { arrow: f.command },
+            second: !Command.Pure { fn: [(result, attempts) ->
+              if is_failure(result) and attempts < max_attempts {
+                (result, attempts + 1)
+              } else {
+                (result, max_attempts)
+              }
+            ]}
+          },
+          condition: [(result, attempts) -> is_failure(result) and attempts < max_attempts]
+        }
+      },
+      _a: f._a,
+      _b: f._b
+    }
+  ]
+
+  --------------------------------------------------
+  -- Effect Operations
+  --------------------------------------------------
+
+  --[[
+    effect creates an effect arrow
+  ]]--
+  effect: S * a -> !Arrow [effect_type payload ->
+    {
+      command: !Command.Effect { effect_type: effect_type, payload: payload },
+      _a: typeof(unit),
+      _b: typeof(b) -- The eventual result type, determined by the effect handler
+    }
+  ]
+
+  --[[
+    perform runs an effect
+  ]]--
+  perform: !Effect * a -> b [effect payload ->
+    effect.handler(payload)
+  ]
+
+  --[[
+    handle creates an effect handler
+  ]]--
+  handle: S * (a -> b) -> !Effect [effect_type handler ->
+    {
+      type: effect_type,
+      payload: typeof(a),
+      handler: handler
+    }
+  ]
+
+  --[[
+    try_catch wraps an arrow with error handling
+  ]]--
+  try_catch: !Arrow * !Arrow -> !Arrow [try_arrow catch_arrow ->
+    {
+      command: !Command.Compose {
+        first: !Command.Pure { fn: [a -> Right(a)] },
+        second: !Command.Fanin {
+          f: !Command.Compose {
+            first: !Command.Pure { fn: [a -> a] },
+            second: catch_arrow.command
+          },
+          g: !Command.Compose {
+            first: try_arrow.command,
+            second: !Command.Pure { fn: [b -> Right(b)] }
+          }
+        }
+      },
+      _a: try_arrow._a,
+      _b: try_arrow._b -- assuming try_arrow._b == catch_arrow._b
+    }
+  ]
+
+  --------------------------------------------------
+  -- Pipeline Operations
+  --------------------------------------------------
+
+  --[[
+    pipeline creates a pipeline from a sequence of arrows
+  ]]--
+  pipeline: [!Arrow] -> !Pipeline [arrows ->
+    {
+      stages: arrows,
+      _a: arrows[0]._a,
+      _b: arrows[arrows.length - 1]._b
+    }
+  ]
+
+  --[[
+    stage adds a stage to a pipeline
+  ]]--
+  stage: !Pipeline * !Arrow -> !Pipeline [pipe arrow ->
+    {
+      stages: pipe.stages + [arrow],
+      _a: pipe._a,
+      _b: arrow._b
+    }
+  ]
+
+  --[[
+    parallel creates a parallel computation
+  ]]--
+  parallel: [!Arrow] -> !Arrow [arrows ->
+    -- This is a simplified implementation that just pairs all results
+    -- A proper implementation would need to be more sophisticated
+    let arrow_array_to_tuple = [arr -> 
+      -- This would convert array of arrows to an arrow returning a tuple of results
+      -- Simplified for this example
+      arr[0]
+    ] in
+    arrow_array_to_tuple(arrows)
+  ]
+
+  --[[
+    branch creates a branching computation
+  ]]--
+  branch: (a -> Bool) * !Arrow * !Arrow -> !Arrow [condition true_arrow false_arrow ->
+    {
+      command: !Command.Compose {
+        first: !Command.Pure { fn: [a -> if condition(a) { Left(a) } else { Right(a) }] },
+        second: !Command.Fanin {
+          f: true_arrow.command,
+          g: false_arrow.command
+        }
+      },
+      _a: true_arrow._a, -- assuming true_arrow._a == false_arrow._a
+      _b: true_arrow._b  -- assuming true_arrow._b == false_arrow._b
+    }
+  ]
+
+  --[[
+    fork creates multiple parallel computations
+  ]]--
+  fork: !Arrow * [!Arrow] -> [!Arrow] [input branches ->
+    branches |> map [branch ->
+      compose(input, branch)
+    ]
+  ]
+
+  --[[
+    join combines multiple arrows into one
+  ]]--
+  join: [!Arrow] * (([b]) -> c) -> !Arrow [arrows combiner ->
+    -- Simplified implementation
+    {
+      command: !Command.Compose {
+        first: !Command.Pure { fn: [a -> 
+          -- Run each arrow with the input
+          -- This would actually need to be done via the interpreter
+          arrows |> map [arr -> a]
+        ]},
+        second: !Command.Pure { fn: [results -> combiner(results)] }
+      },
+      _a: arrows[0]._a, -- assuming all have same input type
+      _b: typeof(c)
+    }
+  ]
+
+  --------------------------------------------------
+  -- Domain-Specific Combinators
+  --------------------------------------------------
+
+  --[[
+    sequence_steps combines multiple steps sequentially
+  ]]--
+  sequence_steps: [!Arrow] -> !Arrow [steps ->
+    -- Fold the steps with compose
+    match steps with
+      | [] -> id()
+      | [step] -> step
+      | [first @ rest] -> 
+          rest |> fold [result step -> compose(result, step)] first
+  ]
+
+  --[[
+    filter_step creates a step that filters values
+  ]]--
+  filter_step: (a -> Bool) -> !Arrow [predicate ->
+    {
+      command: !Command.Pure { fn: [a -> 
+        if predicate(a) { ?Some(a) } else { ?None }
+      ]},
+      _a: typeof(a),
+      _b: typeof(?a)
+    }
+  ]
+
+  --[[
+    map_step creates a step that maps values
+  ]]--
+  map_step: (a -> b) -> !Arrow [f ->
+    pure(f)
+  ]
+
+  --[[
+    fold_step creates a step that folds a collection
+  ]]--
+  fold_step: (b, a -> b) * b -> !Arrow [f init ->
+    {
+      command: !Command.Pure { fn: [as -> 
+        as |> fold [result a -> f(result, a)] init
+      ]},
+      _a: typeof([a]),
+      _b: typeof(b)
+    }
+  ]
+
+  --[[
+    async_step creates an asynchronous computation step
+  ]]--
+  async_step: (a -> promise<b>) -> !Arrow [f ->
+    {
+      command: !Command.Effect { 
+        effect_type: "async", 
+        payload: f
+      },
+      _a: typeof(a),
+      _b: typeof(b)
+    }
+  ]
+
+  --[[
+    io_step creates an IO computation step
+  ]]--
+  io_step: S * (a -> b) -> !Arrow [io_type f ->
+    {
+      command: !Command.Effect { 
+        effect_type: "io:" + io_type, 
+        payload: f
+      },
+      _a: typeof(a),
+      _b: typeof(b)
+    }
+  ]
+
+  --[[
+    compute_step creates a pure computation step
+  ]]--
+  compute_step: (a -> b) -> !Arrow [f ->
+    {
+      command: !Command.Compute { fn: f },
+      _a: typeof(a),
+      _b: typeof(b)
+    }
+  ]
+
+  --[[
+    validate_step creates a validation step
+  ]]--
+  validate_step: (a -> Bool) * S -> !Arrow [predicate error_msg ->
+    {
+      command: !Command.Validate { predicate: predicate, error_msg: error_msg },
+      _a: typeof(a),
+      _b: !Result
+    }
+  ]
+
+  --------------------------------------------------
+  -- Interpreter Creation
+  --------------------------------------------------
+
+  --[[
+    make_interpreter creates a new interpreter
+  ]]--
+  make_interpreter: ((!Command, a) -> b) -> !Interpreter [handler ->
+    {
+      run: [arrow input -> handler(arrow.command, input)],
+      handle_command: handler
+    }
+  ]
+
+  --[[
+    compile creates an optimized version of an arrow
+  ]]--
+  compile: !Arrow -> !Arrow [arr ->
+    -- In a real implementation, this would apply optimization rules
+    -- For now, we just return the original arrow
+    arr
+  ]
+
+  --[[
+    optimize applies optimization rules to an arrow
+  ]]--
+  optimize: !Arrow -> !Arrow [arr ->
+    -- This would apply various optimizations like fusion
+    -- For simplicity, we just return the arrow
+    arr
+  ]
+
+  --[[
+    trace creates a tracing interpreter
+  ]]--
+  trace: !Interpreter -> !Interpreter [base_interpreter ->
+    {
+      run: [arrow input -> 
+        println("Running arrow: " + to_string(arrow._a) + " -> " + to_string(arrow._b));
+        let result = base_interpreter.run(arrow, input);
+        println("Result: " + to_string(result));
+        result
+      ],
+      handle_command: [cmd input ->
+        println("Handling command: " + to_string(cmd));
+        base_interpreter.handle_command(cmd, input)
+      ]
+    }
+  ]
+
+  --[[
+    cache creates a caching interpreter
+  ]]--
+  cache: !Interpreter -> !Interpreter [base_interpreter ->
+    -- This is a simplified version; a real one would need a cache data structure
+    {
+      run: base_interpreter.run,
+      handle_command: base_interpreter.handle_command
+    }
+  ]
+
+  --------------------------------------------------
+  -- Operators
+  --------------------------------------------------
+
+  --[[
+    >>> is sequential composition
+  ]]--
+  >>>: !Arrow * !Arrow -> !Arrow [f g ->
+    compose(f, g)
+  ]
+
+  --[[
+    +++ is parallel composition on sum types
+  ]]--
+  +++: !Arrow * !Arrow -> !Arrow [f g ->
+    {
+      command: !Command.Compose {
+        first: !Command.Fanin {
+          f: !Command.Compose {
+            first: f.command,
+            second: !Command.Pure { fn: [b -> Left(b)] }
+          },
+          g: !Command.Compose {
+            first: g.command,
+            second: !Command.Pure { fn: [c -> Right(c)] }
+          }
+        },
+        second: !Command.Id {}
+      },
+      _a: Either f._a g._a,
+      _b: Either f._b g._b
+    }
+  ]
+
+  --[[
+    *** is parallel composition on product types
+  ]]--
+  ***: !Arrow * !Arrow -> !Arrow [f g ->
+    both(f, g)
+  ]
+
+  --[[
+    &&& is fan out composition
+  ]]--
+  &&&: !Arrow * !Arrow -> !Arrow [f g ->
+    fanout(f, g)
+  ]
+
+  --[[
+    ||| is fan in composition
+  ]]--
+  |||: !Arrow * !Arrow -> !Arrow [f g ->
+    fanin(f, g)
+  ]
+
+  --------------------------------------------------
+  -- Laws
+  --------------------------------------------------
+
+  --[[
+    Arrow Identity Law: arr id >>> f = f = f >>> arr id
+  ]]--
+  law.arrow_id: !Arrow -> Bool [f ->
+    compose(pure([x -> x]), f) == f && compose(f, pure([x -> x])) == f
+  ]
+
+  --[[
+    Arrow Composition Law: arr (f >>> g) = arr f >>> arr g
+  ]]--
+  law.arrow_compose: (a -> b) * (b -> c) -> Bool [f g ->
+    pure([a -> g(f(a))]) == compose(pure(f), pure(g))
+  ]
+
+  --[[
+    Arrow First Law: first (arr f) = arr (first f)
+  ]]--
+  law.arrow_first: (a -> b) -> Bool [f ->
+    first(pure(f)) == pure([(a, c) -> (f(a), c)])
+  ]
+
+  --[[
+    Arrow Association Law: first (first f) >>> arr assoc = arr assoc >>> first f
+    where assoc ((a,b),c) = (a,(b,c))
+  ]]--
+  law.arrow_association: !Arrow -> Bool [f ->
+    let assoc = [(ab, c) -> 
+      let (a, b) = ab in
+      (a, (b, c))
+    ] in
+    let assoc_inv = [(a, bc) -> 
+      let (b, c) = bc in
+      ((a, b), c)
+    ] in
+    compose(first(first(f)), pure(assoc)) == compose(pure(assoc_inv), first(f))
+  ]
+
+  --[[
+    Arrow Functor Law: arr (f >>> g) = arr f >>> arr g
+  ]]--
+  law.arrow_functor: (a -> b) * (b -> c) -> Bool [f g ->
+    pure([a -> g(f(a))]) == compose(pure(f), pure(g))
+  ]
+
+  --------------------------------------------------
+  -- Utility Functions
+  --------------------------------------------------
+
+  --[[
+    fold helper function
+  ]]--
+  fold: [a] * (b, a -> b) * b -> b [xs f init ->
+    match xs with
+      | [] -> init
+      | [x @ rest] -> fold(rest, f, f(init, x))
+  ]
+
+  --[[
+    map helper function
+  ]]--
+  map: [a] * (a -> b) -> [b] [xs f ->
+    match xs with
+      | [] -> []
+      | [x @ rest] -> [f(x)] + map(rest, f)
+  ]
+
+  --[[
+    to_string helper function
+  ]]--
+  to_string: a -> S [x ->
+    -- Simplified implementation
+    "value"
+  ]
+
+  --[[
+    println helper function
+  ]]--
+  println: S -> () [s ->
+    -- In a real implementation, this would print to console
+    {}
+  ]
+} 
