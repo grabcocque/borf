@@ -1,9 +1,9 @@
 --[[
   Optics Transformations
-  
+
   This module defines transformations between optics and other categorical structures,
   including functors, natural transformations, and adjunctions.
-  
+
   It provides the categorical foundation for optic composition and transformation.
 ]]--
 
@@ -13,13 +13,13 @@
     OpticFunctor
     OpticNatTransformation
     OpticAdjunction
-    
+
     -- Categories of optics
     LensCategory
     PrismCategory
     IsoCategory
     TraversalCategory
-    
+
     -- Special functors
     LensToOptionalFunctor
     PrismToOptionalFunctor
@@ -40,27 +40,27 @@
     iso_category
     traversal_category
     optional_category
-    
+
     -- Functor constructors
     lens_to_optional_functor
     prism_to_optional_functor
     lens_to_traversal_functor
     iso_to_lens_functor
     iso_to_prism_functor
-    
+
     -- Natural transformation constructors
     lens_to_traversal_nt
     optional_to_traversal_nt
-    
+
     -- Adjunction constructors
     lens_optional_adjunction
     prism_optional_adjunction
-    
+
     -- Profunctor operations
     dimap
     lmap
     rmap
-    
+
     -- Utility functions
     compose_functors
     compose_nat_transformations
@@ -204,13 +204,13 @@
       name: name,
       objects: [],
       morphisms: [],
-      id: [a -> 
+      id: [a ->
         @Optics.lens(
           [x -> x],
           [_ x -> x]
         )
       ],
-      compose: [l1 l2 -> 
+      compose: [l1 l2 ->
         @Optics.lens(
           [s -> l2.get(l1.get(s))],
           [s a -> l1.set(s, l2.set(l1.get(s), a))]
@@ -227,13 +227,13 @@
       name: name,
       objects: [],
       morphisms: [],
-      id: [a -> 
+      id: [a ->
         @Optics.prism(
           [x -> x],
           [x -> x]
         )
       ],
-      compose: [p1 p2 -> 
+      compose: [p1 p2 ->
         @Optics.prism(
           [s -> {
             let inner = p1.preview(s) in
@@ -253,13 +253,13 @@
       name: name,
       objects: [],
       morphisms: [],
-      id: [a -> 
+      id: [a ->
         @Optics.iso(
           [x -> x],
           [x -> x]
         )
       ],
-      compose: [i1 i2 -> 
+      compose: [i1 i2 ->
         @Optics.iso(
           [s -> i2.from(i1.from(s))],
           [a -> i1.to(i2.to(a))]
@@ -276,50 +276,50 @@
       name: name,
       objects: [],
       morphisms: [],
-      id: [a -> 
+      id: [a ->
         @Optics.traversal(
           [x -> [x]],
           [x _ -> x]
         )
       ],
-      compose: [t1 t2 -> 
+      compose: [t1 t2 ->
         @Optics.traversal(
           [s -> {
             let collected = t1.collect(s) in
             let result = [] in
-            
+
             for item in collected {
               result = result + t2.collect(item)
             }
-            
+
             result
           }],
           [s as -> {
             let collected = t1.collect(s) in
             let counts = [] in
-            
+
             for item in collected {
               counts = counts + [Prim.length(t2.collect(item))]
             }
-            
+
             let values_index = 0 in
             let updated = [] in
-            
+
             for i in 0..(Prim.length(collected) - 1) {
               let item = collected[i] in
               let count = counts[i] in
               let item_values = [] in
-              
+
               for j in 0..count - 1 {
                 if values_index < Prim.length(as) {
                   item_values = item_values + [as[values_index]]
                   values_index = values_index + 1
                 }
               }
-              
+
               updated = updated + [t2.update(item, item_values)]
             }
-            
+
             t1.update(s, updated)
           }]
         )
@@ -335,13 +335,13 @@
       name: name,
       objects: [],
       morphisms: [],
-      id: [a -> 
+      id: [a ->
         @Optics.optional(
           [x -> x],
           [_ x -> x]
         )
       ],
-      compose: [o1 o2 -> 
+      compose: [o1 o2 ->
         @Optics.optional(
           [s -> {
             let inner = o1.preview(s) in
@@ -373,7 +373,7 @@
       source_cat: lens_cat,
       target_cat: optional_cat,
       object_map: [a -> a],
-      morphism_map: [lens -> 
+      morphism_map: [lens ->
         @Optics.optional(
           [s -> lens.get(s)],
           [s a -> lens.set(s, a)]
@@ -391,10 +391,10 @@
       source_cat: prism_cat,
       target_cat: optional_cat,
       object_map: [a -> a],
-      morphism_map: [prism -> 
+      morphism_map: [prism ->
         @Optics.optional(
           [s -> prism.preview(s)],
-          [s a -> 
+          [s a ->
             let existing = prism.preview(s) in
             if existing != null {
               prism.review(a)
@@ -416,10 +416,10 @@
       source_cat: lens_cat,
       target_cat: traversal_cat,
       object_map: [a -> a],
-      morphism_map: [lens -> 
+      morphism_map: [lens ->
         @Optics.traversal(
           [s -> [lens.get(s)]],
-          [s values -> 
+          [s values ->
             if Prim.length(values) > 0 {
               lens.set(s, values[0])
             } else {
@@ -440,7 +440,7 @@
       source_cat: iso_cat,
       target_cat: lens_cat,
       object_map: [a -> a],
-      morphism_map: [iso -> 
+      morphism_map: [iso ->
         @Optics.lens(
           [s -> iso.from(s)],
           [s a -> iso.to(a)]
@@ -458,7 +458,7 @@
       source_cat: iso_cat,
       target_cat: prism_cat,
       object_map: [a -> a],
-      morphism_map: [iso -> 
+      morphism_map: [iso ->
         @Optics.prism(
           [s -> iso.from(s)],
           [a -> iso.to(a)]
@@ -565,7 +565,7 @@
     if f.target_cat.name != g.source_cat.name {
       error("Cannot compose functors: target category of first must equal source category of second")
     }
-    
+
     {
       name: f.name + " ∘ " + g.name,
       source_cat: f.source_cat,
@@ -582,7 +582,7 @@
     if alpha.target_functor.name != beta.source_functor.name {
       error("Cannot compose natural transformations: target functor of first must equal source functor of second")
     }
-    
+
     {
       name: alpha.name + " ∘ " + beta.name,
       source_functor: alpha.source_functor,
@@ -596,21 +596,21 @@
   --------------------------------------------------
 
   --[[
-    Structure mapping that establishes @OpticsXf as a category of 
+    Structure mapping that establishes @OpticsXf as a category of
     transformations between optic categories.
-    
+
     In this categorical structure:
     - Objects are optic functors
     - Morphisms are natural transformations between functors
     - Composition is functor composition
-    
+
     This captures the categorical essence of optic transformations.
   ]]--
   structure: {
     -- Map OpticsXf to a category
     objects: OpticFunctor,
     morphisms: OpticNatTransformation,
-    
+
     -- Base category structure
     dom: [nt -> nt.source_functor],
     cod: [nt -> nt.target_functor],
@@ -621,64 +621,64 @@
       components: [a -> [optic -> optic]]
     }],
     compose: [alpha beta -> compose_nat_transformations(alpha, beta)],
-    
+
     -- Optic categories
     lens_category: lens_category,
     prism_category: prism_category,
     iso_category: iso_category,
     traversal_category: traversal_category,
     optional_category: optional_category,
-    
+
     -- Functors between optic categories
     lens_to_optional_functor: lens_to_optional_functor,
     prism_to_optional_functor: prism_to_optional_functor,
     lens_to_traversal_functor: lens_to_traversal_functor,
     iso_to_lens_functor: iso_to_lens_functor,
     iso_to_prism_functor: iso_to_prism_functor,
-    
+
     -- Natural transformations
     lens_to_traversal_nt: lens_to_traversal_nt,
     optional_to_traversal_nt: optional_to_traversal_nt,
-    
+
     -- Adjunctions
     lens_optional_adjunction: lens_optional_adjunction,
     prism_optional_adjunction: prism_optional_adjunction,
-    
+
     -- Profunctor operations
     dimap: dimap,
     lmap: lmap,
     rmap: rmap,
-    
+
     -- Utility functions
     compose_functors: compose_functors,
-    
+
     -- Laws for optic transformations
     law: {
       -- Functor laws
       identity_preservation: [f optic ->
         f.morphism_map(f.source_cat.id(optic)) == f.target_cat.id(f.morphism_map(optic))
       ],
-      
+
       composition_preservation: [f optic1 optic2 ->
-        f.morphism_map(f.source_cat.compose(optic1, optic2)) == 
+        f.morphism_map(f.source_cat.compose(optic1, optic2)) ==
         f.target_cat.compose(f.morphism_map(optic1), f.morphism_map(optic2))
       ],
-      
+
       -- Natural transformation laws
       naturality: [nt a optic ->
         let f = nt.source_functor in
         let g = nt.target_functor in
-        
+
         g.morphism_map(optic) == nt.components(a)(f.morphism_map(optic))
       ],
-      
+
       -- Adjunction laws
       adjunction_unit_counit: [adj a ->
         let l = adj.left_functor in
         let r = adj.right_functor in
         let unit = adj.unit in
         let counit = adj.counit in
-        
+
         compose_nat_transformations(
           {
             name: "l(unit)",
@@ -687,9 +687,9 @@
             components: [a -> [optic -> l.morphism_map(unit.components(a)(optic))]]
           },
           counit
-        ).components(a)([optic -> optic]) == 
+        ).components(a)([optic -> optic]) ==
         id(l).components(a)([optic -> optic]) &&
-        
+
         compose_nat_transformations(
           unit,
           {
@@ -701,16 +701,16 @@
         ).components(a)([optic -> optic]) ==
         id(r).components(a)([optic -> optic])
       ],
-      
+
       -- Profunctor laws
       dimap_identity: [p ->
         dimap([x -> x], [x -> x], p) == p
       ],
-      
+
       dimap_composition: [f1 f2 g1 g2 p ->
         let f = [x -> f2(f1(x))] in
         let g = [x -> g2(g1(x))] in
-        
+
         dimap(f, g, p) == dimap(f1, g2, dimap(f2, g1, p))
       ]
     }
@@ -728,11 +728,11 @@
       -- Create lens and traversal categories
       let lens_cat = lens_category("LensCat") in
       let traversal_cat = traversal_category("TraversalCat") in
-      
+
       -- Create a functor from lenses to traversals
       lens_to_traversal_functor(lens_cat, traversal_cat)
     ],
-    
+
     --[[
       Example 2: Using profunctor operations to compose optics
     ]]--
@@ -740,18 +740,18 @@
       -- Create lenses for accessing nested fields
       let person_lens = @Optics.field("person") in
       let address_lens = @Optics.field("address") in
-      
+
       -- Use dimap to compose them
       let result = dimap(
         [obj -> obj],                                   -- Identity on input
         [obj -> obj],                                   -- Identity on output
         [obj -> @Optics.compose(person_lens, address_lens)]  -- The optic transformation
       ) in
-      
+
       -- Create the composite lens directly
       @Optics.compose(person_lens, address_lens)
     ],
-    
+
     --[[
       Example 3: Using functors to transform between optic types
     ]]--
@@ -760,22 +760,22 @@
       let iso_cat = iso_category("IsoCat") in
       let lens_cat = lens_category("LensCat") in
       let prism_cat = prism_category("PrismCat") in
-      
+
       -- Create functors
       let iso_to_lens = iso_to_lens_functor(iso_cat, lens_cat) in
       let iso_to_prism = iso_to_prism_functor(iso_cat, prism_cat) in
-      
+
       -- Create an isomorphism
       let string_number_iso = @Optics.iso(
         [s -> Prim.parse_int(s)],                     -- String to number
         [n -> Prim.to_string(n)]                      -- Number to string
       ) in
-      
+
       -- Transform the isomorphism to lens and prism
       let as_lens = iso_to_lens.morphism_map(string_number_iso) in
       let as_prism = iso_to_prism.morphism_map(string_number_iso) in
-      
+
       [as_lens, as_prism]
     ]
   }
-} 
+}

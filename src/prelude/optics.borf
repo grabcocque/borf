@@ -1,9 +1,9 @@
 --[[
   Optics
-  
+
   This module defines various optical structures (lenses, prisms, etc.)
   for accessing and manipulating nested data structures in a composable way.
-  
+
   Optics are a practical application of category theory that provide
   bidirectional access to data, allowing both getting and setting of values.
 ]]--
@@ -18,7 +18,7 @@
     Getter
     Setter
     Optional
-    
+
     -- Compound optic types
     Optic
     AffineTraversal
@@ -27,7 +27,7 @@
   op: {
     -- Composition operator
     .
-    
+
     -- Record field accessor
     ^
   }
@@ -38,27 +38,27 @@
     lens_from_path
     lens_from_accessors
     field
-    
+
     -- Prism constructors
     prism
     prism_from_predicates
     prism_for_type
-    
+
     -- Traversal constructors
     traversal
     traversal_from_paths
     each
     filtered
-    
+
     -- Iso constructors
     iso
     iso_from_functions
     reversed
-    
+
     -- Optional constructors
     optional
     at_index
-    
+
     -- Optic operations
     view
     set
@@ -67,10 +67,10 @@
     review
     collect
     modify
-    
+
     -- Composition
     compose
-    
+
     -- Utilities
     to_path
     from_path
@@ -193,7 +193,7 @@
   ]]--
   lens_from_path: [S] -> Lens.{}.Any [path ->
     lens(
-      [s -> 
+      [s ->
         let current = s in
         for key in path {
           current = current ? {} in
@@ -201,25 +201,25 @@
         }
         current
       ],
-      [s new_value -> 
+      [s new_value ->
         let result = s ? {} in
-        
+
         if path == [] {
           return new_value
         }
-        
+
         let nested_set = [obj remaining_path idx val ->
           if idx >= Prim.length(remaining_path) {
             return val
           }
-          
+
           let key = remaining_path[idx] in
           let updated = obj ? {} in
           updated[key] = nested_set(updated[key], remaining_path, idx + 1, val)
-          
+
           updated
         ] in
-        
+
         nested_set(result, path, 0, new_value)
       ]
     )
@@ -238,7 +238,7 @@
   field: S -> Lens.{}.Any [field_name ->
     lens(
       [obj -> obj[field_name]],
-      [obj value -> 
+      [obj value ->
         let result = obj ? {} in
         result[field_name] = value
         result
@@ -301,13 +301,13 @@
   ]]--
   traversal_from_paths: [[S]] -> Traversal.{}.Any [paths ->
     traversal(
-      [s -> 
+      [s ->
         let result = [] in
-        
+
         for path in paths {
           let value = s in
           let valid = true in
-          
+
           for key in path {
             if value == null || value[key] == null {
               valid = false
@@ -315,39 +315,39 @@
             }
             value = value[key]
           }
-          
+
           if valid {
             result = result + [value]
           }
         }
-        
+
         result
       ],
-      [s values -> 
+      [s values ->
         let result = s ? {} in
         let value_index = 0 in
-        
+
         for path in paths {
           if value_index >= Prim.length(values) {
             break
           }
-          
+
           let nested_set = [obj remaining_path idx val ->
             if idx >= Prim.length(remaining_path) {
               return val
             }
-            
+
             let key = remaining_path[idx] in
             let updated = obj ? {} in
             updated[key] = nested_set(updated[key], remaining_path, idx + 1, val)
-            
+
             updated
           ] in
-          
+
           result = nested_set(result, path, 0, values[value_index])
           value_index = value_index + 1
         }
-        
+
         result
       ]
     )
@@ -359,7 +359,7 @@
   each: () -> Traversal.[a].a [->
     traversal(
       [arr -> arr],
-      [arr values -> 
+      [arr values ->
         if Prim.length(arr) != Prim.length(values) {
           arr
         } else {
@@ -374,21 +374,21 @@
   ]]--
   filtered: (a -> Bool) -> Traversal.[a].a [predicate ->
     traversal(
-      [arr -> 
+      [arr ->
         let result = [] in
-        
+
         for item in arr {
           if predicate(item) {
             result = result + [item]
           }
         }
-        
+
         result
       ],
-      [arr values -> 
+      [arr values ->
         let result = [] in
         let value_index = 0 in
-        
+
         for item in arr {
           if predicate(item) {
             if value_index < Prim.length(values) {
@@ -401,7 +401,7 @@
             result = result + [item]
           }
         }
-        
+
         result
       ]
     )
@@ -437,21 +437,21 @@
       [arr -> {
         let result = [] in
         let len = Prim.length(arr) in
-        
+
         for i in 0..(len - 1) {
           result = result + [arr[len - 1 - i]]
         }
-        
+
         result
       }],
       [arr -> {
         let result = [] in
         let len = Prim.length(arr) in
-        
+
         for i in 0..(len - 1) {
           result = result + [arr[len - 1 - i]]
         }
-        
+
         result
       }]
     )
@@ -477,17 +477,17 @@
   ]]--
   at_index: Z -> Optional.[a].a [idx ->
     optional(
-      [arr -> 
+      [arr ->
         if idx >= 0 && idx < Prim.length(arr) {
           arr[idx]
         } else {
           null
         }
       ],
-      [arr value -> 
+      [arr value ->
         if idx >= 0 && idx < Prim.length(arr) {
           let result = [] in
-          
+
           for i in 0..(Prim.length(arr) - 1) {
             if i == idx {
               result = result + [value]
@@ -495,7 +495,7 @@
               result = result + [arr[i]]
             }
           }
-          
+
           result
         } else {
           arr
@@ -553,11 +553,11 @@
       "Traversal" => {
         let values = optic.collect(s) in
         let new_values = [] in
-        
+
         for _ in values {
           new_values = new_values + [a]
         }
-        
+
         optic.update(s, new_values)
       },
       "Optic" => set(optic.impl, s, a),
@@ -600,11 +600,11 @@
       "Traversal" => {
         let values = optic.collect(s) in
         let new_values = [] in
-        
+
         for value in values {
           new_values = new_values + [f(value)]
         }
-        
+
         optic.update(s, new_values)
       },
       "Optic" => over(optic.impl, s, f),
@@ -682,11 +682,11 @@
       "Traversal" => {
         let values = optic.collect(s) in
         let new_values = [] in
-        
+
         for value in values {
           new_values = new_values + [f(value)]
         }
-        
+
         optic.update(s, new_values)
       },
       "Lens" => optic.set(s, f(optic.get(s))),
@@ -735,14 +735,14 @@
         [s a -> l1.set(s, l2.set(l1.get(s), a))]
       )
     ] in
-    
+
     let compose_lens_prism = [l p ->
       optional(
         [s -> p.preview(l.get(s))],
         [s a -> l.set(s, p.preview(l.get(s)) != null ? p.review(a) : l.get(s))]
       )
     ] in
-    
+
     let compose_prism_lens = [p l ->
       optional(
         [s -> {
@@ -755,7 +755,7 @@
         }]
       )
     ] in
-    
+
     let compose_prism_prism = [p1 p2 ->
       prism(
         [s -> {
@@ -765,44 +765,44 @@
         [a -> p1.review(p2.review(a))]
       )
     ] in
-    
+
     let compose_lens_traversal = [l t ->
       traversal(
         [s -> t.collect(l.get(s))],
         [s as -> l.set(s, t.update(l.get(s), as))]
       )
     ] in
-    
+
     let compose_traversal_lens = [t l ->
       traversal(
         [s -> {
           let collected = t.collect(s) in
           let result = [] in
-          
+
           for item in collected {
             result = result + [l.get(item)]
           }
-          
+
           result
         }],
         [s as -> {
           let collected = t.collect(s) in
-          
+
           if Prim.length(collected) != Prim.length(as) {
             return s
           }
-          
+
           let updated = [] in
-          
+
           for i in 0..(Prim.length(collected) - 1) {
             updated = updated + [l.set(collected[i], as[i])]
           }
-          
+
           t.update(s, updated)
         }]
       )
     ] in
-    
+
     -- Determine the composition based on the optic types
     match (optic1._type, optic2._type) {
       ("Lens", "Lens") => compose_lens_lens(optic1, optic2),
@@ -854,14 +854,14 @@
   ]]--
   to_path: S -> [S] [path_str ->
     let parts = Prim.split(path_str, ".") in
-    
+
     let result = [] in
     for part in parts {
       if part != "" {
         result = result + [part]
       }
     }
-    
+
     result
   ]
 
@@ -879,7 +879,7 @@
   --[[
     Structure mapping that establishes the categorical structure
     of optics.
-    
+
     Optics form a category with:
     - Objects: Types
     - Morphisms: Various optics between types
@@ -890,74 +890,74 @@
     -- Categorical structure
     objects: a,
     morphisms: Optic,
-    
-    id: [a -> 
+
+    id: [a ->
       lens(
         [x -> x],
         [_ x -> x]
       )
     ],
     compose: [o1 o2 -> compose(o1, o2)],
-    
+
     -- Lens structure
     lens: lens,
     field: field,
-    
+
     -- Prism structure
     prism: prism,
     prism_for_type: prism_for_type,
-    
+
     -- Traversal structure
     traversal: traversal,
     each: each,
     filtered: filtered,
-    
+
     -- Iso structure
     iso: iso,
-    
+
     -- Optional structure
     optional: optional,
     at_index: at_index,
-    
+
     -- Operations
     view: view,
     set: set,
     over: over,
-    
+
     -- Laws
     law: {
       -- Lens laws
       get_set: [l s a ->
         view(l, set(l, s, a)) == a
       ],
-      
+
       set_get: [l s ->
         set(l, s, view(l, s)) == s
       ],
-      
+
       set_set: [l s a b ->
         set(l, set(l, s, a), b) == set(l, s, b)
       ],
-      
+
       -- Prism laws
       preview_review: [p a ->
         preview(p, review(p, a)) == a
       ],
-      
+
       review_preview: [p s ->
         let v = preview(p, s) in
         v != null ? review(p, v) == s : true
       ],
-      
+
       -- Iso laws
       from_to: [i a ->
         view(i, review(i, a)) == a
       ],
-      
+
       to_from: [i s ->
         review(i, view(i, s)) == s
       ],
-      
+
       -- Composition law
       compose_law: [o1 o2 o3 ->
         compose(compose(o1, o2), o3) == compose(o1, compose(o2, o3))
@@ -988,21 +988,21 @@
           notifications: true
         }
       } in
-      
+
       -- Create lenses for accessing fields
       let user_lens = field("user") in
       let name_lens = field("name") in
       let user_name_lens = compose(user_lens, name_lens) in
-      
+
       let email_lens = lens_from_path(["user", "contact", "email"]) in
-      
+
       -- Use lenses to view and update fields
       let name = view(user_name_lens, data) in
       let updated = set(email_lens, data, "alice.new@example.com") in
-      
+
       updated
     ],
-    
+
     --[[
       Example 2: Using prisms to handle variant types
     ]]--
@@ -1012,29 +1012,29 @@
         _type: "circle",
         radius: 5
       } in
-      
+
       -- Create prisms for each shape type
       let circle_prism = prism_for_type("circle") in
       let rectangle_prism = prism_for_type("rectangle") in
-      
+
       -- Create lenses for shape properties
       let radius_lens = field("radius") in
       let width_lens = field("width") in
-      
+
       -- Combine prism and lens
       let circle_radius = compose(circle_prism, radius_lens) in
       let rectangle_width = compose(rectangle_prism, width_lens) in
-      
+
       -- Use the optics
       let radius = view(circle_radius, shape) in
       let with_bigger_radius = over(circle_radius, shape, [r -> r * 2]) in
-      
+
       -- This does nothing since the shape is not a rectangle
       let with_bigger_width = over(rectangle_width, shape, [w -> w * 2]) in
-      
+
       with_bigger_radius
     ],
-    
+
     --[[
       Example 3: Using traversals for collections
     ]]--
@@ -1045,16 +1045,16 @@
         { name: "Bob", age: 25, active: false },
         { name: "Charlie", age: 35, active: true }
       ] in
-      
+
       -- Create traversal for all elements
       let users_traversal = each() in
-      
+
       -- Create lens for the age field
       let age_lens = field("age") in
-      
+
       -- Create traversal for all users' ages
       let ages_traversal = compose(users_traversal, age_lens) in
-      
+
       -- Create traversal only for active users
       let active_traversal = compose(
         users_traversal,
@@ -1063,17 +1063,17 @@
           age_lens
         )
       ) in
-      
+
       -- Get all ages
       let all_ages = collect(ages_traversal, users) in
-      
+
       -- Increase all ages by 1
       let older_users = over(ages_traversal, users, [age -> age + 1]) in
-      
+
       -- Increase only active users' ages by 5
       let older_active_users = over(active_traversal, users, [age -> age + 5]) in
-      
+
       older_active_users
     ]
   }
-} 
+}

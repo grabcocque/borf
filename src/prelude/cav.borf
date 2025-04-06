@@ -1,0 +1,697 @@
+--[[
+  CAVs
+  
+  This module defines CAVs, which are the context aware values.
+  CAVs encapsulatecontexts that can extract values.
+  
+  This implementation avoids monadic patterns by using linear types
+  for precise resource tracking and composition.
+]]--
+
+@CAV: {
+  typ: {
+    -- Core CAV types
+    !CAV
+    !CAVMorphism
+    !CAVTransformation
+    
+    -- Common CAVs
+    !IdentityCAV
+    !ProductCAV
+    !FunctionCAV
+    !StreamCAV
+    !StoreCAV
+    !EnvCAV
+    !TracedCAV
+  }
+
+  op: {
+    -- CAV operators
+    >=< -- CAV composition
+    =>> -- Cokleisli composition
+    -o> -- Linear function application
+  }
+
+  fn: {
+    -- Core functions
+    CAV
+    extract
+    duplicate
+    extend
+    
+    -- CAV instance constructors
+    identity_CAV
+    product_CAV
+    function_CAV
+    stream_CAV
+    store_CAV
+    env_CAV
+    traced_CAV
+    
+    -- CAV morphisms
+    CAV_morphism
+    composed_CAV
+    
+    -- Cokleisli operations
+    cokleisli
+    co_return
+    co_compose
+    
+    -- CAV transformations
+    CAV_transformation
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@CAV, @Linear, true),  -- Add dependency on Linear types
+    (@CAV, @Cat, true),     -- Add dependency on Category
+    (@CAV, @T, true)        -- Add dependency on Type system
+  }
+
+  --------------------------------------------------
+  -- Core CAV Types
+  --------------------------------------------------
+
+  --[[
+    !CAV represents a CAV, which is a functor w with operations
+    extract: w a -> a and duplicate: w a -> w (w a)
+  ]]--
+  !CAV: {
+    _type: "CAV",
+    name: S,                          -- Name of the CAV
+    content_type: T.Type,             -- Type of content
+    container_type: T.Type,           -- Type of container
+    extract_fn: (w a -o> a),          -- Extract function
+    duplicate_fn: (w a -o> w (w a)),  -- Duplicate function
+    map_fn: ((a -o> b) -o> (w a -o> w b)),  -- Functor map function
+    laws_satisfied: Bool              -- Whether CAV laws are satisfied
+  }
+
+  --[[
+    !CAVMorphism represents a morphism between CAVs.
+  ]]--
+  !CAVMorphism: {
+    _type: "CAVMorphism", 
+    source: !CAV,                 -- Source CAV
+    target: !CAV,                 -- Target CAV
+    transform: (w a -o> v a),         -- Natural transformation
+    commutes_with_extract: Bool,      -- Whether it commutes with extract
+    commutes_with_duplicate: Bool     -- Whether it commutes with duplicate
+  }
+
+  --[[
+    !CAVTransformation represents a natural transformation between CAVs.
+  ]]--
+  !CAVTransformation: {
+    _type: "CAVTransformation",
+    source: !CAV,                 -- Source CAV
+    target: !CAV,                 -- Target CAV
+    components: (a -> (w a -o> v a)), -- Components of the transformation
+    naturality: Bool                  -- Whether naturality holds
+  }
+
+  --[[
+    !IdentityCAV represents the identity CAV.
+  ]]--
+  !IdentityCAV: {
+    _type: "IdentityCAV",
+    base: !CAV                    -- The underlying CAV
+  }
+
+  --[[
+    !ProductCAV represents the product CAV.
+  ]]--
+  !ProductCAV: {
+    _type: "ProductCAV",
+    left: !CAV,                   -- Left CAV
+    right: !CAV,                  -- Right CAV
+    base: !CAV                    -- The underlying CAV
+  }
+
+  --[[
+    !FunctionCAV represents the function CAV (Reader).
+  ]]--
+  !FunctionCAV: {
+    _type: "FunctionCAV", 
+    environment_type: T.Type,         -- Type of environment
+    base: !CAV                    -- The underlying CAV
+  }
+
+  --[[
+    !StreamCAV represents the stream CAV.
+  ]]--
+  !StreamCAV: {
+    _type: "StreamCAV",
+    base: !CAV                    -- The underlying CAV
+  }
+
+  --[[
+    !StoreCAV represents the store CAV.
+  ]]--
+  !StoreCAV: {
+    _type: "StoreCAV",
+    state_type: T.Type,               -- Type of state
+    base: !CAV                    -- The underlying CAV
+  }
+
+  --[[
+    !EnvCAV represents the environment CAV.
+  ]]--
+  !EnvCAV: {
+    _type: "EnvCAV",
+    environment_type: T.Type,         -- Type of environment
+    base: !CAV                    -- The underlying CAV
+  }
+
+  --[[
+    !TracedCAV represents the traced CAV.
+  ]]--
+  !TracedCAV: {
+    _type: "TracedCAV",
+    monoid_type: T.Type,              -- Type of monoid
+    base: !CAV                    -- The underlying CAV
+  }
+
+  --------------------------------------------------
+  -- Core Functions
+  --------------------------------------------------
+
+  --[[
+    CAV creates a new CAV from its components.
+  ]]--
+  CAV: S * T.Type * T.Type * (w a -o> a) * (w a -o> w (w a)) * 
+           ((a -o> b) -o> (w a -o> w b)) -> !CAV [
+    name content container extract_fn duplicate_fn map_fn ->
+    {
+      _type: "CAV",
+      name: name,
+      content_type: content,
+      container_type: container,
+      extract_fn: extract_fn,
+      duplicate_fn: duplicate_fn,
+      map_fn: map_fn,
+      laws_satisfied: true  -- Assumed for now, should be verified
+    }
+  ]
+
+  --[[
+    extract gets the content from a CAVic container.
+  ]]--
+  extract: !CAV * w a -o> a [
+    cmd container ->
+    cmd.extract_fn(container)
+  ]
+
+  --[[
+    duplicate produces a nested CAVic container.
+  ]]--
+  duplicate: !CAV * w a -o> w (w a) [
+    cmd container ->
+    cmd.duplicate_fn(container)
+  ]
+
+  --[[
+    extend applies a function to a CAVic context.
+    This is the dual of bind for monads.
+  ]]--
+  extend: !CAV * (w a -o> b) * w a -o> w b [
+    cmd f container ->
+    -- extend f = map f . duplicate
+    let duplicated = duplicate(cmd, container) in
+    cmd.map_fn([w_a -o> f(w_a)])(duplicated)
+  ]
+
+  --------------------------------------------------
+  -- CAV Instance Constructors
+  --------------------------------------------------
+
+  --[[
+    identity_CAV creates an identity CAV.
+  ]]--
+  identity_CAV: S -> !IdentityCAV [
+    name ->
+    let base = CAV(
+      name,
+      typeof(a),         -- Content type
+      typeof(a),         -- Container type (same as content)
+      [a -o> a],         -- Extract is identity
+      [a -o> a],         -- Duplicate is identity
+      [f -o> f]          -- Map is function application
+    ) in
+    {
+      _type: "IdentityCAV",
+      base: base
+    }
+  ]
+
+  --[[
+    product_CAV creates a product CAV.
+  ]]--
+  product_CAV: S * !CAV * !CAV -> !ProductCAV [
+    name left right ->
+    let base = CAV(
+      name,
+      typeof(a),         -- Content type 
+      (typeof(w a), typeof(v a)),  -- Container is product of containers
+      [(w_a, v_a) -o>
+        (extract(left, w_a), extract(right, v_a))
+      ],                 -- Extract from both sides
+      [(w_a, v_a) -o>
+        let w_w_a = duplicate(left, w_a) in
+        let v_v_a = duplicate(right, v_a) in
+        (w_w_a, v_v_a)
+      ],                 -- Duplicate both sides
+      [f -o> [(w_a, v_a) -o>
+        let w_b = left.map_fn(f)(w_a) in
+        let v_b = right.map_fn(f)(v_a) in
+        (w_b, v_b)
+      ]]                 -- Map over both sides
+    ) in
+    {
+      _type: "ProductCAV",
+      left: left,
+      right: right,
+      base: base
+    }
+  ]
+
+  --[[
+    function_CAV creates a function CAV (Reader CAV).
+  ]]--
+  function_CAV: S * T.Type -> !FunctionCAV [
+    name env_type ->
+    let base = CAV(
+      name,
+      typeof(a),         -- Content type
+      typeof(e -> a),    -- Container type (function)
+      [f -o> f(())],     -- Extract applies to unit
+      [f -o> [e -o> [e' -o> f(e')]]], -- Duplicate creates a curried function
+      [g -o> [f -o> [e -o> g(f(e))]]] -- Map applies g to result of f
+    ) in
+    {
+      _type: "FunctionCAV",
+      environment_type: env_type,
+      base: base
+    }
+  ]
+
+  --[[
+    stream_CAV creates a stream CAV.
+  ]]--
+  stream_CAV: S -> !StreamCAV [
+    name ->
+    let base = CAV(
+      name,
+      typeof(a),         -- Content type
+      typeof([a]),       -- Container type (infinite stream)
+      [stream -o> stream[0]],  -- Extract takes head of stream
+      [stream -o> 
+        [i -o> [j -o> stream[i + j]]]
+      ],                 -- Duplicate creates streams of substreams
+      [f -o> [stream -o> [i -o> f(stream[i])]]]  -- Map applies f to each element
+    ) in
+    {
+      _type: "StreamCAV",
+      base: base
+    }
+  ]
+
+  --[[
+    store_CAV creates a store CAV.
+  ]]--
+  store_CAV: S * T.Type -> !StoreCAV [
+    name state_type ->
+    let base = CAV(
+      name,
+      typeof(a),         -- Content type
+      typeof((s -> a, s)),  -- Container is (getter, state)
+      [(getter, state) -o> getter(state)],  -- Extract applies getter to state
+      [(getter, state) -o> 
+        [s -o> (getter, s)]
+      ],                 -- Duplicate creates a store of stores
+      [f -o> [(getter, state) -o> 
+        ([s -o> f(getter(s))], state)
+      ]]                 -- Map composes f with getter
+    ) in
+    {
+      _type: "StoreCAV",
+      state_type: state_type,
+      base: base
+    }
+  ]
+
+  --[[
+    env_CAV creates an environment CAV.
+  ]]--
+  env_CAV: S * T.Type -> !EnvCAV [
+    name env_type ->
+    let base = CAV(
+      name,
+      typeof(a),         -- Content type
+      typeof((e, a)),    -- Container type (environment, value)
+      [(e, a) -o> a],    -- Extract takes the value
+      [(e, a) -o> (e, (e, a))],  -- Duplicate nests the pair
+      [f -o> [(e, a) -o> (e, f(a))]]  -- Map applies f to value only
+    ) in
+    {
+      _type: "EnvCAV",
+      environment_type: env_type,
+      base: base
+    }
+  ]
+
+  --[[
+    traced_CAV creates a traced CAV.
+  ]]--
+  traced_CAV: S * T.Type -> !TracedCAV [
+    name monoid_type ->
+    let base = CAV(
+      name,
+      typeof(a),         -- Content type
+      typeof(m -> a),    -- Container type (function from monoid)
+      [f -o> f(monoid_zero)],  -- Extract applies to monoid zero
+      [f -o> [m -o> [n -o> f(monoid_plus(m, n))]]],  -- Duplicate uses monoid operation
+      [g -o> [f -o> [m -o> g(f(m))]]]  -- Map composes g with f
+    ) in
+    {
+      _type: "TracedCAV",
+      monoid_type: monoid_type,
+      base: base
+    }
+  ]
+
+  --------------------------------------------------
+  -- CAV Morphisms and Transformations
+  --------------------------------------------------
+
+  --[[
+    CAV_morphism creates a morphism between CAVs.
+  ]]--
+  CAV_morphism: !CAV * !CAV * (w a -o> v a) -> !CAVMorphism [
+    source target transform ->
+    {
+      _type: "CAVMorphism",
+      source: source,
+      target: target,
+      transform: transform,
+      commutes_with_extract: true,    -- Assumed for now, should be verified
+      commutes_with_duplicate: true   -- Assumed for now, should be verified
+    }
+  ]
+
+  --[[
+    composed_CAV creates a composition of two CAVs.
+  ]]--
+  composed_CAV: S * !CAV * !CAV -> !CAV [
+    name outer inner ->
+    CAV(
+      name,
+      inner.content_type,     -- Content type from inner CAV
+      typeof(w (v a)),        -- Container is composition of containers
+      [w_v_a -o>
+        let v_a = extract(outer, w_v_a) in
+        extract(inner, v_a)
+      ],                      -- Extract by extracting twice
+      [w_v_a -o>
+        let w_w_v_a = duplicate(outer, w_v_a) in
+        outer.map_fn([v_a -o>
+          let v_v_a = duplicate(inner, v_a) in
+          outer.map_fn([v_v_a' -o> v_v_a'])(w_w_v_a)
+        ])(w_w_v_a)
+      ],                      -- Duplicate is complex due to composition
+      [f -o> [w_v_a -o>
+        outer.map_fn([v_a -o>
+          inner.map_fn(f)(v_a)
+        ])(w_v_a)
+      ]]                      -- Map applies f through both CAVs
+    )
+  ]
+
+  --[[
+    CAV_transformation creates a natural transformation between CAVs.
+  ]]--
+  CAV_transformation: S * !CAV * !CAV * (a -> (w a -o> v a)) -> 
+                       !CAVTransformation [
+    name source target components ->
+    {
+      _type: "CAVTransformation",
+      source: source,
+      target: target,
+      components: components,
+      naturality: true  -- Assumed for now, should be verified
+    }
+  ]
+
+  --------------------------------------------------
+  -- Cokleisli Operations
+  --------------------------------------------------
+
+  --[[
+    cokleisli creates a cokleisli arrow (a function from a CAVic value to a regular value)
+  ]]--
+  cokleisli: (w a -o> b) -> (w a -o> b) [
+    f -> f  -- Cokleisli arrows are just functions from w a to b
+  ]
+
+  --[[
+    co_return lifts a value into a cokleisli arrow.
+  ]]--
+  co_return: a -> (w b -o> a) [
+    a -> [_ -o> a]  -- Constant function ignoring the CAVic value
+  ]
+
+  --[[
+    co_compose composes cokleisli arrows.
+  ]]--
+  co_compose: !CAV * (w a -o> b) * (w b -o> c) -> (w a -o> c) [
+    cmd f g ->
+    [w_a -o>
+      -- f : w a -> b
+      -- g : w b -> c
+      -- extend f : w a -> w b
+      -- g . extend f : w a -> c
+      let w_b = extend(cmd, f, w_a) in
+      g(w_b)
+    ]
+  ]
+
+  --------------------------------------------------
+  -- Operators
+  --------------------------------------------------
+
+  --[[
+    >=< is the composition operator for CAVs.
+  ]]--
+  >=<: !CAV * !CAV -> !CAV [
+    cmd1 cmd2 ->
+    composed_CAV(cmd1.name + " >< " + cmd2.name, cmd1, cmd2)
+  ]
+
+  --[[
+    =>> is the cokleisli composition operator.
+  ]]--
+  =>>: (w a -o> b) * (w b -o> c) * !CAV -> (w a -o> c) [
+    f g cmd ->
+    co_compose(cmd, f, g)
+  ]
+
+  --[[
+    -o> is linear function application
+  ]]--
+  -o>: a * (a -o> b) -> b [
+    x f ->
+    f(x)
+  ]
+
+  --------------------------------------------------
+  -- Standard CAV Instances
+  --------------------------------------------------
+
+  -- Identity CAV
+  identity: !IdentityCAV = identity_CAV("Identity")
+  
+  -- Environment CAV for String environment
+  env: !EnvCAV = env_CAV("Env", typeof(S))
+  
+  -- Store CAV for Integer state
+  store: !StoreCAV = store_CAV("Store", typeof(Z))
+  
+  -- Stream CAV
+  stream: !StreamCAV = stream_CAV("Stream")
+
+  --------------------------------------------------
+  -- Structure Mapping to Category
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @CAV as a categorical structure.
+    
+    In this structure:
+    - Objects are types
+    - Morphisms are cokleisli arrows (w a -> b)
+    - Identity is extract
+    - Composition is cokleisli composition
+    
+    This forms a category known as the cokleisli category of the CAV.
+  ]]--
+  cokleisli_structure: {
+    -- Map CAV to a category
+    objects: a,                              -- Objects are types
+    morphisms: (w a -o> b),                  -- Morphisms are cokleisli arrows
+    
+    -- Core category structure
+    dom: [f -> typeof(w a) given f: (w a -o> b)],
+    cod: [f -> typeof(b) given f: (w a -o> b)],
+    id: [a -> [w_a -o> extract(standard_CAV, w_a)]],  -- Identity is extract
+    compose: [f g -> co_compose(standard_CAV, f, g)], -- Composition is cokleisli composition
+    
+    -- Laws
+    law: {
+      identity: [f -> 
+        -- Left identity: extract =>> f = f
+        co_compose(standard_CAV, 
+          [w_a -o> extract(standard_CAV, w_a)], 
+          f
+        ) == f
+        &&
+        -- Right identity: f =>> extract = f
+        co_compose(standard_CAV, 
+          f, 
+          [w_b -o> extract(standard_CAV, w_b)]
+        ) == f
+      ],
+      
+      associativity: [f g h -> 
+        -- (f =>> g) =>> h = f =>> (g =>> h)
+        co_compose(standard_CAV,
+          co_compose(standard_CAV, f, g),
+          h
+        ) == co_compose(standard_CAV,
+          f,
+          co_compose(standard_CAV, g, h)
+        )
+      ]
+    }
+  }
+
+  --[[
+    Structure mapping that establishes CAVs themselves as a category.
+    
+    In this structure:
+    - Objects are CAVs
+    - Morphisms are CAV morphisms
+    - Identity is the identity CAV morphism
+    - Composition is composition of CAV morphisms
+  ]]--
+  structure: {
+    -- Map CAV to a category
+    objects: !CAV,                         -- Objects are CAVs
+    morphisms: !CAVMorphism,               -- Morphisms are CAV morphisms
+    
+    -- Core category structure
+    dom: [m -> m.source],
+    cod: [m -> m.target],
+    id: [cmd -> CAV_morphism(cmd, cmd, [w_a -o> w_a])],
+    compose: [m1 m2 -> 
+      if m1.target != m2.source {
+        error("Cannot compose CAV morphisms with incompatible types")
+      }
+      CAV_morphism(
+        m1.source, 
+        m2.target, 
+        [w_a -o> m2.transform(m1.transform(w_a))]
+      )
+    ],
+    
+    -- Laws
+    law: {
+      identity: [m -> 
+        compose(id(dom(m)), m) == m && 
+        compose(m, id(cod(m))) == m
+      ],
+      
+      associativity: [m1 m2 m3 -> 
+        compose(compose(m1, m2), m3) == compose(m1, compose(m2, m3))
+      ]
+    }
+  }
+
+  -- Standard CAV for the structure
+  standard_CAV: !CAV = identity.base
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    --[[
+      Example 1: Using the Store CAV
+    ]]--
+    store_example: () -> Z [->
+      let get_value = [position -o> position * 2] in
+      let store_container = (get_value, 5) in
+      
+      extract(store.base, store_container)  -- Should return 10 (= 5 * 2)
+    ],
+    
+    --[[
+      Example 2: Using the Env CAV
+    ]]--
+    env_example: () -> Z [->
+      let env_container = ("config", 42) in
+      
+      extract(env.base, env_container)  -- Should return 42
+    ],
+    
+    --[[
+      Example 3: Extending a Store CAV
+    ]]--
+    extend_example: () -> ((Z -> Z), Z) [->
+      let get_value = [position -o> position * 2] in
+      let store_container = (get_value, 5) in
+      
+      -- Create a function that adds the current value to the value at position+1
+      let f = [(getter, state) -o> 
+        getter(state) + getter(state + 1)
+      ] in
+      
+      extend(store.base, f, store_container)
+      -- Should return a new store with a modified getter function
+    ],
+    
+    --[[
+      Example 4: Composing Cokleisli arrows
+    ]]--
+    cokleisli_example: () -> S [->
+      let env_container = ("config", 42) in
+      
+      -- First arrow: from Env Int to Int (extracts the value and adds 1)
+      let f = [(e, a) -o> a + 1] in
+      
+      -- Second arrow: from Env Int to String (converts to string)
+      let g = [(e, a) -o> "Value: " + string(a)] in
+      
+      -- Compose them
+      let h = co_compose(env.base, f, g) in
+      
+      h(env_container)  -- Should return "Value: 43"
+    ],
+    
+    --[[
+      Example 5: Composing CAVs
+    ]]--
+    composed_CAV_example: () -> Z [->
+      -- Create a composition of Store and Env
+      let composed = composed_CAV("StoreEnv", store.base, env.base) in
+      
+      -- Create a composite container ((s -> a, s), e)
+      let get_value = [position -o> position * 2] in
+      let container = ((get_value, 5), "config") in
+      
+      extract(composed, container)  -- Should return 10
+    ]
+  }
+} 

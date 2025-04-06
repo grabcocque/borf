@@ -17,10 +17,10 @@
   op: {
     -- Composition operators
     >>> +++ *** &&& ||| &&^ |||^ >>> <<<
-    
+
     -- Lifting operators
     ^>> >>^ ^<< <<^
-    
+
     -- Effect operators
     ~> <!> <*> <+> <|>
   }
@@ -28,25 +28,25 @@
   fn: {
     -- Core arrow operations
     arrow pure id run interpret
-    
+
     -- Arrow combinators
     compose first second both split
     fanout fanin left right combine
     loop feedback iterate retry
-    
+
     -- Effect operations
     effect perform handle try_catch
-    
+
     -- Pipeline operations
     pipeline stage parallel branch fork join
-    
+
     -- Domain-specific combinators
     sequence_steps filter_step map_step fold_step
     async_step io_step compute_step validate_step
-    
+
     -- Interpreter creation
     make_interpreter compile optimize trace cache
-    
+
     -- Laws
     law.arrow_id law.arrow_compose law.arrow_first
     law.arrow_association law.arrow_functor
@@ -63,6 +63,65 @@
     (@Arrow, @Cat, true),       -- Category theory
     (@Arrow, @Pipeline, true),  -- Pipeline abstractions
     (@Arrow, @Flp, true)        -- Functional programming utilities
+  }
+
+  --------------------------------------------------
+  -- Structure Mapping to Arrow Category
+  --------------------------------------------------
+
+  --[[
+    Arrow Category Structure
+
+    This mapping establishes @Arrow as a category where:
+    - Objects are types
+    - Morphisms are arrows between types
+    - Composition is sequential arrow composition
+    - Identity is the identity arrow
+
+    This forms a proper category with the laws of identity and associativity.
+  ]]--
+  structure: {
+    -- Map Arrow to a category
+    objects: T.Type,               -- Objects are types
+    morphisms: !Arrow,             -- Morphisms are arrows between types
+
+    -- Core category structure
+    dom: [f -> f._a],              -- Domain of an arrow is its input type
+    cod: [f -> f._b],              -- Codomain of an arrow is its output type
+    id: [a -> {                    -- Identity arrow for a type
+      command: !Command.Id {},
+      _a: a,
+      _b: a
+    }],
+    compose: [f g -> {             -- Arrow composition
+      command: !Command.Compose { first: g.command, second: f.command },
+      _a: g._a,
+      _b: f._b
+    }],
+
+    -- Category laws
+    law.identity: [f ->
+      compose(id(f._a), f) == f && compose(f, id(f._b)) == f
+    ],
+    law.associativity: [f g h ->
+      compose(f, compose(g, h)) == compose(compose(f, g), h)
+    ],
+
+    -- Arrow-specific structural properties
+    products: true,                -- Category has products
+    coproducts: true,              -- Category has coproducts
+    closed: true,                  -- Category is cartesian closed
+    monoidal: true,                -- Category has monoidal structure
+    traced: true,                  -- Category has trace structure
+
+    -- Structural connections to other categories
+    to_kleisli: [m -> @Kleisli.create_kleisli_category(m)],
+    from_kleisli: [k -> {
+      -- Transform Kleisli arrows to regular arrows
+      command: !Command.Pure { fn: [a -> k.run(a)] },
+      _a: typeof(a),
+      _b: typeof(k.run(a))
+    }]
   }
 
   --------------------------------------------------
@@ -88,28 +147,28 @@
     -- Terminal operations
     Id: {},
     Pure: { fn: (a -> b) },
-    
+
     -- Sequential flow operations
     Compose: { first: !Command, second: !Command },
-    
+
     -- Parallel flow operations
     First: { arrow: !Command },
     Second: { arrow: !Command },
-    
+
     -- Branching operations
     Fanout: { f: !Command, g: !Command },
     Fanin: { f: !Command, g: !Command },
-    
+
     -- Effect operations
     Effect: { effect_type: S, payload: a },
-    
+
     -- Domain-specific operations (examples)
     FileRead: { path: S },
     FileWrite: { path: S, content: S },
     HttpRequest: { url: S, method: S, headers: {S: S}, body: ?S },
     Compute: { fn: (a -> b) },
     Validate: { predicate: (a -> Bool), error_msg: S },
-    
+
     -- Loop constructs
     Loop: { body: !Command, condition: (a -> Bool) }
   }
@@ -220,7 +279,7 @@
     match arr.command with
       | !Command.Id {} -> a
       | !Command.Pure { fn } -> fn(a)
-      | !Command.Compose { first, second } -> 
+      | !Command.Compose { first, second } ->
           let mid_result = run({ command: first, _a: arr._a, _b: typeof(mid_result) }, a) in
           run({ command: second, _a: typeof(mid_result), _b: arr._b }, mid_result)
       | !Command.First { arrow } ->
@@ -294,7 +353,7 @@
   ]]--
   both: !Arrow * !Arrow -> !Arrow [f g ->
     {
-      command: !Command.Compose { 
+      command: !Command.Compose {
         first: !Command.First { arrow: f.command },
         second: !Command.Second { arrow: g.command }
       },
@@ -550,7 +609,7 @@
   parallel: [!Arrow] -> !Arrow [arrows ->
     -- This is a simplified implementation that just pairs all results
     -- A proper implementation would need to be more sophisticated
-    let arrow_array_to_tuple = [arr -> 
+    let arrow_array_to_tuple = [arr ->
       -- This would convert array of arrows to an arrow returning a tuple of results
       -- Simplified for this example
       arr[0]
@@ -591,7 +650,7 @@
     -- Simplified implementation
     {
       command: !Command.Compose {
-        first: !Command.Pure { fn: [a -> 
+        first: !Command.Pure { fn: [a ->
           -- Run each arrow with the input
           -- This would actually need to be done via the interpreter
           arrows |> map [arr -> a]
@@ -615,7 +674,7 @@
     match steps with
       | [] -> id()
       | [step] -> step
-      | [first @ rest] -> 
+      | [first @ rest] ->
           rest |> fold [result step -> compose(result, step)] first
   ]
 
@@ -624,7 +683,7 @@
   ]]--
   filter_step: (a -> Bool) -> !Arrow [predicate ->
     {
-      command: !Command.Pure { fn: [a -> 
+      command: !Command.Pure { fn: [a ->
         if predicate(a) { ?Some(a) } else { ?None }
       ]},
       _a: typeof(a),
@@ -644,7 +703,7 @@
   ]]--
   fold_step: (b, a -> b) * b -> !Arrow [f init ->
     {
-      command: !Command.Pure { fn: [as -> 
+      command: !Command.Pure { fn: [as ->
         as |> fold [result a -> f(result, a)] init
       ]},
       _a: typeof([a]),
@@ -657,8 +716,8 @@
   ]]--
   async_step: (a -> promise<b>) -> !Arrow [f ->
     {
-      command: !Command.Effect { 
-        effect_type: "async", 
+      command: !Command.Effect {
+        effect_type: "async",
         payload: f
       },
       _a: typeof(a),
@@ -671,8 +730,8 @@
   ]]--
   io_step: S * (a -> b) -> !Arrow [io_type f ->
     {
-      command: !Command.Effect { 
-        effect_type: "io:" + io_type, 
+      command: !Command.Effect {
+        effect_type: "io:" + io_type,
         payload: f
       },
       _a: typeof(a),
@@ -739,7 +798,7 @@
   ]]--
   trace: !Interpreter -> !Interpreter [base_interpreter ->
     {
-      run: [arrow input -> 
+      run: [arrow input ->
         println("Running arrow: " + to_string(arrow._a) + " -> " + to_string(arrow._b));
         let result = base_interpreter.run(arrow, input);
         println("Result: " + to_string(result));
@@ -848,11 +907,11 @@
     where assoc ((a,b),c) = (a,(b,c))
   ]]--
   law.arrow_association: !Arrow -> Bool [f ->
-    let assoc = [(ab, c) -> 
+    let assoc = [(ab, c) ->
       let (a, b) = ab in
       (a, (b, c))
     ] in
-    let assoc_inv = [(a, bc) -> 
+    let assoc_inv = [(a, bc) ->
       let (b, c) = bc in
       ((a, b), c)
     ] in
@@ -903,4 +962,4 @@
     -- In a real implementation, this would print to console
     {}
   ]
-} 
+}

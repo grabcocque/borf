@@ -17,6 +17,13 @@
     LambdaToWire
     PrimToWire
     TermToWire
+    CCCToWire
+    CAVToWire
+    FreeToWire
+    TracedToWire
+    ApplicativeToWire
+    BicategoryToWire
+    OperadToWire
 
     -- Rendering types
     RenderConfig
@@ -43,6 +50,9 @@
     -- Specific transformations
     category_to_wire lambda_to_wire prim_to_wire
     term_to_wire rw_to_wire
+    ccc_to_wire CAV_to_wire free_to_wire
+    traced_to_wire applicative_to_wire
+    bicategory_to_wire operad_to_wire
 
     -- Rendering functions
     render_wire layout_wire export_wire optimize_layout
@@ -55,6 +65,10 @@
     -- Special categorical visualizations
     adjunction_diagram monad_diagram
     functor_diagram natural_transform_diagram
+    cartesian_product_diagram exponential_diagram
+    CAVic_extract_diagram CAVic_duplicate_diagram
+    horizontal_composition_diagram vertical_composition_diagram
+    operad_composition_diagram
   }
 
   E: typ cup op cup fn
@@ -64,14 +78,22 @@
   vis: E |> [e -> true]
 
   deps: {
-    (@WireXf, @T, true),        -- Add dependency on Type system
-    (@WireXf, @Wire, true),     -- Add dependency on Wire diagrams
-    (@WireXf, @CatXf, true),    -- Add dependency on Category theory
-    (@WireXf, @Lambda, true),   -- Add dependency on Lambda calculus
-    (@WireXf, @LambdaXf, true), -- Add dependency on Lambda transformations
-    (@WireXf, @Prim, true),     -- Add dependency on Primitives
-    (@WireXf, @PrimXf, true),   -- Add dependency on Primitive transformations
-    (@WireXf, @Term, true)      -- Add dependency on Termination
+    (@WireXf, @T, true),            -- Add dependency on Type system
+    (@WireXf, @Wire, true),         -- Add dependency on Wire diagrams
+    (@WireXf, @CatXf, true),        -- Add dependency on Category theory
+    (@WireXf, @Lambda, true),       -- Add dependency on Lambda calculus
+    (@WireXf, @LambdaXf, true),     -- Add dependency on Lambda transformations
+    (@WireXf, @Prim, true),         -- Add dependency on Primitives
+    (@WireXf, @PrimXf, true),       -- Add dependency on Primitive transformations
+    (@WireXf, @Term, true),         -- Add dependency on Termination
+    (@WireXf, @Monoidal, true),     -- Add dependency on Monoidal Categories
+    (@WireXf, @CCC, true),          -- Add dependency on CCC
+    (@WireXf, @CAV, true),          -- Add dependency on CAVs
+    (@WireXf, @Free, true),         -- Add dependency on Free Categories
+    (@WireXf, @Traced, true),       -- Add dependency on Traced Categories
+    (@WireXf, @Applicative, true),  -- Add dependency on Applicatives
+    (@WireXf, @Bi, true),           -- Add dependency on Bicategories
+    (@WireXf, @Operad, true)        -- Add dependency on Operads
   }
 
   --------------------------------------------------
@@ -517,6 +539,34 @@
     else if has_natural_transformation_structure(diagram) then
       "natural_transformation"
 
+    -- Check for CCC structure
+    else if has_exponential_structure(diagram) || has_product_structure(diagram) then
+      "ccc"
+
+    -- Check for CAV structure
+    else if exists_box_with_type(diagram, "Comonoid") then
+      "CAV"
+
+    -- Check for free category structure
+    else if exists_box_with_type(diagram, "FreeObject") || exists_box_with_type(diagram, "FreeMorphism") then
+      "free"
+
+    -- Check for traced monoidal structure
+    else if exists_box_with_type(diagram, "Trace") then
+      "traced"
+
+    -- Check for applicative structure
+    else if exists_box_with_type(diagram, "Applicative") then
+      "applicative"
+
+    -- Check for bicategory structure
+    else if exists_box_with_type(diagram, "TwoCellBox") then
+      "bicategory"
+
+    -- Check for operad structure
+    else if exists_box_with_type(diagram, "Operad") then
+      "operad"
+
     -- Check for termination evidence structure
     else if has_termination_evidence_structure(diagram) then
       "termination"
@@ -538,6 +588,15 @@
   ]
 
   --[[
+    exists_box_with_type checks if a diagram contains a box with a given type
+  ]]--
+  exists_box_with_type: Wire.WireDiagram * S -> Bool [diagram type_name ->
+    diagram.boxes |> exists [box ->
+      box._type == type_name
+    ]
+  ]
+
+  --[[
     has_natural_transformation_structure checks if a diagram has the structure of a natural transformation
   ]]--
   has_natural_transformation_structure: Wire.WireDiagram -> Bool [diagram ->
@@ -552,6 +611,24 @@
   has_termination_evidence_structure: Wire.WireDiagram -> Bool [diagram ->
     -- In a real implementation, this would check for cycles, decreasing metrics, etc.
     false
+  ]
+
+  --[[
+    has_exponential_structure checks if a diagram has exponential structure
+  ]]--
+  has_exponential_structure: Wire.WireDiagram -> Bool [diagram ->
+    exists_box_with_type(diagram, "Exponential")
+  ]
+
+  --[[
+    has_product_structure checks if a diagram has product structure
+  ]]--
+  has_product_structure: Wire.WireDiagram -> Bool [diagram ->
+    diagram.boxes |> exists [box ->
+      match box with
+        | { _type: "Composite", name: n } -> n |> contains "product"
+        | _ -> false
+    ]
   ]
 
   --[[
@@ -582,5 +659,639 @@
 
     -- In a real implementation, this would write to a file
     true
+  ]
+
+  --------------------------------------------------
+  -- CCC to Wire Transformations
+  --------------------------------------------------
+
+  --[[
+    ccc_to_wire transforms Cartesian Closed Category structures into wire diagrams,
+    visualizing products, terminal objects, and exponentials.
+  ]]--
+  ccc_to_wire: CCC.CCC -> Wire.WireDiagram [ccc ->
+    -- Create boxes and wires based on CCC structure
+    let products = extract_products(ccc) in
+    let exponentials = extract_exponentials(ccc) in
+    let terminal = extract_terminal(ccc) in
+
+    -- Create product boxes
+    let product_boxes = products |> map [prod ->
+      let name = "product(" + prod.left + "," + prod.right + ")" in
+      Wire.create_box(name, [], [], ?None, ?None)
+    ] in
+
+    -- Create terminal box
+    let terminal_box = Wire.terminal() in
+
+    -- Create exponential boxes
+    let exponential_boxes = exponentials |> map [exp ->
+      Wire.exponential(exp.domain, exp.codomain, [], [], ?None, ?None)
+    ] in
+
+    -- Create wires for projections
+    let projection_wires = products |> concatmap [prod ->
+      let product_box = find_product_box(product_boxes, prod) in
+      let left_proj = Wire.create_wire(prod.left_type, ?Some(product_box), ?None, ?Some(0), ?None, ?None) in
+      let right_proj = Wire.create_wire(prod.right_type, ?Some(product_box), ?None, ?Some(1), ?None, ?None) in
+      [left_proj, right_proj]
+    ] in
+
+    -- Create evaluation wires for exponentials
+    let eval_wires = exponentials |> map [exp ->
+      let exp_box = find_exponential_box(exponential_boxes, exp) in
+      Wire.create_wire(exp.codomain, ?Some(exp_box), ?None, ?Some(0), ?None, ?None)
+    ] in
+
+    -- Create the complete diagram
+    Wire.create_diagram(
+      product_boxes + [terminal_box] + exponential_boxes,
+      projection_wires + eval_wires,
+      [], []
+    )
+  ]
+
+  --[[
+    cartesian_product_diagram creates a wire diagram for a product in a CCC
+  ]]--
+  cartesian_product_diagram: T.T * T.T -> Wire.WireDiagram [a b ->
+    -- Create a product box
+    let product_box = Wire.create_box("product", [], [], ?None, ?None) in
+
+    -- Create wires for projections
+    let left_proj = Wire.create_wire(a, ?Some(product_box), ?None, ?Some(0), ?None, ?None) in
+    let right_proj = Wire.create_wire(b, ?Some(product_box), ?None, ?Some(1), ?None, ?None) in
+
+    -- Create the product diagram
+    Wire.create_diagram([product_box], [left_proj, right_proj], [], [left_proj, right_proj])
+  ]
+
+  --[[
+    exponential_diagram creates a wire diagram for an exponential in a CCC
+  ]]--
+  exponential_diagram: T.T * T.T -> Wire.WireDiagram [a b ->
+    -- Create an exponential box
+    let exp_box = Wire.exponential(a, b, [], [], ?None, ?None) in
+
+    -- Create input wires
+    let input_a = Wire.create_wire(a, ?None, ?Some(exp_box), ?None, ?Some(0), ?None) in
+
+    -- Create output wire (evaluation)
+    let output_b = Wire.create_wire(b, ?Some(exp_box), ?None, ?Some(0), ?None, ?None) in
+
+    -- Create the exponential diagram
+    Wire.create_diagram([exp_box], [input_a, output_b], [input_a], [output_b])
+  ]
+
+  --------------------------------------------------
+  -- CAV to Wire Transformations
+  --------------------------------------------------
+
+  --[[
+    CAV_to_wire transforms CAV structures into wire diagrams,
+    visualizing extract and duplicate operations.
+  ]]--
+  CAV_to_wire: CAV.CAV -> Wire.WireDiagram [CAV ->
+    -- Create boxes for CAVic operations
+    let extract_box = Wire.comonoid("extract", CAV.object, [Wire.create_wire(CAV.object)], [Wire.create_wire(CAV.functor)], ?None, ?None) in
+    let duplicate_box = Wire.comonoid("duplicate", CAV.object, [Wire.create_wire(CAV.object)], [Wire.create_wire(CAV.functor), Wire.create_wire(CAV.functor)], ?None, ?None) in
+
+    -- Create wires
+    let input_wire = Wire.create_wire(CAV.object) in
+    let output_wire1 = Wire.create_wire(CAV.functor) in
+    let output_wire2 = Wire.create_wire(CAV.functor) in
+
+    -- Create the CAV diagram
+    Wire.create_diagram([extract_box, duplicate_box], [input_wire, output_wire1, output_wire2], [input_wire], [output_wire1, output_wire2])
+  ]
+
+  --[[
+    CAVic_extract_diagram creates a wire diagram for CAVic extraction
+  ]]--
+  CAVic_extract_diagram: T.T * T.T -> Wire.WireDiagram [w a ->
+    -- Create an extract box
+    let extract_box = Wire.comonoid("extract", a, [Wire.create_wire(w)], [Wire.create_wire(a)], ?None, ?None) in
+
+    -- Create wires
+    let input_wire = Wire.create_wire(w, ?None, ?Some(extract_box), ?None, ?Some(0), ?None) in
+    let output_wire = Wire.create_wire(a, ?Some(extract_box), ?None, ?Some(0), ?None, ?None) in
+
+    -- Create the extract diagram
+    Wire.create_diagram([extract_box], [input_wire, output_wire], [input_wire], [output_wire])
+  ]
+
+  --[[
+    CAVic_duplicate_diagram creates a wire diagram for CAVic duplication
+  ]]--
+  CAVic_duplicate_diagram: T.T * T.T -> Wire.WireDiagram [w ww ->
+    -- Create a duplicate box
+    let duplicate_box = Wire.comonoid("duplicate", ww, [Wire.create_wire(w)], [Wire.create_wire(ww)], ?None, ?None) in
+
+    -- Create wires
+    let input_wire = Wire.create_wire(w, ?None, ?Some(duplicate_box), ?None, ?Some(0), ?None) in
+    let output_wire = Wire.create_wire(ww, ?Some(duplicate_box), ?None, ?Some(0), ?None, ?None) in
+
+    -- Create the duplicate diagram
+    Wire.create_diagram([duplicate_box], [input_wire, output_wire], [input_wire], [output_wire])
+  ]
+
+  --------------------------------------------------
+  -- Free Category to Wire Transformations
+  --------------------------------------------------
+
+  --[[
+    free_to_wire transforms Free Category structures into wire diagrams,
+    visualizing objects and morphisms derived from graphs.
+  ]]--
+  free_to_wire: Free.FreeCategory -> Wire.WireDiagram [free_cat ->
+    -- Extract objects and morphisms from the free category
+    let objects = extract_free_objects(free_cat) in
+    let morphisms = extract_free_morphisms(free_cat) in
+
+    -- Create boxes for objects
+    let object_boxes = objects |> map [obj ->
+      Wire.free_object(obj.name, ?None, ?None)
+    ] in
+
+    -- Create boxes for morphisms
+    let morphism_boxes = morphisms |> map [morph ->
+      Wire.free_morphism(morph.name, morph.source, morph.target, morph.path, ?None, ?None)
+    ] in
+
+    -- Create wires connecting objects through morphisms
+    let wires = morphisms |> map [morph ->
+      let source_box = find_object_box(object_boxes, morph.source) in
+      let target_box = find_object_box(object_boxes, morph.target) in
+      let morph_box = find_morphism_box(morphism_boxes, morph.name) in
+
+      let source_wire = Wire.create_wire(T.Any, ?Some(source_box), ?Some(morph_box), ?None, ?None, ?None) in
+      let target_wire = Wire.create_wire(T.Any, ?Some(morph_box), ?Some(target_box), ?None, ?None, ?None) in
+
+      [source_wire, target_wire]
+    ] |> flatten in
+
+    -- Create the free category diagram
+    Wire.create_diagram(object_boxes + morphism_boxes, wires, [], [])
+  ]
+
+  --------------------------------------------------
+  -- Traced Monoidal to Wire Transformations
+  --------------------------------------------------
+
+  --[[
+    traced_to_wire transforms Traced Monoidal Category structures into wire diagrams,
+    visualizing trace operations (feedback loops).
+  ]]--
+  traced_to_wire: Traced.TracedMonoidalCategory -> Wire.WireDiagram [traced ->
+    -- Extract trace operations from the traced category
+    let trace_ops = extract_trace_operations(traced) in
+
+    -- Create trace boxes
+    let trace_boxes = trace_ops |> map [op ->
+      let inner_box = op.inner_box |> wireify_box in
+      let trace_wire = Wire.create_wire(op.trace_type) in
+
+      Wire.trace(inner_box, trace_wire, ?None, ?None)
+    ] in
+
+    -- Create input and output wires
+    let input_wires = trace_ops |> map [op -> Wire.create_wire(op.input_type)] in
+    let output_wires = trace_ops |> map [op -> Wire.create_wire(op.output_type)] in
+
+    -- Create the traced category diagram
+    Wire.create_diagram(trace_boxes, input_wires + output_wires, input_wires, output_wires)
+  ]
+
+  --------------------------------------------------
+  -- Applicative to Wire Transformations
+  --------------------------------------------------
+
+  --[[
+    applicative_to_wire transforms Applicative structures into wire diagrams,
+    visualizing pure, ap, and liftA2 operations.
+  ]]--
+  applicative_to_wire: Applicative.Applicative -> Wire.WireDiagram [app ->
+    -- Create boxes for applicative operations
+    let pure_box = Wire.applicative("pure", [Wire.create_wire(app.value_type)], [Wire.create_wire(app.functor_type)], ?None, ?None) in
+    let ap_box = Wire.applicative("ap", [Wire.create_wire(app.function_type), Wire.create_wire(app.functor_type)], [Wire.create_wire(app.result_type)], ?None, ?None) in
+    let liftA2_box = Wire.applicative("liftA2", [Wire.create_wire(app.function_type), Wire.create_wire(app.functor_type), Wire.create_wire(app.functor_type)], [Wire.create_wire(app.result_type)], ?None, ?None) in
+
+    -- Create wires
+    let input_wires = [
+      Wire.create_wire(app.value_type),
+      Wire.create_wire(app.function_type),
+      Wire.create_wire(app.functor_type)
+    ] in
+
+    let output_wires = [
+      Wire.create_wire(app.functor_type),
+      Wire.create_wire(app.result_type)
+    ] in
+
+    -- Create the applicative diagram
+    Wire.create_diagram([pure_box, ap_box, liftA2_box], input_wires + output_wires, input_wires, output_wires)
+  ]
+
+  --------------------------------------------------
+  -- Bicategory to Wire Transformations
+  --------------------------------------------------
+
+  --[[
+    bicategory_to_wire transforms Bicategory structures into wire diagrams,
+    visualizing 0-cells, 1-cells, and 2-cells with horizontal and vertical compositions.
+  ]]--
+  bicategory_to_wire: Bi.Bicategory -> Wire.WireDiagram [bicat ->
+    -- Extract 0-cells, 1-cells, and 2-cells
+    let cells0 = extract_0cells(bicat) in
+    let cells1 = extract_1cells(bicat) in
+    let cells2 = extract_2cells(bicat) in
+
+    -- Create boxes for 0-cells
+    let cell0_boxes = cells0 |> map [cell ->
+      Wire.create_box(cell.name, [], [], ?None, ?None)
+    ] in
+
+    -- Create boxes for 1-cells
+    let cell1_boxes = cells1 |> map [cell ->
+      let source_box = find_0cell_box(cell0_boxes, cell.source) in
+      let target_box = find_0cell_box(cell0_boxes, cell.target) in
+
+      Wire.create_box(cell.name, [Wire.create_wire(cell.type)], [Wire.create_wire(cell.type)], ?None, ?None)
+    ] in
+
+    -- Create boxes for 2-cells
+    let cell2_boxes = cells2 |> map [cell ->
+      let source_1cell = find_1cell_box(cell1_boxes, cell.source) in
+      let target_1cell = find_1cell_box(cell1_boxes, cell.target) in
+
+      Wire.two_cell_box(cell.name, source_1cell, target_1cell, ?None, ?None)
+    ] in
+
+    -- Create wires connecting 0-cells and 1-cells
+    let cell01_wires = cells1 |> concatmap [cell ->
+      let source_box = find_0cell_box(cell0_boxes, cell.source) in
+      let target_box = find_0cell_box(cell0_boxes, cell.target) in
+      let cell1_box = find_1cell_box(cell1_boxes, cell.name) in
+
+      let source_wire = Wire.create_wire(cell.type, ?Some(source_box), ?Some(cell1_box), ?None, ?None, ?None) in
+      let target_wire = Wire.create_wire(cell.type, ?Some(cell1_box), ?Some(target_box), ?None, ?None, ?None) in
+
+      [source_wire, target_wire]
+    ] in
+
+    -- Create wires connecting 1-cells and 2-cells
+    let cell12_wires = cells2 |> map [cell ->
+      let source_box = find_1cell_box(cell1_boxes, cell.source) in
+      let target_box = find_1cell_box(cell1_boxes, cell.target) in
+      let cell2_box = find_2cell_box(cell2_boxes, cell.name) in
+
+      Wire.two_cell_wire(source_box, target_box, cell.type, ?None)
+    ] in
+
+    -- Create the bicategory diagram
+    Wire.create_diagram(
+      cell0_boxes + cell1_boxes + cell2_boxes,
+      cell01_wires + cell12_wires,
+      [], []
+    )
+  ]
+
+  --[[
+    horizontal_composition_diagram creates a wire diagram for horizontal composition in a bicategory
+  ]]--
+  horizontal_composition_diagram: Bi.Cell1 * Bi.Cell1 -> Wire.WireDiagram [f g ->
+    -- Create 0-cell boxes
+    let a_box = Wire.create_box("A", [], [], ?None, ?None) in
+    let b_box = Wire.create_box("B", [], [], ?None, ?None) in
+    let c_box = Wire.create_box("C", [], [], ?None, ?None) in
+
+    -- Create 1-cell boxes
+    let f_box = Wire.create_box(f.name, [Wire.create_wire(f.type)], [Wire.create_wire(f.type)], ?None, ?None) in
+    let g_box = Wire.create_box(g.name, [Wire.create_wire(g.type)], [Wire.create_wire(g.type)], ?None, ?None) in
+
+    -- Create 1-cell composition box
+    let comp_box = Wire.create_box("g ∘ f", [Wire.create_wire(f.type), Wire.create_wire(g.type)], [Wire.create_wire(T.Any)], ?None, ?None) in
+
+    -- Create wires
+    let f_input = Wire.create_wire(f.type, ?Some(a_box), ?Some(f_box), ?None, ?None, ?None) in
+    let f_output = Wire.create_wire(f.type, ?Some(f_box), ?Some(b_box), ?None, ?None, ?None) in
+    let g_input = Wire.create_wire(g.type, ?Some(b_box), ?Some(g_box), ?None, ?None, ?None) in
+    let g_output = Wire.create_wire(g.type, ?Some(g_box), ?Some(c_box), ?None, ?None, ?None) in
+
+    -- Create the horizontal composition diagram
+    Wire.create_diagram(
+      [a_box, b_box, c_box, f_box, g_box, comp_box],
+      [f_input, f_output, g_input, g_output],
+      [f_input],
+      [g_output]
+    )
+  ]
+
+  --[[
+    vertical_composition_diagram creates a wire diagram for vertical composition in a bicategory
+  ]]--
+  vertical_composition_diagram: Bi.Cell2 * Bi.Cell2 -> Wire.WireDiagram [alpha beta ->
+    -- Find 1-cells
+    let f = alpha.source in
+    let g = alpha.target in
+    let h = beta.target in
+
+    -- Create 1-cell boxes
+    let f_box = Wire.create_box(f.name, [Wire.create_wire(f.type)], [Wire.create_wire(f.type)], ?None, ?None) in
+    let g_box = Wire.create_box(g.name, [Wire.create_wire(g.type)], [Wire.create_wire(g.type)], ?None, ?None) in
+    let h_box = Wire.create_box(h.name, [Wire.create_wire(h.type)], [Wire.create_wire(h.type)], ?None, ?None) in
+
+    -- Create 2-cell boxes
+    let alpha_box = Wire.two_cell_box(alpha.name, f_box, g_box, ?None, ?None) in
+    let beta_box = Wire.two_cell_box(beta.name, g_box, h_box, ?None, ?None) in
+
+    -- Create vertical composition box
+    let comp_box = Wire.two_cell_box("β ∘ α", f_box, h_box, ?None, ?None) in
+
+    -- Create wires
+    let f_wire = Wire.create_wire(f.type) in
+    let g_wire = Wire.create_wire(g.type) in
+    let h_wire = Wire.create_wire(h.type) in
+    let alpha_wire = Wire.two_cell_wire(f_box, g_box, alpha.type, ?None) in
+    let beta_wire = Wire.two_cell_wire(g_box, h_box, beta.type, ?None) in
+
+    -- Create the vertical composition diagram
+    Wire.create_diagram(
+      [f_box, g_box, h_box, alpha_box, beta_box, comp_box],
+      [f_wire, g_wire, h_wire, alpha_wire, beta_wire],
+      [f_wire],
+      [h_wire]
+    )
+  ]
+
+  --------------------------------------------------
+  -- Operad to Wire Transformations
+  --------------------------------------------------
+
+  --[[
+    operad_to_wire transforms Operad structures into wire diagrams,
+    visualizing multi-input operations and their compositions.
+  ]]--
+  operad_to_wire: Operad.Operad -> Wire.WireDiagram [op ->
+    -- Extract operations from the operad
+    let operations = extract_operations(op) in
+
+    -- Create operad boxes
+    let op_boxes = operations |> map [operation ->
+      Wire.operad(
+        operation.name,
+        operation.arity,
+        range(0, operation.arity) |> map [i -> Wire.create_wire(T.Any)],
+        Wire.create_wire(T.Any),
+        operation.colors,
+        ?None,
+        ?None
+      )
+    ] in
+
+    -- Create multiway wires
+    let wires = operations |> map [operation ->
+      let op_box = find_operad_box(op_boxes, operation.name) in
+      let input_wires = range(0, operation.arity) |> map [i ->
+        Wire.create_wire(T.Any, ?None, ?Some(op_box), ?None, ?Some(i), ?None)
+      ] in
+      let output_wire = Wire.create_wire(T.Any, ?Some(op_box), ?None, ?Some(0), ?None, ?None) in
+
+      input_wires + [output_wire]
+    ] |> flatten in
+
+    -- Create the operad diagram
+    Wire.create_diagram(op_boxes, wires, [], [])
+  ]
+
+  --[[
+    operad_composition_diagram creates a wire diagram for operad composition
+  ]]--
+  operad_composition_diagram: Operad.Operation * [Operad.Operation] -> Wire.WireDiagram [outer inner_ops ->
+    -- Create the outer operation box
+    let outer_box = Wire.operad(
+      outer.name,
+      outer.arity,
+      range(0, outer.arity) |> map [i -> Wire.create_wire(T.Any)],
+      Wire.create_wire(T.Any),
+      outer.colors,
+      ?None,
+      ?None
+    ) in
+
+    -- Create the inner operation boxes
+    let inner_boxes = inner_ops |> map [op ->
+      Wire.operad(
+        op.name,
+        op.arity,
+        range(0, op.arity) |> map [i -> Wire.create_wire(T.Any)],
+        Wire.create_wire(T.Any),
+        op.colors,
+        ?None,
+        ?None
+      )
+    ] in
+
+    -- Create wires connecting operations
+    let inner_wires = inner_ops |> concatmap [op ->
+      let op_box = find_operad_box(inner_boxes, op.name) in
+      let input_wires = range(0, op.arity) |> map [i ->
+        Wire.create_wire(T.Any, ?None, ?Some(op_box), ?None, ?Some(i), ?None)
+      ] in
+      let output_wire = Wire.create_wire(T.Any, ?Some(op_box), ?Some(outer_box), ?None, ?None, ?None) in
+
+      input_wires + [output_wire]
+    ] in
+
+    -- Create outer output wire
+    let output_wire = Wire.create_wire(T.Any, ?Some(outer_box), ?None, ?Some(0), ?None, ?None) in
+
+    -- Create the operad composition diagram
+    Wire.create_diagram(
+      [outer_box] + inner_boxes,
+      inner_wires + [output_wire],
+      inner_wires |> filter [w -> w.target == ?None],
+      [output_wire]
+    )
+  ]
+
+  --------------------------------------------------
+  -- Helper Functions for CCC
+  --------------------------------------------------
+
+  --[[
+    extract_products extracts products from a CCC
+  ]]--
+  extract_products: CCC.CCC -> [CCC.Product] [ccc ->
+    -- In a real implementation, this would extract actual products
+    []
+  ]
+
+  --[[
+    extract_exponentials extracts exponentials from a CCC
+  ]]--
+  extract_exponentials: CCC.CCC -> [CCC.Exponential] [ccc ->
+    -- In a real implementation, this would extract actual exponentials
+    []
+  ]
+
+  --[[
+    extract_terminal extracts the terminal object from a CCC
+  ]]--
+  extract_terminal: CCC.CCC -> CCC.Terminal [ccc ->
+    -- In a real implementation, this would extract the terminal object
+    {}
+  ]
+
+  --[[
+    find_product_box finds a product box by its component types
+  ]]--
+  find_product_box: [Wire.Box] * CCC.Product -> Wire.Box [boxes product ->
+    -- In a real implementation, this would find the matching box
+    boxes[0]
+  ]
+
+  --[[
+    find_exponential_box finds an exponential box by its domain and codomain
+  ]]--
+  find_exponential_box: [Wire.Box] * CCC.Exponential -> Wire.Box [boxes exponential ->
+    -- In a real implementation, this would find the matching box
+    boxes[0]
+  ]
+
+  --------------------------------------------------
+  -- Helper Functions for Free Categories
+  --------------------------------------------------
+
+  --[[
+    extract_free_objects extracts objects from a free category
+  ]]--
+  extract_free_objects: Free.FreeCategory -> [Free.Object] [free_cat ->
+    -- In a real implementation, this would extract actual objects
+    []
+  ]
+
+  --[[
+    extract_free_morphisms extracts morphisms from a free category
+  ]]--
+  extract_free_morphisms: Free.FreeCategory -> [Free.Morphism] [free_cat ->
+    -- In a real implementation, this would extract actual morphisms
+    []
+  ]
+
+  --[[
+    find_object_box finds an object box by its name
+  ]]--
+  find_object_box: [Wire.Box] * S -> Wire.Box [boxes name ->
+    -- In a real implementation, this would find the matching box
+    boxes[0]
+  ]
+
+  --[[
+    find_morphism_box finds a morphism box by its name
+  ]]--
+  find_morphism_box: [Wire.Box] * S -> Wire.Box [boxes name ->
+    -- In a real implementation, this would find the matching box
+    boxes[0]
+  ]
+
+  --------------------------------------------------
+  -- Helper Functions for Traced Categories
+  --------------------------------------------------
+
+  --[[
+    extract_trace_operations extracts trace operations from a traced category
+  ]]--
+  extract_trace_operations: Traced.TracedMonoidalCategory -> [Traced.TraceOperation] [traced ->
+    -- In a real implementation, this would extract actual trace operations
+    []
+  ]
+
+  --[[
+    wireify_box converts a box description to an actual Wire.Box
+  ]]--
+  wireify_box: Traced.Box -> Wire.Box [box ->
+    -- In a real implementation, this would create a proper Wire.Box
+    Wire.create_box("box", [], [], ?None, ?None)
+  ]
+
+  --------------------------------------------------
+  -- Helper Functions for Bicategories
+  --------------------------------------------------
+
+  --[[
+    extract_0cells extracts 0-cells from a bicategory
+  ]]--
+  extract_0cells: Bi.Bicategory -> [Bi.Cell0] [bicat ->
+    -- In a real implementation, this would extract actual 0-cells
+    []
+  ]
+
+  --[[
+    extract_1cells extracts 1-cells from a bicategory
+  ]]--
+  extract_1cells: Bi.Bicategory -> [Bi.Cell1] [bicat ->
+    -- In a real implementation, this would extract actual 1-cells
+    []
+  ]
+
+  --[[
+    extract_2cells extracts 2-cells from a bicategory
+  ]]--
+  extract_2cells: Bi.Bicategory -> [Bi.Cell2] [bicat ->
+    -- In a real implementation, this would extract actual 2-cells
+    []
+  ]
+
+  --[[
+    find_0cell_box finds a 0-cell box by its name
+  ]]--
+  find_0cell_box: [Wire.Box] * S -> Wire.Box [boxes name ->
+    -- In a real implementation, this would find the matching box
+    boxes[0]
+  ]
+
+  --[[
+    find_1cell_box finds a 1-cell box by its name
+  ]]--
+  find_1cell_box: [Wire.Box] * S -> Wire.Box [boxes name ->
+    -- In a real implementation, this would find the matching box
+    boxes[0]
+  ]
+
+  --[[
+    find_2cell_box finds a 2-cell box by its name
+  ]]--
+  find_2cell_box: [Wire.Box] * S -> Wire.Box [boxes name ->
+    -- In a real implementation, this would find the matching box
+    boxes[0]
+  ]
+
+  --------------------------------------------------
+  -- Helper Functions for Operads
+  --------------------------------------------------
+
+  --[[
+    extract_operations extracts operations from an operad
+  ]]--
+  extract_operations: Operad.Operad -> [Operad.Operation] [op ->
+    -- In a real implementation, this would extract actual operations
+    []
+  ]
+
+  --[[
+    find_operad_box finds an operad box by its name
+  ]]--
+  find_operad_box: [Wire.Box] * S -> Wire.Box [boxes name ->
+    -- In a real implementation, this would find the matching box
+    boxes[0]
+  ]
+
+  --[[
+    range creates a range of integers from start (inclusive) to end (exclusive)
+  ]]--
+  range: Z * Z -> [Z] [start end ->
+    -- In a real implementation, this would create a proper range
+    []
   ]
 }

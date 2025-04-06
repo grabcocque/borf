@@ -1,9 +1,9 @@
 --[[
   Generator Transformations
-  
+
   This module defines transformations between generator categories,
   including functors, natural transformations, and adjunctions.
-  
+
   It provides the categorical foundation for generator composition
   and transformation between different generator types.
 ]]--
@@ -14,14 +14,14 @@
     GeneratorFunctor
     GeneratorNatTransformation
     GeneratorAdjunction
-    
+
     -- Special functors
     MapFunctor
     FilterFunctor
     TakeFunctor
     ZipFunctor
     FlattenFunctor
-    
+
     -- Generator transformation categories
     GeneratorCategory
     StreamCategory
@@ -37,27 +37,27 @@
     generator_functor
     generator_nat_transformation
     generator_adjunction
-    
+
     -- Functor constructors
     map_functor
     filter_functor
     take_functor
     zip_functor
     flatten_functor
-    
+
     -- Functor operations
     apply_functor
     compose_functors
-    
+
     -- Natural transformation operations
     apply_nat_transformation
     vertical_composition
     horizontal_composition
-    
+
     -- Category construction
     generator_category
     stream_category
-    
+
     -- Generator/Stream transformations
     generator_to_stream
     stream_to_generator
@@ -289,7 +289,7 @@
     if f.target_cat.name != g.source_cat.name {
       error("Cannot compose functors: target category of first must equal source category of second")
     }
-    
+
     generator_functor(
       f.name + "∘" + g.name,
       f.source_cat,
@@ -331,7 +331,7 @@
     if alpha.target_functor.name != beta.source_functor.name {
       error("Cannot compose natural transformations vertically: target functor of first must equal source functor of second")
     }
-    
+
     generator_nat_transformation(
       alpha.name + " • " + beta.name,
       alpha.source_functor,
@@ -347,10 +347,10 @@
     if alpha.source_functor.target_cat.name != beta.source_functor.source_cat.name {
       error("Cannot compose natural transformations horizontally: categories must match")
     }
-    
+
     let fg = compose_functors(alpha.source_functor, beta.source_functor) in
     let gh = compose_functors(alpha.target_functor, beta.target_functor) in
-    
+
     generator_nat_transformation(
       alpha.name + " ⊗ " + beta.name,
       fg,
@@ -372,11 +372,11 @@
       objects: [], -- Will be populated dynamically
       morphisms: [], -- Will be populated dynamically
       id: [g -> g],
-      compose: [f g -> 
+      compose: [f g ->
         @Generator.generator(
           [state ->
             let result1 = @Generator.next(state.g1) in
-            
+
             if result1._type == "completed" {
               { _type: "completed", value: null, next_state: null }
             } else {
@@ -385,9 +385,9 @@
                 ...state.g2,
                 state: result1.value
               } in
-              
+
               let result2 = @Generator.next(g2_with_input) in
-              
+
               {
                 _type: result2._type,
                 value: result2.value,
@@ -413,12 +413,12 @@
       objects: [], -- Will be populated dynamically
       morphisms: [], -- Will be populated dynamically
       id: [s -> s],
-      compose: [s1 s2 -> 
+      compose: [s1 s2 ->
         @Stream.stream(
           @Generator.generator(
             [state ->
               let result1 = @Generator.next(state.g1.generator) in
-              
+
               if result1._type == "completed" {
                 { _type: "completed", value: null, next_state: null }
               } else {
@@ -427,9 +427,9 @@
                   ...state.g2.generator,
                   state: result1.value
                 } in
-                
+
                 let result2 = @Generator.next(g2_with_input) in
-                
+
                 {
                   _type: result2._type,
                   value: result2.value,
@@ -482,26 +482,26 @@
   --------------------------------------------------
 
   --[[
-    Structure mapping that establishes @GeneratorXf as a category of 
+    Structure mapping that establishes @GeneratorXf as a category of
     transformations between generator categories.
-    
+
     In this categorical structure:
     - Objects are generator functors
     - Morphisms are natural transformations between functors
     - Composition is functor composition
-    
-    This captures the essence of transformations between different 
+
+    This captures the essence of transformations between different
     generator categories and semantics.
   ]]--
   structure: {
     -- Map GeneratorXf to a category
     objects: GeneratorFunctor,
     morphisms: GeneratorNatTransformation,
-    
+
     -- Base category structure
     dom: [nt -> nt.source_functor],
     cod: [nt -> nt.target_functor],
-    id: [f -> 
+    id: [f ->
       generator_nat_transformation(
         "id_" + f.name,
         f,
@@ -510,26 +510,26 @@
       )
     ],
     compose: [alpha beta -> vertical_composition(alpha, beta)],
-    
+
     -- Functor constructors
     map_functor: map_functor,
     filter_functor: filter_functor,
     take_functor: take_functor,
     zip_functor: zip_functor,
     flatten_functor: flatten_functor,
-    
+
     -- Functor operations
     apply_functor: apply_functor,
     compose_functors: compose_functors,
-    
+
     -- Category construction
     generator_category: generator_category,
     stream_category: stream_category,
-    
+
     -- Generator/Stream transformations
     generator_to_stream: generator_to_stream,
     stream_to_generator: stream_to_generator,
-    
+
     -- Laws for functor categories
     law: {
       -- Functor laws
@@ -537,31 +537,31 @@
         let id_g = f.source_cat.id(g) in
         f.object_map(id_g) == f.target_cat.id(f.object_map(g))
       ],
-      
+
       composition_preservation: [f g1 g2 ->
         let composed = f.source_cat.compose(g1, g2) in
         f.object_map(composed) == f.target_cat.compose(f.object_map(g1), f.object_map(g2))
       ],
-      
+
       -- Natural transformation laws
       naturality: [alpha g ->
         let f1 = alpha.source_functor in
         let f2 = alpha.target_functor in
-        
+
         f2.object_map(g) == alpha.components(f1.object_map(g))
       ],
-      
+
       -- Functor composition laws
       associativity: [f g h ->
         compose_functors(compose_functors(f, g), h) ==
         compose_functors(f, compose_functors(g, h))
       ],
-      
+
       -- Adjunction laws
       adjunction_unit_counit: [adj f ->
         let l = adj.left_functor in
         let r = adj.right_functor in
-        
+
         vertical_composition(
           generator_nat_transformation(
             "l(unit)",
@@ -571,7 +571,7 @@
           ),
           adj.counit
         ) == id(l) &&
-        
+
         vertical_composition(
           adj.unit,
           generator_nat_transformation(
@@ -596,21 +596,21 @@
     functor_example: () -> @Generator.Generator.Z [->
       -- Create a generator
       let numbers = @Generator.range(1, 10, 1) in
-      
+
       -- Create a map functor
       let double_functor = map_functor([x -> x * 2]) in
-      
+
       -- Apply the functor
       apply_specialized_functor(double_functor, numbers)
     ],
-    
+
     --[[
       Example 2: Composing functors
     ]]--
     compose_functors_example: () -> [Z] [->
       -- Create generator categories
       let gen_cat = generator_category("GenCat") in
-      
+
       -- Create functors
       let double_functor = generator_functor(
         "Double",
@@ -619,7 +619,7 @@
         [g -> @Generator.map(g, [x -> x * 2])],
         [f -> [x -> f(x * 2)]]
       ) in
-      
+
       let filter_even_functor = generator_functor(
         "FilterEven",
         gen_cat,
@@ -627,18 +627,18 @@
         [g -> @Generator.filter(g, [x -> x % 2 == 0])],
         [f -> [x -> x % 2 == 0 ? f(x) : null]]
       ) in
-      
+
       -- Compose the functors
       let composed = compose_functors(double_functor, filter_even_functor) in
-      
+
       -- Apply to a generator
       let numbers = @Generator.range(1, 10, 1) in
       let result = apply_functor(composed, numbers) in
-      
+
       -- Collect results
       @Generator.collect(result)
     ],
-    
+
     --[[
       Example 3: Generator to Stream adjunction
     ]]--
@@ -646,11 +646,11 @@
       -- Create categories
       let gen_cat = generator_category("GenCat") in
       let stream_cat = stream_category("StreamCat") in
-      
+
       -- Create functors
       let g2s = generator_to_stream(gen_cat, stream_cat) in
       let s2g = stream_to_generator(stream_cat, gen_cat) in
-      
+
       -- Create unit and counit
       let unit = generator_nat_transformation(
         "Unit",
@@ -658,14 +658,14 @@
         compose_functors(s2g, g2s),
         [g -> @Stream.stream(g).generator]
       ) in
-      
+
       let counit = generator_nat_transformation(
         "Counit",
         compose_functors(g2s, s2g),
         stream_cat.id,
         [s -> @Stream.stream(s.generator)]
       ) in
-      
+
       -- Create an adjunction
       let adj = generator_adjunction(
         "StreamAdjunction",
@@ -674,12 +674,12 @@
         unit,
         counit
       ) in
-      
+
       -- Test with some examples
       let numbers = @Generator.range(1, 5, 1) in
       let numbers_stream = @Stream.from_range(1, 5, 1) in
-      
+
       ((@Stream.stream(numbers), numbers_stream.generator), (numbers, @Stream.stream(numbers_stream.generator)))
     ]
   }
-} 
+}

@@ -1,0 +1,855 @@
+--[[
+  CAV Transformations
+  
+  This module defines transformations between CAV categories
+  and other categorical structures, enabling the representation of
+  context-dependent computations in different mathematical frameworks.
+  
+  These transformations are dual to monad transformations but use
+  linear types instead of monadic patterns.
+]]--
+
+@CAVXf@prelude: {
+  typ: {
+    -- Core transformation types
+    CAVFunctor
+    CAVNaturalTransformation
+    CAVAdjunction
+    
+    -- Special functors
+    StoreCAVFunctor
+    EnvCAVFunctor
+    StreamCAVFunctor
+    ProductCAVFunctor
+    
+    -- Transformations
+    CAVTransformer
+    CAVCoalgebra
+  }
+
+  op: {
+    -- Functor composition
+    ∘
+    
+    -- CAV operations
+    >=< -- CAV composition
+    =>> -- Cokleisli composition
+    -o> -- Linear function application
+  }
+
+  fn: {
+    -- Core transformation functions
+    CAV_functor
+    CAV_nat_transformation
+    CAV_adjunction
+    
+    -- Functor constructors
+    store_CAV_functor
+    env_CAV_functor
+    stream_CAV_functor
+    product_CAV_functor
+    
+    -- Natural transformation constructors
+    CAV_to_store_nt
+    store_to_CAV_nt
+    CAV_to_env_nt
+    env_to_CAV_nt
+    
+    -- Adjunction constructors
+    CAV_store_adjunction
+    
+    -- Functor operations
+    apply_functor
+    compose_functors
+    
+    -- Natural transformation operations
+    apply_nat_transformation
+    vertical_composition
+    horizontal_composition
+    
+    -- CAV/Store transformations
+    CAV_to_store
+    store_to_CAV
+    
+    -- CAV/Env transformations
+    CAV_to_env
+    env_to_CAV
+    
+    -- CAV/Stream transformations
+    CAV_to_stream
+    stream_to_CAV
+    
+    -- Transformer operations
+    lift_CAV
+    CAV_transformer
+    
+    -- Coalgebra operations
+    CAV_coalgebra
+    unfold
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@CAVXf@prelude, @CAV, true),  -- Add dependency on CAV module
+    (@CAVXf@prelude, @Linear, true),   -- Add dependency on Linear types
+    (@CAVXf@prelude, @CatXf, true),    -- Add dependency on Category transformations
+    (@CAVXf@prelude, @Cat, true),      -- Add dependency on Category
+    (@CAVXf@prelude, @T, true)         -- Add dependency on Type system
+  }
+
+  --------------------------------------------------
+  -- Core Transformation Types
+  --------------------------------------------------
+
+  --[[
+    CAVFunctor represents a functor between CAV categories.
+    
+    This structure captures transformations that preserve the CAV
+    structure while changing the underlying representation.
+  ]]--
+  CAVFunctor: {
+    source_category: @Cat.Category,      -- Source category
+    target_category: @Cat.Category,      -- Target category
+    source_CAV: @CAV.!CAV,   -- Source CAV
+    target_CAV: @CAV.!CAV,   -- Target CAV
+    map_obj: (a -> b),                   -- Object mapping component
+    map_morphism: ((w a -o> b) -> (v c -o> d)),  -- Morphism mapping (cokleisli arrows)
+    preserves_extract: Bool,             -- Whether extract is preserved
+    preserves_duplicate: Bool,           -- Whether duplicate is preserved
+    preserves_extend: Bool               -- Whether extend is preserved
+  }
+
+  --[[
+    CAVNaturalTransformation represents a natural transformation
+    between CAV functors.
+  ]]--
+  CAVNaturalTransformation: {
+    source_functor: CAVFunctor,      -- Source functor
+    target_functor: CAVFunctor,      -- Target functor
+    components: (a -> (w a -o> v a)),    -- Components of the natural transformation
+    naturality: Bool,                    -- Whether naturality condition holds
+    preserves_extract: Bool,             -- Whether extract is preserved
+    preserves_duplicate: Bool            -- Whether duplicate is preserved
+  }
+
+  --[[
+    CAVAdjunction represents an adjunction between CAV categories.
+  ]]--
+  CAVAdjunction: {
+    left_functor: CAVFunctor,        -- Left functor in the adjunction
+    right_functor: CAVFunctor,       -- Right functor in the adjunction
+    unit: CAVNaturalTransformation,  -- Unit natural transformation
+    counit: CAVNaturalTransformation, -- Counit natural transformation
+    adjoint: Bool                        -- Whether adjunction laws hold
+  }
+
+  --[[
+    CAVTransformer represents a CAV transformer, which
+    adds structure from one CAV to another.
+  ]]--
+  CAVTransformer: {
+    base_CAV: @CAV.!CAV,     -- Base CAV
+    transform: (@CAV.!CAV -> @CAV.!CAV),  -- Transformation function
+    lift: ((w a -o> b) -o> (t w a -o> b)),  -- Lift function
+    preserves_structure: Bool            -- Whether CAV structure is preserved
+  }
+
+  --[[
+    CAVCoalgebra represents a coalgebra for a CAV,
+    which is a morphism α: A → W(A) where W is a CAV.
+  ]]--
+  CAVCoalgebra: {
+    CAV: @CAV.!CAV,          -- The CAV
+    carrier: T.Type,                     -- The carrier type
+    operation: (a -o> w a),              -- The coalgebra operation
+    is_coalgebra: Bool                   -- Whether coalgebra laws hold
+  }
+
+  --------------------------------------------------
+  -- Core Transformation Functions
+  --------------------------------------------------
+
+  --[[
+    CAV_functor creates a functor between CAV categories
+  ]]--
+  CAV_functor: S * @Cat.Category * @Cat.Category * 
+                @CAV.!CAV * @CAV.!CAV *
+                (a -> b) * ((w a -o> b) -> (v c -o> d)) -> 
+                CAVFunctor [
+    name source target source_CAV target_CAV obj_map morphism_map ->
+    {
+      source_category: source,
+      target_category: target,
+      source_CAV: source_CAV,
+      target_CAV: target_CAV,
+      map_obj: obj_map,
+      map_morphism: morphism_map,
+      preserves_extract: true,    -- Should be verified
+      preserves_duplicate: true,  -- Should be verified
+      preserves_extend: true      -- Should be verified
+    }
+  ]
+
+  --[[
+    CAV_nat_transformation creates a natural transformation between CAV functors
+  ]]--
+  CAV_nat_transformation: S * CAVFunctor * CAVFunctor * 
+                          (a -> (w a -o> v a)) -> 
+                          CAVNaturalTransformation [
+    name source_functor target_functor components ->
+    {
+      source_functor: source_functor,
+      target_functor: target_functor,
+      components: components,
+      naturality: true,           -- Should be verified
+      preserves_extract: true,    -- Should be verified
+      preserves_duplicate: true   -- Should be verified
+    }
+  ]
+
+  --[[
+    CAV_adjunction creates an adjunction between CAV categories
+  ]]--
+  CAV_adjunction: S * CAVFunctor * CAVFunctor * 
+                   CAVNaturalTransformation * CAVNaturalTransformation -> 
+                   CAVAdjunction [
+    name left right unit counit ->
+    {
+      left_functor: left,
+      right_functor: right,
+      unit: unit,
+      counit: counit,
+      adjoint: true  -- Should be verified
+    }
+  ]
+
+  --------------------------------------------------
+  -- Special Functors
+  --------------------------------------------------
+
+  --[[
+    store_CAV_functor creates a functor from a category to the Store CAV category
+  ]]--
+  store_CAV_functor: S * T.Type -> StoreCAVFunctor [
+    name state_type ->
+    CAV_functor(
+      name,
+      @Cat.structure,
+      @CAV.cokleisli_structure,
+      @CAV.identity.base,
+      @CAV.store.base,
+      [a -> a],  -- Object mapping
+      [f -> [(store, state) -o>
+        let getter = store.0 in
+        let current = state in
+        f(getter(current))
+      ]],  -- Morphism mapping
+    )
+  ]
+
+  --[[
+    env_CAV_functor creates a functor from a category to the Env CAV category
+  ]]--
+  env_CAV_functor: S * T.Type -> EnvCAVFunctor [
+    name env_type ->
+    CAV_functor(
+      name,
+      @Cat.structure,
+      @CAV.cokleisli_structure,
+      @CAV.identity.base,
+      @CAV.env.base,
+      [a -> a],  -- Object mapping
+      [f -> [(env, value) -o>
+        f(value)
+      ]],  -- Morphism mapping
+    )
+  ]
+
+  --[[
+    stream_CAV_functor creates a functor from a category to the Stream CAV category
+  ]]--
+  stream_CAV_functor: S -> StreamCAVFunctor [
+    name ->
+    CAV_functor(
+      name,
+      @Cat.structure,
+      @CAV.cokleisli_structure,
+      @CAV.identity.base,
+      @CAV.stream.base,
+      [a -> a],  -- Object mapping
+      [f -> [stream -o>
+        f(stream[0])
+      ]],  -- Morphism mapping
+    )
+  ]
+
+  --[[
+    product_CAV_functor creates a functor from a product of categories to a Product CAV category
+  ]]--
+  product_CAV_functor: S * @CAV.!CAV * @CAV.!CAV -> ProductCAVFunctor [
+    name left right ->
+    let product = @CAV.product_CAV("Product", left, right) in
+    
+    CAV_functor(
+      name,
+      @Cat.structure,
+      @CAV.cokleisli_structure,
+      @CAV.identity.base,
+      product.base,
+      [a -> a],  -- Object mapping
+      [f -> [(left_container, right_container) -o>
+        let left_val = @CAV.extract(left, left_container) in
+        let right_val = @CAV.extract(right, right_container) in
+        f((left_val, right_val))
+      ]],  -- Morphism mapping
+    )
+  ]
+
+  --------------------------------------------------
+  -- Natural Transformations
+  --------------------------------------------------
+
+  --[[
+    CAV_to_store_nt creates a natural transformation from a CAV to Store
+  ]]--
+  CAV_to_store_nt: S -> CAVNaturalTransformation [
+    name ->
+    CAV_nat_transformation(
+      name,
+      identity_functor(@CAV.identity.base),
+      store_CAV_functor("CAVToStore", typeof(Z)),
+      [a -> CAV_to_store(a)]
+    )
+  ]
+
+  --[[
+    store_to_CAV_nt creates a natural transformation from Store to a CAV
+  ]]--
+  store_to_CAV_nt: S -> CAVNaturalTransformation [
+    name ->
+    CAV_nat_transformation(
+      name,
+      store_CAV_functor("StoreToCAV", typeof(Z)),
+      identity_functor(@CAV.identity.base),
+      [a -> store_to_CAV(a)]
+    )
+  ]
+
+  --[[
+    CAV_to_env_nt creates a natural transformation from a CAV to Env
+  ]]--
+  CAV_to_env_nt: S -> CAVNaturalTransformation [
+    name ->
+    CAV_nat_transformation(
+      name,
+      identity_functor(@CAV.identity.base),
+      env_CAV_functor("CAVToEnv", typeof(S)),
+      [a -> CAV_to_env(a)]
+    )
+  ]
+
+  --[[
+    env_to_CAV_nt creates a natural transformation from Env to a CAV
+  ]]--
+  env_to_CAV_nt: S -> CAVNaturalTransformation [
+    name ->
+    CAV_nat_transformation(
+      name,
+      env_CAV_functor("EnvToCAV", typeof(S)),
+      identity_functor(@CAV.identity.base),
+      [a -> env_to_CAV(a)]
+    )
+  ]
+
+  --------------------------------------------------
+  -- Utility Functions
+  --------------------------------------------------
+
+  --[[
+    apply_functor applies a CAV functor to a morphism
+  ]]--
+  apply_functor: CAVFunctor * (w a -o> b) -> (v c -o> d) [
+    functor morphism ->
+    functor.map_morphism(morphism)
+  ]
+
+  --[[
+    compose_functors composes two CAV functors
+  ]]--
+  compose_functors: CAVFunctor * CAVFunctor -> CAVFunctor [
+    f g ->
+    {
+      source_category: g.source_category,
+      target_category: f.target_category,
+      source_CAV: g.source_CAV,
+      target_CAV: f.target_CAV,
+      map_obj: [a -> f.map_obj(g.map_obj(a))],
+      map_morphism: [morphism -> f.map_morphism(g.map_morphism(morphism))],
+      preserves_extract: f.preserves_extract && g.preserves_extract,
+      preserves_duplicate: f.preserves_duplicate && g.preserves_duplicate,
+      preserves_extend: f.preserves_extend && g.preserves_extend
+    }
+  ]
+
+  --[[
+    identity_functor creates an identity functor for a CAV
+  ]]--
+  identity_functor: @CAV.!CAV -> CAVFunctor [cmd ->
+    {
+      source_category: @CAV.cokleisli_structure,
+      target_category: @CAV.cokleisli_structure,
+      source_CAV: cmd,
+      target_CAV: cmd,
+      map_obj: [a -> a],
+      map_morphism: [morphism -> morphism],
+      preserves_extract: true,
+      preserves_duplicate: true,
+      preserves_extend: true
+    }
+  ]
+
+  --[[
+    vertical_composition composes two natural transformations vertically
+  ]]--
+  vertical_composition: CAVNaturalTransformation * CAVNaturalTransformation -> 
+                      CAVNaturalTransformation [
+    alpha beta ->
+    {
+      source_functor: beta.source_functor,
+      target_functor: alpha.target_functor,
+      components: [a -> 
+        let beta_component = beta.components(a) in
+        let alpha_component = alpha.components(
+          beta.target_functor.map_obj(a)
+        ) in
+        [w_a -o>
+          alpha_component(beta_component(w_a))
+        ]
+      ],
+      naturality: alpha.naturality && beta.naturality,
+      preserves_extract: alpha.preserves_extract && beta.preserves_extract,
+      preserves_duplicate: alpha.preserves_duplicate && beta.preserves_duplicate
+    }
+  ]
+
+  --[[
+    horizontal_composition composes two natural transformations horizontally
+  ]]--
+  horizontal_composition: CAVNaturalTransformation * CAVNaturalTransformation -> 
+                        CAVNaturalTransformation [
+    alpha beta ->
+    {
+      source_functor: compose_functors(alpha.source_functor, beta.source_functor),
+      target_functor: compose_functors(alpha.target_functor, beta.target_functor),
+      components: [a -> 
+        let beta_component = beta.components(a) in
+        let mapped_beta = apply_functor(alpha.source_functor, beta_component) in
+        let alpha_component = alpha.components(
+          beta.target_functor.map_obj(a)
+        ) in
+        [w_a -o>
+          alpha_component(mapped_beta(w_a))
+        ]
+      ],
+      naturality: alpha.naturality && beta.naturality,
+      preserves_extract: alpha.preserves_extract && beta.preserves_extract,
+      preserves_duplicate: alpha.preserves_duplicate && beta.preserves_duplicate
+    }
+  ]
+
+  --[[
+    apply_nat_transformation applies a natural transformation to an object
+  ]]--
+  apply_nat_transformation: CAVNaturalTransformation * a -> (w a -o> v a) [
+    nt a ->
+    nt.components(a)
+  ]
+
+  --------------------------------------------------
+  -- CAV/Store Transformations
+  --------------------------------------------------
+
+  --[[
+    CAV_to_store transforms a CAV into a store CAV
+  ]]--
+  CAV_to_store: a -> (w a -o> ((s -> a), s)) [
+    a ->
+    [w_a -o>
+      -- Create a store from a CAVic value
+      -- For a generic transformation, we use the CAVic value itself
+      -- as the state, and create a getter that uses extend
+      let getter = [s -o> 
+        @CAV.extract(@CAV.standard_CAV, s)
+      ] in
+      (getter, w_a)
+    ]
+  ]
+
+  --[[
+    store_to_CAV transforms a store CAV into a CAV
+  ]]--
+  store_to_CAV: a -> (((s -> a), s) -o> a) [
+    a ->
+    [store -o>
+      -- Extract from the store
+      let (getter, state) = store in
+      getter(state)
+    ]
+  ]
+
+  --------------------------------------------------
+  -- CAV/Env Transformations
+  --------------------------------------------------
+
+  --[[
+    CAV_to_env transforms a CAV into an environment CAV
+  ]]--
+  CAV_to_env: a -> (w a -o> (e, a)) [
+    a ->
+    [w_a -o>
+      -- Create an environment CAV from a CAVic value
+      -- For a generic transformation, we use a default environment
+      -- and extract the value
+      let env = "default" in
+      let value = @CAV.extract(@CAV.standard_CAV, w_a) in
+      (env, value)
+    ]
+  ]
+
+  --[[
+    env_to_CAV transforms an environment CAV into a CAV
+  ]]--
+  env_to_CAV: a -> ((e, a) -o> a) [
+    a ->
+    [env_a -o>
+      -- Extract the value part
+      let (env, value) = env_a in
+      value
+    ]
+  ]
+
+  --------------------------------------------------
+  -- CAV/Stream Transformations
+  --------------------------------------------------
+
+  --[[
+    CAV_to_stream transforms a CAV into a stream CAV
+  ]]--
+  CAV_to_stream: a -> (w a -o> [a]) [
+    a ->
+    [w_a -o>
+      -- Create a stream from a CAVic value using extend
+      -- This is a simplified version that creates a finite stream
+      let initial = @CAV.extract(@CAV.standard_CAV, w_a) in
+      let next = @CAV.extend(
+        @CAV.standard_CAV,
+        [w -o> @CAV.extract(@CAV.standard_CAV, w)],
+        w_a
+      ) in
+      [initial, @CAV.extract(@CAV.standard_CAV, next), ...]
+    ]
+  ]
+
+  --[[
+    stream_to_CAV transforms a stream CAV into a CAV
+  ]]--
+  stream_to_CAV: a -> ([a] -o> a) [
+    a ->
+    [stream -o>
+      -- Extract the head of the stream
+      stream[0]
+    ]
+  ]
+
+  --------------------------------------------------
+  -- Transformer Operations
+  --------------------------------------------------
+
+  --[[
+    CAV_transformer creates a CAV transformer, which
+    adds structure from one CAV to another
+  ]]--
+  CAV_transformer: S * @CAV.!CAV * 
+                    (@CAV.!CAV -> @CAV.!CAV) *
+                    ((w a -o> b) -o> (t w a -o> b)) -> 
+                    CAVTransformer [
+    name base transform lift ->
+    {
+      base_CAV: base,
+      transform: transform,
+      lift: lift,
+      preserves_structure: true  -- Should be verified
+    }
+  ]
+
+  --[[
+    lift_CAV lifts a CAV morphism to work with a CAV transformer
+  ]]--
+  lift_CAV: CAVTransformer * (w a -o> b) -> (t w a -o> b) [
+    transformer morphism ->
+    transformer.lift(morphism)
+  ]
+
+  --------------------------------------------------
+  -- Coalgebra Operations
+  --------------------------------------------------
+
+  --[[
+    CAV_coalgebra creates a coalgebra for a CAV
+  ]]--
+  CAV_coalgebra: @CAV.!CAV * T.Type * (a -o> w a) -> CAVCoalgebra [
+    CAV carrier operation ->
+    {
+      CAV: CAV,
+      carrier: carrier,
+      operation: operation,
+      is_coalgebra: true  -- Should be verified
+    }
+  ]
+
+  --[[
+    unfold performs CAVic unfold using a coalgebra
+  ]]--
+  unfold: CAVCoalgebra * a -> w a [
+    coalgebra seed ->
+    let w_a = coalgebra.operation(seed) in
+    let duplicated = @CAV.duplicate(coalgebra.CAV, w_a) in
+    duplicated
+  ]
+
+  --------------------------------------------------
+  -- Operators
+  --------------------------------------------------
+
+  --[[
+    ∘ represents composition of functors
+  ]]--
+  ∘: CAVFunctor * CAVFunctor -> CAVFunctor [
+    f g ->
+    compose_functors(f, g)
+  ]
+
+  --[[
+    >=< represents composition of CAVs
+  ]]--
+  >=<: @CAV.!CAV * @CAV.!CAV -> @CAV.!CAV [
+    cmd1 cmd2 ->
+    @CAV.>=<(cmd1, cmd2)
+  ]
+
+  --[[
+    =>> represents cokleisli composition
+  ]]--
+  =>>: (w a -o> b) * (w b -o> c) * @CAV.!CAV -> (w a -o> c) [
+    f g cmd ->
+    @CAV.=>>(f, g, cmd)
+  ]
+
+  --[[
+    -o> represents linear function application
+  ]]--
+  -o>: a * (a -o> b) -> b [
+    x f ->
+    f(x)
+  ]
+
+  --------------------------------------------------
+  -- Adjunction Constructors
+  --------------------------------------------------
+
+  --[[
+    CAV_store_adjunction creates an adjunction between CAV and store categories
+  ]]--
+  CAV_store_adjunction: S -> CAVAdjunction [
+    name ->
+    CAV_adjunction(
+      name,
+      store_CAV_functor("StoreToCAV", typeof(Z)),
+      store_CAV_functor("CAVToStore", typeof(Z)),
+      CAV_to_store_nt("Unit"),
+      store_to_CAV_nt("Counit")
+    )
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping to Categorical Semantics
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @CAVXf@prelude as a category of 
+    transformations between CAV categories.
+    
+    In this categorical structure:
+    - Objects are CAV functors
+    - Morphisms are CAV natural transformations
+    - Identity is the identity CAV natural transformation
+    - Composition is vertical composition of CAV natural transformations
+    
+    This structure enables rigorous transformation of CAVic computations
+    between different categorical representations.
+  ]]--
+  structure: {
+    -- Map CAVXf@prelude to a category
+    objects: CAVFunctor,
+    morphisms: CAVNaturalTransformation,
+    
+    -- Base category structure
+    dom: [nt -> nt.source_functor],
+    cod: [nt -> nt.target_functor],
+    id: [f -> CAV_nat_transformation(
+      "Identity",
+      f,
+      f,
+      [a -> [w_a -o> w_a]]
+    )],
+    compose: [alpha beta -> vertical_composition(alpha, beta)],
+    
+    -- Laws
+    law: {
+      -- Basic category laws
+      identity: [nt -> 
+        vertical_composition(id(dom(nt)), nt) == nt && 
+        vertical_composition(nt, id(cod(nt))) == nt
+      ],
+      
+      associativity: [alpha beta gamma -> 
+        vertical_composition(
+          vertical_composition(alpha, beta), 
+          gamma
+        ) == vertical_composition(
+          alpha, 
+          vertical_composition(beta, gamma)
+        )
+      ],
+      
+      -- CAV specific laws
+      extract_preservation: [nt a w_a ->
+        -- Natural transformations preserve extract
+        @CAV.extract(
+          nt.target_functor.target_CAV, 
+          apply_nat_transformation(nt, a)(w_a)
+        ) == @CAV.extract(
+          nt.source_functor.source_CAV, 
+          w_a
+        )
+      ],
+      
+      duplicate_preservation: [nt a w_a ->
+        -- Natural transformations commute with duplicate
+        let lhs = apply_nat_transformation(
+          nt, 
+          nt.source_functor.map_obj(a)
+        )(@CAV.duplicate(
+          nt.source_functor.source_CAV, 
+          w_a
+        )) in
+        
+        let rhs = nt.target_functor.target_CAV.map_fn(
+          [w_b -o> apply_nat_transformation(nt, a)(w_b)]
+        )(@CAV.duplicate(
+          nt.target_functor.target_CAV, 
+          apply_nat_transformation(nt, a)(w_a)
+        )) in
+        
+        lhs == rhs
+      ],
+      
+      -- Adjunction laws
+      adjunction_unit_counit: [adj a w_a ->
+        let F = adj.left_functor in
+        let G = adj.right_functor in
+        let η = adj.unit in
+        let ε = adj.counit in
+        
+        vertical_composition(
+          η, 
+          horizontal_composition(id(G), ε)
+        ).components(a)(w_a) == w_a
+        &&
+        vertical_composition(
+          horizontal_composition(ε, id(F)),
+          η
+        ).components(F.map_obj(a))(
+          apply_functor(F, [w_a -o> w_a])(w_a)
+        ) == apply_functor(F, [w_a -o> w_a])(w_a)
+      ]
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    --[[
+      Example 1: Transforming a CAV to a store CAV and back
+    ]]--
+    CAV_store_roundtrip: (w a -o> a) -> (w a -o> a) [
+      extract_fn ->
+      let to_store = CAV_to_store(typeof(a)) in
+      let from_store = store_to_CAV(typeof(a)) in
+      [w_a -o>
+        let store = to_store(w_a) in
+        from_store(store)
+      ]
+    ],
+    
+    --[[
+      Example 2: Applying a CAV functor to a cokleisli arrow
+    ]]--
+    apply_to_cokleisli: CAVFunctor * (w a -o> b) -> (v c -o> d) [
+      functor cokleisli ->
+      apply_functor(functor, cokleisli)
+    ],
+    
+    --[[
+      Example 3: Creating a coalgebra for the store CAV
+    ]]--
+    store_coalgebra: () -> CAVCoalgebra [->
+      CAV_coalgebra(
+        @CAV.store.base,
+        typeof(Z),
+        [n -o>
+          let getter = [i -o> i * n] in  -- A simple getter function
+          (getter, n)  -- The state is the input value
+        ]
+      )
+    ],
+    
+    --[[
+      Example 4: Lifting a cokleisli arrow through a CAV transformer
+    ]]--
+    lift_example: () -> ((e, w a) -o> b) [->
+      -- Create a CAV transformer that adds environment structure
+      let transformer = CAV_transformer(
+        "EnvT",
+        @CAV.identity.base,
+        [base_cmd -> 
+          @CAV.env.base  -- Just return the env CAV for simplicity
+        ],
+        [f -o> [(e, w_a) -o>
+          f(w_a)  -- Ignore the environment and apply the function
+        ]]
+      ) in
+      
+      -- Create a simple cokleisli arrow to lift
+      let cokleisli = [w_a -o> @CAV.extract(@CAV.identity.base, w_a) + 1] in
+      
+      -- Lift the arrow
+      lift_CAV(transformer, cokleisli)
+    ],
+    
+    --[[
+      Example 5: Composition of CAV functors
+    ]]--
+    compose_CAV_functors: () -> CAVFunctor [->
+      compose_functors(
+        store_CAV_functor("StoreFunctor", typeof(Z)),
+        env_CAV_functor("EnvFunctor", typeof(S))
+      )
+    ]
+  }
+} 

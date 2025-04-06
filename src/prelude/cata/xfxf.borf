@@ -16,7 +16,7 @@
     FunctorTrans CategoryTrans RepresentationTrans
 
     -- Higher transformations
-    Adjunction Equivalence Monad Comonad
+    Adjunction Equivalence Monad CAV
   }
 
   op: {
@@ -43,7 +43,7 @@
     -- Higher transformations
     to_adjunction from_adjunction adjoint_pair
     to_equivalence from_equivalence
-    to_monad from_monad to_comonad from_comonad
+    to_monad from_monad to_CAV from_CAV
 
     -- Common natural transformations
     fmap_transform apply_transform join_transform
@@ -216,13 +216,13 @@
   }
 
   --[[
-    Comonad derived from an adjunction
+    CAV derived from an adjunction
   ]]--
-  Comonad: {
+  CAV: {
     functor: @Xf.Xf,         -- W: C → C
     counit: NaturalTransformation,  -- ε: W → Id_C
     comultiplication: NaturalTransformation,  -- δ: W → W ∘ W
-    is_comonad: Bool         -- Whether (W, ε, δ) forms a valid comonad
+    is_CAV: Bool         -- Whether (W, ε, δ) forms a valid CAV
   }
 
   --------------------------------------------------

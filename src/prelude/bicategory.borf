@@ -1,0 +1,1209 @@
+--[[
+  Bicategories
+  
+  This module defines bicategories, which are higher-dimensional categorical
+  structures with objects (0-cells), 1-morphisms (1-cells) between objects,
+  and 2-morphisms (2-cells) between 1-morphisms.
+  
+  Bicategories are a generalization of 2-categories where composition is
+  associative and unital only up to coherent isomorphism, rather than strictly.
+  
+  This implementation uses linear types to ensure proper resource handling
+  and avoid monadic patterns.
+]]--
+
+@Bicategory: {
+  typ: {
+    -- Core types
+    !Bicategory
+    !Object  -- 0-cell
+    !Morphism  -- 1-cell
+    !TwoMorphism  -- 2-cell
+    
+    -- Composition operations
+    !HorizontalComposition  -- Composition of 1-morphisms
+    !VerticalComposition  -- Composition of 2-morphisms
+    !WhiskerLeft  -- Left whiskering
+    !WhiskerRight  -- Right whiskering
+    
+    -- Coherence isomorphisms
+    !Associator
+    !LeftUnitor
+    !RightUnitor
+    
+    -- Specific instances
+    !CatBicategory  -- Bicategory of categories
+    !SpanBicategory  -- Bicategory of spans
+    !ProfunctorBicategory  -- Bicategory of profunctors
+  }
+
+  op: {
+    -- Composition operators
+    ∘₁  -- Horizontal composition of 1-morphisms
+    ∘₂  -- Vertical composition of 2-morphisms
+    ◁   -- Left whiskering
+    ▷   -- Right whiskering
+    =⇒  -- 2-morphism
+    -o> -- Linear function application
+  }
+
+  fn: {
+    -- Core functions
+    bicategory
+    object
+    morphism
+    two_morphism
+    
+    -- Composition operations
+    horizontal_composition
+    vertical_composition
+    whisker_left
+    whisker_right
+    
+    -- Coherence isomorphisms
+    associator
+    left_unitor
+    right_unitor
+    
+    -- Instance constructors
+    cat_bicategory
+    span_bicategory
+    profunctor_bicategory
+    
+    -- Standard instances
+    standard_bicategory
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Bicategory, @Linear, true),  -- Add dependency on Linear types
+    (@Bicategory, @Cat, true),     -- Add dependency on Category
+    (@Bicategory, @T, true)        -- Add dependency on Type system
+  }
+
+  --------------------------------------------------
+  -- Core Types
+  --------------------------------------------------
+
+  --[[
+    !Bicategory represents a bicategory.
+    
+    A bicategory consists of:
+    - Objects (0-cells)
+    - Morphisms (1-cells) between objects
+    - 2-morphisms (2-cells) between parallel 1-cells
+    - Horizontal composition of 1-cells (with associator)
+    - Vertical composition of 2-cells (strictly associative)
+    - Identity 1-cells (with left and right unitors)
+    - Identity 2-cells
+  ]]--
+  !Bicategory: {
+    _type: "Bicategory",
+    objects: [!Object],                    -- Collection of objects (0-cells)
+    hom_categories: !{(a, b): @Cat.Category},  -- Hom-categories between objects
+    horizontal_composition: (f * g -> h),  -- Composition of 1-morphisms
+    identity_morphisms: !{a: !Morphism},   -- Identity 1-morphisms for each object
+    
+    -- Coherence isomorphisms
+    associator: (f * g * h -> !TwoMorphism),  -- Associativity isomorphism
+    left_unitor: (f -> !TwoMorphism),         -- Left identity isomorphism
+    right_unitor: (f -> !TwoMorphism),        -- Right identity isomorphism
+    
+    -- Coherence conditions
+    pentagon_identity: Bool,           -- Pentagon coherence for associator
+    triangle_identity: Bool,           -- Triangle coherence for unitors
+    vertical_composition_assoc: Bool,  -- Associativity of vertical composition
+    
+    name: S  -- Name of the bicategory
+  }
+
+  --[[
+    !Object represents an object (0-cell) in a bicategory.
+  ]]--
+  !Object: {
+    _type: "BicategoryObject",
+    value: a,           -- The underlying value
+    bicategory: !Bicategory,  -- The bicategory this object belongs to
+    index: Z            -- Index in the bicategory's object collection
+  }
+
+  --[[
+    !Morphism represents a 1-morphism (1-cell) in a bicategory.
+  ]]--
+  !Morphism: {
+    _type: "BicategoryMorphism",
+    source: !Object,       -- Source object
+    target: !Object,       -- Target object
+    value: f,              -- The underlying value
+    bicategory: !Bicategory,  -- The bicategory this morphism belongs to
+    is_identity: Bool      -- Whether this is an identity morphism
+  }
+
+  --[[
+    !TwoMorphism represents a 2-morphism (2-cell) in a bicategory.
+  ]]--
+  !TwoMorphism: {
+    _type: "BicategoryTwoMorphism",
+    source: !Morphism,     -- Source 1-morphism
+    target: !Morphism,     -- Target 1-morphism
+    value: α,              -- The underlying value
+    bicategory: !Bicategory,  -- The bicategory this 2-morphism belongs to
+    is_identity: Bool      -- Whether this is an identity 2-morphism
+  }
+
+  --[[
+    !HorizontalComposition represents horizontal composition of 1-morphisms.
+  ]]--
+  !HorizontalComposition: {
+    _type: "HorizontalComposition",
+    first: !Morphism,      -- First morphism
+    second: !Morphism,     -- Second morphism
+    result: !Morphism,     -- Result of composition
+    bicategory: !Bicategory   -- The bicategory in which the composition takes place
+  }
+
+  --[[
+    !VerticalComposition represents vertical composition of 2-morphisms.
+  ]]--
+  !VerticalComposition: {
+    _type: "VerticalComposition",
+    first: !TwoMorphism,   -- First 2-morphism
+    second: !TwoMorphism,  -- Second 2-morphism
+    result: !TwoMorphism,  -- Result of composition
+    bicategory: !Bicategory   -- The bicategory in which the composition takes place
+  }
+
+  --[[
+    !WhiskerLeft represents left whiskering: composition of a 1-morphism with a 2-morphism.
+  ]]--
+  !WhiskerLeft: {
+    _type: "WhiskerLeft",
+    morphism: !Morphism,    -- 1-morphism to compose
+    two_morphism: !TwoMorphism,  -- 2-morphism to compose with
+    result: !TwoMorphism,   -- Result of whiskering
+    bicategory: !Bicategory    -- The bicategory in which the whiskering takes place
+  }
+
+  --[[
+    !WhiskerRight represents right whiskering: composition of a 2-morphism with a 1-morphism.
+  ]]--
+  !WhiskerRight: {
+    _type: "WhiskerRight",
+    two_morphism: !TwoMorphism,  -- 2-morphism to compose with
+    morphism: !Morphism,    -- 1-morphism to compose
+    result: !TwoMorphism,   -- Result of whiskering
+    bicategory: !Bicategory    -- The bicategory in which the whiskering takes place
+  }
+
+  --[[
+    !Associator represents the associativity isomorphism for horizontal composition.
+  ]]--
+  !Associator: {
+    _type: "Associator",
+    first: !Morphism,      -- First morphism
+    second: !Morphism,     -- Second morphism
+    third: !Morphism,      -- Third morphism
+    forward: !TwoMorphism, -- (f ∘₁ g) ∘₁ h ⟹ f ∘₁ (g ∘₁ h)
+    backward: !TwoMorphism, -- f ∘₁ (g ∘₁ h) ⟹ (f ∘₁ g) ∘₁ h
+    bicategory: !Bicategory   -- The bicategory in which the associator operates
+  }
+
+  --[[
+    !LeftUnitor represents the left identity isomorphism.
+  ]]--
+  !LeftUnitor: {
+    _type: "LeftUnitor",
+    morphism: !Morphism,   -- The morphism
+    forward: !TwoMorphism, -- id_b ∘₁ f ⟹ f
+    backward: !TwoMorphism, -- f ⟹ id_b ∘₁ f
+    bicategory: !Bicategory  -- The bicategory in which the unitor operates
+  }
+
+  --[[
+    !RightUnitor represents the right identity isomorphism.
+  ]]--
+  !RightUnitor: {
+    _type: "RightUnitor",
+    morphism: !Morphism,   -- The morphism
+    forward: !TwoMorphism, -- f ∘₁ id_c ⟹ f
+    backward: !TwoMorphism, -- f ⟹ f ∘₁ id_c
+    bicategory: !Bicategory  -- The bicategory in which the unitor operates
+  }
+
+  --[[
+    !CatBicategory represents the bicategory of categories, functors, and natural transformations.
+  ]]--
+  !CatBicategory: {
+    _type: "CatBicategory",
+    base: !Bicategory  -- The underlying bicategory
+  }
+
+  --[[
+    !SpanBicategory represents the bicategory of spans.
+  ]]--
+  !SpanBicategory: {
+    _type: "SpanBicategory",
+    base: !Bicategory,  -- The underlying bicategory
+    base_category: @Cat.Category  -- The base category for spans
+  }
+
+  --[[
+    !ProfunctorBicategory represents the bicategory of profunctors.
+  ]]--
+  !ProfunctorBicategory: {
+    _type: "ProfunctorBicategory",
+    base: !Bicategory  -- The underlying bicategory
+  }
+
+  --------------------------------------------------
+  -- Core Functions
+  --------------------------------------------------
+
+  --[[
+    bicategory creates a new bicategory.
+  ]]--
+  bicategory: S * [!Object] * !{(a, b): @Cat.Category} * 
+           (f * g -> h) * !{a: !Morphism} * 
+           (f * g * h -> !TwoMorphism) * 
+           (f -> !TwoMorphism) * 
+           (f -> !TwoMorphism) -> !Bicategory [
+    name objs hom_cats horiz_comp id_morphs assoc l_unitor r_unitor ->
+    {
+      _type: "Bicategory",
+      objects: objs,
+      hom_categories: hom_cats,
+      horizontal_composition: horiz_comp,
+      identity_morphisms: id_morphs,
+      associator: assoc,
+      left_unitor: l_unitor,
+      right_unitor: r_unitor,
+      
+      -- Coherence conditions assumed to hold, should be verified
+      pentagon_identity: true,
+      triangle_identity: true,
+      vertical_composition_assoc: true,
+      
+      name: name
+    }
+  ]
+
+  --[[
+    object creates a new object in a bicategory.
+  ]]--
+  object: !Bicategory * a * Z -> !Object [
+    bicategory value index ->
+    {
+      _type: "BicategoryObject",
+      value: value,
+      bicategory: bicategory,
+      index: index
+    }
+  ]
+
+  --[[
+    morphism creates a new 1-morphism in a bicategory.
+  ]]--
+  morphism: !Bicategory * !Object * !Object * f * Bool -> !Morphism [
+    bicategory source target value is_id ->
+    {
+      _type: "BicategoryMorphism",
+      source: source,
+      target: target,
+      value: value,
+      bicategory: bicategory,
+      is_identity: is_id
+    }
+  ]
+
+  --[[
+    two_morphism creates a new 2-morphism in a bicategory.
+  ]]--
+  two_morphism: !Bicategory * !Morphism * !Morphism * α * Bool -> !TwoMorphism [
+    bicategory source target value is_id ->
+    {
+      _type: "BicategoryTwoMorphism",
+      source: source,
+      target: target,
+      value: value,
+      bicategory: bicategory,
+      is_identity: is_id
+    }
+  ]
+
+  --[[
+    horizontal_composition performs horizontal composition of 1-morphisms.
+  ]]--
+  horizontal_composition: !Bicategory * !Morphism * !Morphism -> !HorizontalComposition [
+    bicategory f g ->
+    if f.target.value != g.source.value {
+      error("Cannot compose morphisms with incompatible endpoints")
+    }
+    
+    let result_value = bicategory.horizontal_composition(f.value, g.value) in
+    
+    {
+      _type: "HorizontalComposition",
+      first: f,
+      second: g,
+      result: morphism(
+        bicategory,
+        f.source,
+        g.target,
+        result_value,
+        false
+      ),
+      bicategory: bicategory
+    }
+  ]
+
+  --[[
+    vertical_composition performs vertical composition of 2-morphisms.
+  ]]--
+  vertical_composition: !Bicategory * !TwoMorphism * !TwoMorphism -> !VerticalComposition [
+    bicategory alpha beta ->
+    if alpha.target != beta.source {
+      error("Cannot vertically compose 2-morphisms with incompatible 1-morphisms")
+    }
+    
+    let hom_category = bicategory.hom_categories[(alpha.source.source.value, alpha.source.target.value)] in
+    let result_value = @Cat.compose(hom_category, alpha.value, beta.value) in
+    
+    {
+      _type: "VerticalComposition",
+      first: alpha,
+      second: beta,
+      result: two_morphism(
+        bicategory,
+        alpha.source,
+        beta.target,
+        result_value,
+        false
+      ),
+      bicategory: bicategory
+    }
+  ]
+
+  --[[
+    whisker_left performs left whiskering: composition of a 1-morphism with a 2-morphism.
+  ]]--
+  whisker_left: !Bicategory * !Morphism * !TwoMorphism -> !WhiskerLeft [
+    bicategory f alpha ->
+    if f.target != alpha.source.source {
+      error("Cannot left whisker: morphism target does not match 2-morphism source")
+    }
+    
+    -- Left whiskering is implemented using horizontal compositions and identity 2-morphisms
+    let id_f = two_morphism(
+      bicategory,
+      f,
+      f,
+      identity_two_morphism_value(bicategory, f),
+      true
+    ) in
+    
+    let result_value = bicategory.hom_categories[(f.source.value, alpha.target.target.value)].compose(
+      id_f.value,
+      alpha.value
+    ) in
+    
+    {
+      _type: "WhiskerLeft",
+      morphism: f,
+      two_morphism: alpha,
+      result: two_morphism(
+        bicategory,
+        horizontal_composition(bicategory, f, alpha.source).result,
+        horizontal_composition(bicategory, f, alpha.target).result,
+        result_value,
+        false
+      ),
+      bicategory: bicategory
+    }
+  ]
+
+  --[[
+    whisker_right performs right whiskering: composition of a 2-morphism with a 1-morphism.
+  ]]--
+  whisker_right: !Bicategory * !TwoMorphism * !Morphism -> !WhiskerRight [
+    bicategory alpha g ->
+    if alpha.source.target != g.source {
+      error("Cannot right whisker: 2-morphism target does not match morphism source")
+    }
+    
+    -- Right whiskering is implemented using horizontal compositions and identity 2-morphisms
+    let id_g = two_morphism(
+      bicategory,
+      g,
+      g,
+      identity_two_morphism_value(bicategory, g),
+      true
+    ) in
+    
+    let result_value = bicategory.hom_categories[(alpha.source.source.value, g.target.value)].compose(
+      alpha.value,
+      id_g.value
+    ) in
+    
+    {
+      _type: "WhiskerRight",
+      two_morphism: alpha,
+      morphism: g,
+      result: two_morphism(
+        bicategory,
+        horizontal_composition(bicategory, alpha.source, g).result,
+        horizontal_composition(bicategory, alpha.target, g).result,
+        result_value,
+        false
+      ),
+      bicategory: bicategory
+    }
+  ]
+
+  --[[
+    associator creates an associator isomorphism for three composable 1-morphisms.
+  ]]--
+  associator: !Bicategory * !Morphism * !Morphism * !Morphism -> !Associator [
+    bicategory f g h ->
+    if f.target.value != g.source.value || g.target.value != h.source.value {
+      error("Morphisms not composable for associator")
+    }
+    
+    let left_compose = horizontal_composition(
+      bicategory,
+      horizontal_composition(bicategory, f, g).result,
+      h
+    ).result in
+    
+    let right_compose = horizontal_composition(
+      bicategory,
+      f,
+      horizontal_composition(bicategory, g, h).result
+    ).result in
+    
+    let forward = bicategory.associator(f.value, g.value, h.value) in
+    let backward = invert_two_morphism_value(bicategory, forward) in
+    
+    {
+      _type: "Associator",
+      first: f,
+      second: g,
+      third: h,
+      forward: two_morphism(
+        bicategory,
+        left_compose,
+        right_compose,
+        forward,
+        false
+      ),
+      backward: two_morphism(
+        bicategory,
+        right_compose,
+        left_compose,
+        backward,
+        false
+      ),
+      bicategory: bicategory
+    }
+  ]
+
+  --[[
+    left_unitor creates a left unitor isomorphism for a 1-morphism.
+  ]]--
+  left_unitor: !Bicategory * !Morphism -> !LeftUnitor [
+    bicategory f ->
+    let id_b = bicategory.identity_morphisms[f.source.value] in
+    
+    let compose = horizontal_composition(
+      bicategory,
+      id_b,
+      f
+    ).result in
+    
+    let forward = bicategory.left_unitor(f.value) in
+    let backward = invert_two_morphism_value(bicategory, forward) in
+    
+    {
+      _type: "LeftUnitor",
+      morphism: f,
+      forward: two_morphism(
+        bicategory,
+        compose,
+        f,
+        forward,
+        false
+      ),
+      backward: two_morphism(
+        bicategory,
+        f,
+        compose,
+        backward,
+        false
+      ),
+      bicategory: bicategory
+    }
+  ]
+
+  --[[
+    right_unitor creates a right unitor isomorphism for a 1-morphism.
+  ]]--
+  right_unitor: !Bicategory * !Morphism -> !RightUnitor [
+    bicategory f ->
+    let id_c = bicategory.identity_morphisms[f.target.value] in
+    
+    let compose = horizontal_composition(
+      bicategory,
+      f,
+      id_c
+    ).result in
+    
+    let forward = bicategory.right_unitor(f.value) in
+    let backward = invert_two_morphism_value(bicategory, forward) in
+    
+    {
+      _type: "RightUnitor",
+      morphism: f,
+      forward: two_morphism(
+        bicategory,
+        compose,
+        f,
+        forward,
+        false
+      ),
+      backward: two_morphism(
+        bicategory,
+        f,
+        compose,
+        backward,
+        false
+      ),
+      bicategory: bicategory
+    }
+  ]
+
+  --------------------------------------------------
+  -- Helper Functions
+  --------------------------------------------------
+
+  --[[
+    identity_two_morphism_value creates an identity 2-morphism value.
+  ]]--
+  identity_two_morphism_value: !Bicategory * !Morphism -> α [
+    bicategory morphism ->
+    let hom_category = bicategory.hom_categories[(morphism.source.value, morphism.target.value)] in
+    @Cat.id(hom_category, morphism.value)
+  ]
+
+  --[[
+    invert_two_morphism_value inverts a 2-morphism value (assuming it's an isomorphism).
+  ]]--
+  invert_two_morphism_value: !Bicategory * α -> α [
+    bicategory two_morph_value ->
+    -- This is a placeholder - in a real implementation, we'd need more 
+    -- information about how to invert a 2-morphism
+    two_morph_value
+  ]
+
+  --------------------------------------------------
+  -- Instance Constructors
+  --------------------------------------------------
+
+  --[[
+    cat_bicategory creates the bicategory of categories, functors, and natural transformations.
+  ]]--
+  cat_bicategory: S -> !CatBicategory [
+    name ->
+    -- In Cat:
+    -- - Objects are categories
+    -- - 1-morphisms are functors
+    -- - 2-morphisms are natural transformations
+    
+    -- This is a simplified implementation
+    let objs = [
+      object(null, @Cat.structure, 0),  -- Placeholder
+      object(null, @Cat.standard_category, 1)  -- Placeholder
+    ] in
+    
+    let hom_cats = {
+      (@Cat.structure, @Cat.structure): @Cat.functor_category("Cat(@Cat, @Cat)")
+    } in
+    
+    let horiz_comp = [F G ->
+      @Cat.compose_functor(F, G)
+    ] in
+    
+    let id_morphs = {
+      @Cat.structure: morphism(null, objs[0], objs[0], @Cat.identity_functor(@Cat.structure), true)
+    } in
+    
+    let assoc = [F G H ->
+      two_morphism(
+        null,
+        null,
+        null,
+        @Cat.functor_associator(F, G, H),
+        false
+      )
+    ] in
+    
+    let l_unitor = [F ->
+      two_morphism(
+        null,
+        null,
+        null,
+        @Cat.left_functor_unitor(F),
+        false
+      )
+    ] in
+    
+    let r_unitor = [F ->
+      two_morphism(
+        null,
+        null,
+        null,
+        @Cat.right_functor_unitor(F),
+        false
+      )
+    ] in
+    
+    let bicat = bicategory(
+      name,
+      objs,
+      hom_cats,
+      horiz_comp,
+      id_morphs,
+      assoc,
+      l_unitor,
+      r_unitor
+    ) in
+    
+    {
+      _type: "CatBicategory",
+      base: bicat
+    }
+  ]
+
+  --[[
+    span_bicategory creates the bicategory of spans over a given category.
+  ]]--
+  span_bicategory: S * @Cat.Category -> !SpanBicategory [
+    name base_category ->
+    -- In Span(C):
+    -- - Objects are objects of C
+    -- - 1-morphisms are spans: A <-- S --> B
+    -- - 2-morphisms are span morphisms
+    
+    -- This is a simplified implementation
+    let objs = [
+      object(null, "A", 0),  -- Placeholder
+      object(null, "B", 1)   -- Placeholder
+    ] in
+    
+    let hom_cats = {
+      ("A", "B"): @Cat.structure  -- Placeholder
+    } in
+    
+    let horiz_comp = [span1 span2 ->
+      -- Horizontal composition requires pullback
+      -- This is just a placeholder
+      span1
+    ] in
+    
+    let id_morphs = {
+      "A": morphism(null, objs[0], objs[0], "identity_span", true)
+    } in
+    
+    let assoc = [span1 span2 span3 ->
+      -- Associativity isomorphism requires universal property of pullbacks
+      two_morphism(
+        null,
+        null,
+        null,
+        "span_associator",
+        false
+      )
+    ] in
+    
+    let l_unitor = [span ->
+      two_morphism(
+        null,
+        null,
+        null,
+        "span_left_unitor",
+        false
+      )
+    ] in
+    
+    let r_unitor = [span ->
+      two_morphism(
+        null,
+        null,
+        null,
+        "span_right_unitor",
+        false
+      )
+    ] in
+    
+    let bicat = bicategory(
+      name,
+      objs,
+      hom_cats,
+      horiz_comp,
+      id_morphs,
+      assoc,
+      l_unitor,
+      r_unitor
+    ) in
+    
+    {
+      _type: "SpanBicategory",
+      base: bicat,
+      base_category: base_category
+    }
+  ]
+
+  --[[
+    profunctor_bicategory creates the bicategory of profunctors.
+  ]]--
+  profunctor_bicategory: S -> !ProfunctorBicategory [
+    name ->
+    -- In Prof:
+    -- - Objects are categories
+    -- - 1-morphisms are profunctors
+    -- - 2-morphisms are natural transformations
+    
+    -- This is a simplified implementation
+    let objs = [
+      object(null, @Cat.structure, 0),  -- Placeholder
+      object(null, @Cat.structure, 1)   -- Placeholder
+    ] in
+    
+    let hom_cats = {
+      (@Cat.structure, @Cat.structure): @Cat.structure  -- Placeholder
+    } in
+    
+    let horiz_comp = [P Q ->
+      -- Composition of profunctors requires coend
+      -- This is just a placeholder
+      P
+    ] in
+    
+    let id_morphs = {
+      @Cat.structure: morphism(null, objs[0], objs[0], "identity_profunctor", true)
+    } in
+    
+    let assoc = [P Q R ->
+      two_morphism(
+        null,
+        null,
+        null,
+        "profunctor_associator",
+        false
+      )
+    ] in
+    
+    let l_unitor = [P ->
+      two_morphism(
+        null,
+        null,
+        null,
+        "profunctor_left_unitor",
+        false
+      )
+    ] in
+    
+    let r_unitor = [P ->
+      two_morphism(
+        null,
+        null,
+        null,
+        "profunctor_right_unitor",
+        false
+      )
+    ] in
+    
+    let bicat = bicategory(
+      name,
+      objs,
+      hom_cats,
+      horiz_comp,
+      id_morphs,
+      assoc,
+      l_unitor,
+      r_unitor
+    ) in
+    
+    {
+      _type: "ProfunctorBicategory",
+      base: bicat
+    }
+  ]
+
+  --------------------------------------------------
+  -- Operators
+  --------------------------------------------------
+
+  --[[
+    ∘₁ represents horizontal composition of 1-morphisms
+  ]]--
+  ∘₁: !Morphism * !Morphism -> !Morphism [
+    f g ->
+    horizontal_composition(f.bicategory, f, g).result
+  ]
+
+  --[[
+    ∘₂ represents vertical composition of 2-morphisms
+  ]]--
+  ∘₂: !TwoMorphism * !TwoMorphism -> !TwoMorphism [
+    alpha beta ->
+    vertical_composition(alpha.bicategory, alpha, beta).result
+  ]
+
+  --[[
+    ◁ represents left whiskering
+  ]]--
+  ◁: !Morphism * !TwoMorphism -> !TwoMorphism [
+    f alpha ->
+    whisker_left(f.bicategory, f, alpha).result
+  ]
+
+  --[[
+    ▷ represents right whiskering
+  ]]--
+  ▷: !TwoMorphism * !Morphism -> !TwoMorphism [
+    alpha g ->
+    whisker_right(alpha.bicategory, alpha, g).result
+  ]
+
+  --[[
+    =⇒ represents a 2-morphism
+  ]]--
+  =⇒: !Morphism * !Morphism -> (α -> !TwoMorphism) [
+    f g ->
+    [value ->
+      two_morphism(
+        f.bicategory,
+        f,
+        g,
+        value,
+        false
+      )
+    ]
+  ]
+
+  --[[
+    -o> represents linear function application
+  ]]--
+  -o>: a * (a -o> b) -> b [
+    x f ->
+    f(x)
+  ]
+
+  --------------------------------------------------
+  -- Standard Instances
+  --------------------------------------------------
+
+  --[[
+    The standard bicategory (using Cat)
+  ]]--
+  standard_bicategory: !Bicategory = cat_bicategory("StandardBicategory").base
+
+  --------------------------------------------------
+  -- Structure Mapping
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes a correspondence between the
+    bicategory structure and categorical semantics.
+    
+    In a bicategory:
+    - Objects (0-cells) form the collection of "things"
+    - Morphisms (1-cells) form the "hom-categories" between objects
+    - TwoMorphisms (2-cells) are morphisms between morphisms
+    - The horizontal composition is composition of 1-cells
+    - The vertical composition is composition of 2-cells in a hom-category
+    
+    This structure is more general than a 2-category as associativity
+    and unitality are only up to isomorphism, not strict equality.
+  ]]--
+  structure: {
+    -- Bicategories map to multiple levels of categorical structure
+    -- Level 0: Objects
+    objects: a,
+    
+    -- Level 1: 1-Morphisms between objects
+    morphisms: (a -> b),
+    
+    -- Core structure for 1-morphisms
+    dom: [f -> typeof(a) given f: (a -> b)],
+    cod: [f -> typeof(b) given f: (a -> b)],
+    id: [a -> [x -> x]],
+    compose: [f g -> [a -> g(f(a))]],
+    
+    -- Level 2: 2-Morphisms between 1-morphisms
+    two_morphisms: (f =⇒ g),
+    
+    -- Vertical composition of 2-morphisms (within hom-categories)
+    vertical_dom: [alpha -> alpha.source],
+    vertical_cod: [alpha -> alpha.target],
+    vertical_id: [f -> two_morphism(
+      standard_bicategory,
+      f,
+      f,
+      identity_two_morphism_value(standard_bicategory, f),
+      true
+    )],
+    vertical_compose: [alpha beta -> vertical_composition(
+      standard_bicategory,
+      alpha,
+      beta
+    ).result],
+    
+    -- Horizontal composition (of 1-morphisms across hom-categories)
+    horizontal_compose: [f g -> horizontal_composition(
+      standard_bicategory,
+      f,
+      g
+    ).result],
+    
+    -- Whiskering (interaction between levels)
+    whisker_left: [f alpha -> whisker_left(
+      standard_bicategory,
+      f,
+      alpha
+    ).result],
+    
+    whisker_right: [alpha g -> whisker_right(
+      standard_bicategory,
+      alpha,
+      g
+    ).result],
+    
+    -- Coherence isomorphisms
+    associator: [f g h -> associator(
+      standard_bicategory,
+      f,
+      g,
+      h
+    ).forward],
+    
+    left_unitor: [f -> left_unitor(
+      standard_bicategory,
+      f
+    ).forward],
+    
+    right_unitor: [f -> right_unitor(
+      standard_bicategory,
+      f
+    ).forward],
+    
+    -- Laws
+    law: {
+      -- 1-morphism category laws
+      identity: [f -> 
+        compose(id(dom(f)), f) == f && 
+        compose(f, id(cod(f))) == f
+      ],
+      
+      associativity: [f g h -> 
+        compose(compose(f, g), h) == compose(f, compose(g, h))
+      ],
+      
+      -- 2-morphism vertical composition laws
+      vertical_identity: [alpha -> 
+        vertical_compose(vertical_id(vertical_dom(alpha)), alpha) == alpha && 
+        vertical_compose(alpha, vertical_id(vertical_cod(alpha))) == alpha
+      ],
+      
+      vertical_associativity: [alpha beta gamma -> 
+        vertical_compose(
+          vertical_compose(alpha, beta), 
+          gamma
+        ) == vertical_compose(
+          alpha, 
+          vertical_compose(beta, gamma)
+        )
+      ],
+      
+      -- Exchange law (interaction of horizontal and vertical compositions)
+      exchange: [alpha beta gamma delta ->
+        -- (α ∘₂ β) ◁ (γ ∘₂ δ) = (α ◁ γ) ∘₂ (β ◁ δ)
+        vertical_compose(
+          whisker_left(alpha, gamma),
+          whisker_left(beta, delta)
+        ) == whisker_left(
+          vertical_compose(alpha, beta),
+          vertical_compose(gamma, delta)
+        )
+      ],
+      
+      -- Coherence laws
+      
+      -- Pentagon identity for associator
+      pentagon: [f g h k ->
+        -- Complex identity involving five associators
+        -- Ensures that all ways of reassociating (f ∘₁ g) ∘₁ (h ∘₁ k) are equivalent
+        true  -- Placeholder - would need to implement full pentagon
+      ],
+      
+      -- Triangle identity for unitors and associator
+      triangle: [f g ->
+        -- (f ∘₁ id) ∘₁ g ≅ f ∘₁ (id ∘₁ g) ensures coherence of left and right unitors
+        true  -- Placeholder - would need to implement full triangle
+      ]
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    --[[
+      Example 1: Creating objects and morphisms in a bicategory
+    ]]--
+    basic_bicategory_example: () -> !Bicategory [->
+      let bicat = cat_bicategory("BasicExample").base in
+      
+      -- Create some objects (0-cells)
+      let obj_a = object(bicat, "A", 0) in
+      let obj_b = object(bicat, "B", 1) in
+      
+      -- Create some 1-morphisms (1-cells)
+      let f = morphism(bicat, obj_a, obj_b, "F", false) in
+      let g = morphism(bicat, obj_b, obj_a, "G", false) in
+      
+      -- Create a 2-morphism (2-cell)
+      let compose_fg = horizontal_composition(bicat, f, g).result in
+      let id_a = bicat.identity_morphisms["A"] in
+      
+      -- Create a 2-morphism between the composition and identity
+      let alpha = two_morphism(
+        bicat,
+        compose_fg,
+        id_a,
+        "alpha",
+        false
+      ) in
+      
+      bicat
+    ],
+    
+    --[[
+      Example 2: Using the Cat bicategory with functors and natural transformations
+    ]]--
+    cat_example: () -> !CatBicategory [->
+      let cat_bicat = cat_bicategory("CatExample") in
+      let bicat = cat_bicat.base in
+      
+      -- In this bicategory:
+      -- - Objects are categories
+      -- - 1-morphisms are functors
+      -- - 2-morphisms are natural transformations
+      
+      -- Create categories as objects
+      let set_cat = object(bicat, @Cat.structure, 0) in
+      let grp_cat = object(bicat, @Cat.structure, 1) in
+      
+      -- Create functors as 1-morphisms
+      let forgetful = morphism(
+        bicat,
+        grp_cat,
+        set_cat,
+        "forgetful_functor",
+        false
+      ) in
+      
+      let free = morphism(
+        bicat,
+        set_cat,
+        grp_cat,
+        "free_functor",
+        false
+      ) in
+      
+      -- Create a natural transformation as a 2-morphism
+      let unit = two_morphism(
+        bicat,
+        bicat.identity_morphisms[@Cat.structure],
+        horizontal_composition(bicat, forgetful, free).result,
+        "unit",
+        false
+      ) in
+      
+      cat_bicat
+    ],
+    
+    --[[
+      Example 3: Using the Span bicategory
+    ]]--
+    span_example: () -> !SpanBicategory [->
+      let span_bicat = span_bicategory("SpanExample", @Cat.structure) in
+      
+      -- In this bicategory:
+      -- - Objects are objects of the base category (e.g., sets)
+      -- - 1-morphisms are spans: A ← S → B
+      -- - 2-morphisms are span morphisms
+      
+      span_bicat
+    ],
+    
+    --[[
+      Example 4: Horizontal and vertical compositions
+    ]]--
+    composition_example: () -> (!TwoMorphism, !TwoMorphism) [->
+      let bicat = cat_bicategory("CompositionExample").base in
+      
+      -- Create some objects (0-cells)
+      let obj_a = object(bicat, "A", 0) in
+      let obj_b = object(bicat, "B", 1) in
+      let obj_c = object(bicat, "C", 2) in
+      
+      -- Create some 1-morphisms (1-cells)
+      let f1 = morphism(bicat, obj_a, obj_b, "F1", false) in
+      let f2 = morphism(bicat, obj_a, obj_b, "F2", false) in
+      let g1 = morphism(bicat, obj_b, obj_c, "G1", false) in
+      let g2 = morphism(bicat, obj_b, obj_c, "G2", false) in
+      
+      -- Create 2-morphisms
+      let alpha = two_morphism(bicat, f1, f2, "alpha", false) in
+      let beta = two_morphism(bicat, g1, g2, "beta", false) in
+      
+      -- Horizontal composition: f1 -> f2 composed with g1 -> g2
+      let horiz = horizontal_composition(bicat, alpha.source, beta.source).result in
+      
+      -- Vertical composition: stack alpha on another 2-morphism
+      let alpha2 = two_morphism(bicat, f2, f1, "alpha2", false) in
+      let vert = vertical_composition(bicat, alpha, alpha2).result in
+      
+      (horiz, vert)
+    ],
+    
+    --[[
+      Example 5: Using whiskers and coherence isomorphisms
+    ]]--
+    coherence_example: () -> (!Associator, !LeftUnitor, !RightUnitor) [->
+      let bicat = cat_bicategory("CoherenceExample").base in
+      
+      -- Create some objects (0-cells)
+      let obj_a = object(bicat, "A", 0) in
+      let obj_b = object(bicat, "B", 1) in
+      let obj_c = object(bicat, "C", 2) in
+      let obj_d = object(bicat, "D", 3) in
+      
+      -- Create some 1-morphisms (1-cells)
+      let f = morphism(bicat, obj_a, obj_b, "F", false) in
+      let g = morphism(bicat, obj_b, obj_c, "G", false) in
+      let h = morphism(bicat, obj_c, obj_d, "H", false) in
+      
+      -- Create coherence isomorphisms
+      let assoc = associator(bicat, f, g, h) in
+      let left_unit = left_unitor(bicat, f) in
+      let right_unit = right_unitor(bicat, f) in
+      
+      (assoc, left_unit, right_unit)
+    ]
+  }
+} 

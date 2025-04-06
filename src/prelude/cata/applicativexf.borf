@@ -1,0 +1,1112 @@
+--[[
+  Applicative Category Transformations
+  
+  This module defines transformations between applicative categories
+  and other categorical structures, enabling the representation of
+  contextual computations in different frameworks.
+  
+  These transformations use linear types instead of monadic patterns
+  for precise resource tracking and composition.
+]]--
+
+@ApplicativeXf: {
+  typ: {
+    -- Core transformation types
+    ApplicativeFunctor
+    ApplicativeNaturalTransformation
+    ApplicativeAdjunction
+    
+    -- Special functors
+    OptionApplicativeFunctor
+    ResultApplicativeFunctor
+    ListApplicativeFunctor
+    IOApplicativeFunctor
+  }
+
+  op: {
+    -- Functor composition
+    ∘
+    
+    -- Applicative operations
+    <*> <$> <**> *> <*
+    -o>
+  }
+
+  fn: {
+    -- Core transformation functions
+    applicative_functor
+    applicative_nat_transformation
+    applicative_adjunction
+    
+    -- Functor constructors
+    option_applicative_functor
+    result_applicative_functor
+    list_applicative_functor
+    io_applicative_functor
+    
+    -- Natural transformation constructors
+    applicative_to_cat_nt
+    cat_to_applicative_nt
+    option_to_result_nt
+    result_to_option_nt
+    
+    -- Adjunction constructors
+    applicative_cat_adjunction
+    
+    -- Functor operations
+    apply_functor
+    compose_functors
+    
+    -- Natural transformation operations
+    apply_nat_transformation
+    vertical_composition
+    horizontal_composition
+    
+    -- Applicative/Category transformations
+    applicative_to_cat
+    cat_to_applicative
+    
+    -- Instance transformations
+    option_to_result
+    result_to_option
+    option_to_list
+    list_to_option
+    lift_applicative
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@ApplicativeXf, @Applicative, true),  -- Add dependency on Applicative
+    (@ApplicativeXf, @Linear, true),       -- Add dependency on Linear module
+    (@ApplicativeXf, @CatXf, true),        -- Add dependency on Category transformations
+    (@ApplicativeXf, @Cat, true),          -- Add dependency on Category
+    (@ApplicativeXf, @T, true)             -- Add dependency on Type system
+  }
+
+  --------------------------------------------------
+  -- Core Transformation Types
+  --------------------------------------------------
+
+  --[[
+    ApplicativeFunctor represents a functor between applicative categories.
+    
+    This structure captures transformations that preserve the applicative
+    structure while changing the underlying representation.
+  ]]--
+  ApplicativeFunctor: {
+    source: @Applicative.!ApplicativeCategory,  -- Source applicative category
+    target: @Applicative.!ApplicativeCategory,  -- Target applicative category
+    obj_map: (a -> c),                         -- Object mapping
+    morph_map: ((a -o> F b) -> (c -o> G d)),   -- Morphism mapping
+    pure_map: (a -> (F a -> G a)),             -- Maps pure operations
+    apply_map: ((F (a -o> b) * F a) -> (G (c -o> d) * G c)), -- Maps apply operations
+    preserves_pure: Bool,                      -- Whether pure is preserved
+    preserves_apply: Bool                      -- Whether apply is preserved
+  }
+
+  --[[
+    ApplicativeNaturalTransformation represents a natural transformation
+    between applicative functors.
+  ]]--
+  ApplicativeNaturalTransformation: {
+    source: ApplicativeFunctor,                -- Source functor
+    target: ApplicativeFunctor,                -- Target functor
+    components: (a -> (F a -> G a)),           -- Components
+    naturality: Bool,                          -- Whether naturality holds
+    preserves_pure: Bool,                      -- Whether pure is preserved
+    preserves_apply: Bool                      -- Whether apply is preserved
+  }
+
+  --[[
+    ApplicativeAdjunction represents an adjunction between applicative categories.
+  ]]--
+  ApplicativeAdjunction: {
+    left_functor: ApplicativeFunctor,          -- Left functor
+    right_functor: ApplicativeFunctor,         -- Right functor
+    unit: ApplicativeNaturalTransformation,    -- Unit natural transformation
+    counit: ApplicativeNaturalTransformation,  -- Counit natural transformation
+    adjoint: Bool                              -- Whether adjunction laws hold
+  }
+
+  --[[
+    OptionApplicativeFunctor represents a functor focused on
+    optional value applicatives.
+  ]]--
+  OptionApplicativeFunctor: {
+    base: ApplicativeFunctor,                 -- The underlying applicative functor
+    option_map: (Option a -> Option b)        -- Maps optional values
+  }
+
+  --[[
+    ResultApplicativeFunctor represents a functor focused on
+    result value applicatives.
+  ]]--
+  ResultApplicativeFunctor: {
+    base: ApplicativeFunctor,                 -- The underlying applicative functor
+    result_map: (Result a e -> Result b e),   -- Maps result values
+    error_map: (e -> f)                       -- Maps error values
+  }
+
+  --[[
+    ListApplicativeFunctor represents a functor focused on
+    list applicatives.
+  ]]--
+  ListApplicativeFunctor: {
+    base: ApplicativeFunctor,                 -- The underlying applicative functor
+    list_map: ([a] -> [b])                    -- Maps list values
+  }
+
+  --[[
+    IOApplicativeFunctor represents a functor focused on
+    IO applicatives.
+  ]]--
+  IOApplicativeFunctor: {
+    base: ApplicativeFunctor,                 -- The underlying applicative functor
+    io_map: ((() -o> a) -> (() -o> b))        -- Maps IO operations
+  }
+
+  --------------------------------------------------
+  -- Core Transformation Functions
+  --------------------------------------------------
+
+  --[[
+    applicative_functor creates a functor between applicative categories.
+  ]]--
+  applicative_functor: S * @Applicative.!ApplicativeCategory * 
+                     @Applicative.!ApplicativeCategory * 
+                     (a -> c) * 
+                     ((a -o> F b) -> (c -o> G d)) * 
+                     (a -> (F a -> G a)) * 
+                     ((F (a -o> b) * F a) -> (G (c -o> d) * G c)) -> 
+                     ApplicativeFunctor [
+    name source target obj_map morph_map pure_map apply_map ->
+    {
+      source: source,
+      target: target,
+      obj_map: obj_map,
+      morph_map: morph_map,
+      pure_map: pure_map,
+      apply_map: apply_map,
+      preserves_pure: true,  -- Should be verified
+      preserves_apply: true  -- Should be verified
+    }
+  ]
+
+  --[[
+    applicative_nat_transformation creates a natural transformation
+    between applicative functors.
+  ]]--
+  applicative_nat_transformation: S * ApplicativeFunctor * ApplicativeFunctor * 
+                                (a -> (F a -> G a)) -> 
+                                ApplicativeNaturalTransformation [
+    name source target components ->
+    {
+      source: source,
+      target: target,
+      components: components,
+      naturality: true,       -- Should be verified
+      preserves_pure: true,   -- Should be verified
+      preserves_apply: true   -- Should be verified
+    }
+  ]
+
+  --[[
+    applicative_adjunction creates an adjunction between applicative categories.
+  ]]--
+  applicative_adjunction: S * ApplicativeFunctor * ApplicativeFunctor * 
+                        ApplicativeNaturalTransformation * 
+                        ApplicativeNaturalTransformation -> 
+                        ApplicativeAdjunction [
+    name left right unit counit ->
+    {
+      left_functor: left,
+      right_functor: right,
+      unit: unit,
+      counit: counit,
+      adjoint: true  -- Should be verified
+    }
+  ]
+
+  --------------------------------------------------
+  -- Special Functors
+  --------------------------------------------------
+
+  --[[
+    option_applicative_functor creates a functor focused on optional value applicatives.
+  ]]--
+  option_applicative_functor: S -> OptionApplicativeFunctor [
+    name ->
+    let source = @Applicative.option_applicative(name + "Source").base in
+    let target = @Applicative.option_applicative(name + "Target").base in
+    
+    {
+      base: applicative_functor(
+        name,
+        source,
+        target,
+        [a -> a],  -- Object mapping (identity)
+        [f -> f],  -- Morphism mapping (identity)
+        [a -> [opt_a -> opt_a]],  -- Pure mapping (identity)
+        [args -> args]   -- Apply mapping (identity)
+      ),
+      option_map: [opt -> opt]  -- Identity mapping for options
+    }
+  ]
+
+  --[[
+    result_applicative_functor creates a functor focused on result value applicatives.
+  ]]--
+  result_applicative_functor: S * e * f -> ResultApplicativeFunctor [
+    name error_type1 error_type2 ->
+    let source = @Applicative.result_applicative(name + "Source", error_type1).base in
+    let target = @Applicative.result_applicative(name + "Target", error_type2).base in
+    
+    {
+      base: applicative_functor(
+        name,
+        source,
+        target,
+        [a -> a],  -- Object mapping (identity)
+        [f -> f],  -- Morphism mapping (identity)
+        [a -> [res_a -> 
+          match res_a {
+            Ok(value) -> Ok(value),
+            Err(e) -> Err(e.toString())  -- Convert error type
+          }
+        ]],
+        [args -> args]   -- Apply mapping (identity)
+      ),
+      result_map: [res -> 
+        match res {
+          Ok(value) -> Ok(value),
+          Err(e) -> Err(e.toString())  -- Convert error type
+        }
+      ],
+      error_map: [e -> e.toString()]  -- Convert error type
+    }
+  ]
+
+  --[[
+    list_applicative_functor creates a functor focused on list applicatives.
+  ]]--
+  list_applicative_functor: S -> ListApplicativeFunctor [
+    name ->
+    let source = @Applicative.list_applicative(name + "Source").base in
+    let target = @Applicative.list_applicative(name + "Target").base in
+    
+    {
+      base: applicative_functor(
+        name,
+        source,
+        target,
+        [a -> a],  -- Object mapping (identity)
+        [f -> f],  -- Morphism mapping (identity)
+        [a -> [list_a -> list_a]],  -- Pure mapping (identity)
+        [args -> args]   -- Apply mapping (identity)
+      ),
+      list_map: [list -> list]  -- Identity mapping for lists
+    }
+  ]
+
+  --[[
+    io_applicative_functor creates a functor focused on IO applicatives.
+  ]]--
+  io_applicative_functor: S -> IOApplicativeFunctor [
+    name ->
+    let source = @Applicative.io_applicative(name + "Source").base in
+    let target = @Applicative.io_applicative(name + "Target").base in
+    
+    {
+      base: applicative_functor(
+        name,
+        source,
+        target,
+        [a -> a],  -- Object mapping (identity)
+        [f -> f],  -- Morphism mapping (identity)
+        [a -> [io_a -> io_a]],  -- Pure mapping (identity)
+        [args -> args]   -- Apply mapping (identity)
+      ),
+      io_map: [io -> io]  -- Identity mapping for IO operations
+    }
+  ]
+
+  --------------------------------------------------
+  -- Natural Transformations
+  --------------------------------------------------
+
+  --[[
+    applicative_to_cat_nt creates a natural transformation from
+    an applicative functor to a standard category functor.
+  ]]--
+  applicative_to_cat_nt: S -> ApplicativeNaturalTransformation [
+    name ->
+    applicative_nat_transformation(
+      name,
+      identity_functor(@Applicative.standard_applicative),
+      identity_functor(@Applicative.standard_applicative),
+      [a -> applicative_to_cat]
+    )
+  ]
+
+  --[[
+    cat_to_applicative_nt creates a natural transformation from
+    a standard category functor to an applicative functor.
+  ]]--
+  cat_to_applicative_nt: S -> ApplicativeNaturalTransformation [
+    name ->
+    applicative_nat_transformation(
+      name,
+      identity_functor(@Applicative.standard_applicative),
+      identity_functor(@Applicative.standard_applicative),
+      [a -> cat_to_applicative]
+    )
+  ]
+
+  --[[
+    option_to_result_nt creates a natural transformation from
+    an option applicative to a result applicative.
+  ]]--
+  option_to_result_nt: S * e -> ApplicativeNaturalTransformation [
+    name error_type ->
+    let option_app = @Applicative.option_applicative(name + "Option").base in
+    let result_app = @Applicative.result_applicative(name + "Result", error_type).base in
+    
+    let option_functor = applicative_functor(
+      name + "OptionF",
+      option_app,
+      option_app,
+      [a -> a],
+      [f -> f],
+      [a -> [opt_a -> opt_a]],
+      [args -> args]
+    ) in
+    
+    let result_functor = applicative_functor(
+      name + "ResultF",
+      result_app,
+      result_app,
+      [a -> a],
+      [f -> f],
+      [a -> [res_a -> res_a]],
+      [args -> args]
+    ) in
+    
+    applicative_nat_transformation(
+      name,
+      option_functor,
+      result_functor,
+      [a -> option_to_result(error_type)]
+    )
+  ]
+
+  --[[
+    result_to_option_nt creates a natural transformation from
+    a result applicative to an option applicative.
+  ]]--
+  result_to_option_nt: S -> ApplicativeNaturalTransformation [
+    name ->
+    let option_app = @Applicative.option_applicative(name + "Option").base in
+    let result_app = @Applicative.result_applicative(name + "Result", S).base in
+    
+    let option_functor = applicative_functor(
+      name + "OptionF",
+      option_app,
+      option_app,
+      [a -> a],
+      [f -> f],
+      [a -> [opt_a -> opt_a]],
+      [args -> args]
+    ) in
+    
+    let result_functor = applicative_functor(
+      name + "ResultF",
+      result_app,
+      result_app,
+      [a -> a],
+      [f -> f],
+      [a -> [res_a -> res_a]],
+      [args -> args]
+    ) in
+    
+    applicative_nat_transformation(
+      name,
+      result_functor,
+      option_functor,
+      [a -> result_to_option]
+    )
+  ]
+
+  --------------------------------------------------
+  -- Utility Functions
+  --------------------------------------------------
+
+  --[[
+    apply_functor applies an applicative functor to a morphism.
+  ]]--
+  apply_functor: ApplicativeFunctor * (a -o> F b) -> (c -o> G d) [
+    functor morphism ->
+    functor.morph_map(morphism)
+  ]
+
+  --[[
+    compose_functors composes two applicative functors.
+  ]]--
+  compose_functors: ApplicativeFunctor * ApplicativeFunctor -> ApplicativeFunctor [
+    f g ->
+    if f.source != g.target {
+      error("Cannot compose functors with incompatible categories")
+    }
+    
+    applicative_functor(
+      f.source.name + "∘" + g.source.name,
+      g.source,
+      f.target,
+      [a -> f.obj_map(g.obj_map(a))],
+      [morphism -> f.morph_map(g.morph_map(morphism))],
+      [a -> [ga -> f.pure_map(g.obj_map(a))(g.pure_map(a)(ga))]],
+      [args -> f.apply_map(g.apply_map(args))],
+    )
+  ]
+
+  --[[
+    identity_functor creates an identity functor for an applicative category.
+  ]]--
+  identity_functor: @Applicative.!ApplicativeCategory -> ApplicativeFunctor [
+    category ->
+    applicative_functor(
+      "Id_" + category.name,
+      category,
+      category,
+      [a -> a],
+      [f -> f],
+      [a -> [fa -> fa]],
+      [args -> args]
+    )
+  ]
+
+  --[[
+    apply_nat_transformation applies a natural transformation to an object.
+  ]]--
+  apply_nat_transformation: ApplicativeNaturalTransformation * a * F a -> G a [
+    nt a fa ->
+    nt.components(a)(fa)
+  ]
+
+  --[[
+    vertical_composition composes two natural transformations vertically.
+  ]]--
+  vertical_composition: ApplicativeNaturalTransformation * ApplicativeNaturalTransformation -> 
+                      ApplicativeNaturalTransformation [
+    alpha beta ->
+    if alpha.source != beta.target {
+      error("Cannot compose natural transformations with incompatible functors")
+    }
+    
+    applicative_nat_transformation(
+      alpha.source.name + "∘" + beta.source.name,
+      beta.source,
+      alpha.target,
+      [a -> [fa -> 
+        alpha.components(beta.target.obj_map(a))(
+          beta.components(a)(fa)
+        )
+      ]]
+    )
+  ]
+
+  --[[
+    horizontal_composition composes two natural transformations horizontally.
+  ]]--
+  horizontal_composition: ApplicativeNaturalTransformation * ApplicativeNaturalTransformation -> 
+                        ApplicativeNaturalTransformation [
+    alpha beta ->
+    applicative_nat_transformation(
+      alpha.source.name + "⊗" + beta.source.name,
+      compose_functors(alpha.source, beta.source),
+      compose_functors(alpha.target, beta.target),
+      [a -> [fa -> 
+        alpha.components(beta.target.obj_map(a))(
+          beta.components(a)(fa)
+        )
+      ]]
+    )
+  ]
+
+  --------------------------------------------------
+  -- Applicative/Category Transformations
+  --------------------------------------------------
+
+  --[[
+    applicative_to_cat transforms an applicative structure to 
+    a standard category structure, forgetting the applicative context.
+  ]]--
+  applicative_to_cat: F a -> a [
+    fa ->
+    -- This is a placeholder implementation
+    -- In a real implementation, we would need to extract a value from the context
+    -- which may not always be possible
+    match fa {
+      Some(a) -> a,
+      None -> default_value(typeof(a)),
+      Ok(a) -> a,
+      Err(_) -> default_value(typeof(a)),
+      _ -> default_value(typeof(a))
+    }
+  ]
+
+  --[[
+    cat_to_applicative transforms a standard category structure to 
+    an applicative structure, adding an applicative context.
+  ]]--
+  cat_to_applicative: a -> F a [
+    a ->
+    @Applicative.pure(@Applicative.standard_applicative, a).result
+  ]
+
+  --------------------------------------------------
+  -- Instance Transformations
+  --------------------------------------------------
+
+  --[[
+    option_to_result transforms an option to a result.
+  ]]--
+  option_to_result: e * Option a -> Result a e [
+    error_value opt ->
+    match opt {
+      Some(value) -> Ok(value),
+      None -> Err(error_value)
+    }
+  ]
+
+  --[[
+    result_to_option transforms a result to an option.
+  ]]--
+  result_to_option: Result a e -> Option a [
+    res ->
+    match res {
+      Ok(value) -> Some(value),
+      Err(_) -> None
+    }
+  ]
+
+  --[[
+    option_to_list transforms an option to a list.
+  ]]--
+  option_to_list: Option a -> [a] [
+    opt ->
+    match opt {
+      Some(value) -> [value],
+      None -> []
+    }
+  ]
+
+  --[[
+    list_to_option transforms a list to an option.
+  ]]--
+  list_to_option: [a] -> Option a [
+    list ->
+    if list.length > 0 {
+      Some(list[0])
+    } else {
+      None
+    }
+  ]
+
+  --[[
+    lift_applicative lifts a function between applicative values.
+  ]]--
+  lift_applicative: @Applicative.!ApplicativeCategory * (a -o> b) * F a -> F b [
+    category f fa ->
+    @Applicative.lift(category, f, fa)
+  ]
+
+  --------------------------------------------------
+  -- Helper Functions
+  --------------------------------------------------
+
+  --[[
+    default_value provides a default value for a type.
+  ]]--
+  default_value: a -> a [
+    type ->
+    -- Placeholder implementation
+    match typeof(type) {
+      Z -> 0,
+      F -> 0.0,
+      S -> "",
+      B -> false,
+      _ -> null
+    }
+  ]
+
+  --------------------------------------------------
+  -- Operators
+  --------------------------------------------------
+
+  --[[
+    ∘ represents composition of functors
+  ]]--
+  ∘: ApplicativeFunctor * ApplicativeFunctor -> ApplicativeFunctor [
+    f g ->
+    compose_functors(f, g)
+  ]
+
+  --[[
+    <*> represents the apply operation
+  ]]--
+  <*>: F (a -o> b) * F a -> F b [
+    f x ->
+    @Applicative.<*>(f, x)
+  ]
+
+  --[[
+    <$> represents the functor map operation
+  ]]--
+  <$>: (a -o> b) * F a -> F b [
+    f x ->
+    @Applicative.<$>(f, x)
+  ]
+
+  --[[
+    <**> represents reverse application
+  ]]--
+  <**>: F a * F (a -o> b) -> F b [
+    x f ->
+    @Applicative.<**>(x, f)
+  ]
+
+  --[[
+    *> sequences two applicative computations, discarding the first result
+  ]]--
+  *>: F a * F b -> F b [
+    a b ->
+    @Applicative.*>(a, b)
+  ]
+
+  --[[
+    <* sequences two applicative computations, discarding the second result
+  ]]--
+  <*: F a * F b -> F a [
+    a b ->
+    @Applicative.<*(a, b)
+  ]
+
+  --[[
+    -o> represents linear function application
+  ]]--
+  -o>: a * (a -o> b) -> b [
+    x f ->
+    f(x)
+  ]
+
+  --------------------------------------------------
+  -- Adjunction Constructors
+  --------------------------------------------------
+
+  --[[
+    applicative_cat_adjunction creates an adjunction between
+    an applicative category and a standard category.
+  ]]--
+  applicative_cat_adjunction: S -> ApplicativeAdjunction [
+    name ->
+    let left = applicative_functor(
+      name + "_L",
+      @Applicative.standard_applicative,
+      @Applicative.standard_applicative,
+      [a -> a],
+      [f -> f],
+      [a -> [fa -> fa]],
+      [args -> args]
+    ) in
+    
+    let right = applicative_functor(
+      name + "_R",
+      @Applicative.standard_applicative,
+      @Applicative.standard_applicative,
+      [a -> a],
+      [f -> f],
+      [a -> [fa -> fa]],
+      [args -> args]
+    ) in
+    
+    applicative_adjunction(
+      name,
+      left,
+      right,
+      applicative_to_cat_nt(name + "_unit"),
+      cat_to_applicative_nt(name + "_counit")
+    )
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping to Categorical Semantics
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @ApplicativeXf as a category of 
+    transformations between applicative categories.
+    
+    In this categorical structure:
+    - Objects are applicative functors
+    - Morphisms are applicative natural transformations
+    - Identity is the identity applicative natural transformation
+    - Composition is vertical composition of applicative natural transformations
+    
+    This enables rigorous transformation of contextual computations
+    between different categorical frameworks.
+  ]]--
+  structure: {
+    -- Map ApplicativeXf to a category
+    objects: ApplicativeFunctor,
+    morphisms: ApplicativeNaturalTransformation,
+    
+    -- Core category structure
+    dom: [nt -> nt.source],
+    cod: [nt -> nt.target],
+    id: [f -> applicative_nat_transformation(
+      "Id_" + f.source.name,
+      f,
+      f,
+      [a -> [fa -> fa]]
+    )],
+    compose: [alpha beta -> vertical_composition(alpha, beta)],
+    
+    -- Monoidal structure
+    monoidal: {
+      tensor: [f g -> 
+        applicative_functor(
+          f.source.name + "⊗" + g.source.name,
+          f.source,
+          g.target,
+          [a -> (f.obj_map(a), g.obj_map(a))],
+          [morphism -> 
+            [c -o>
+              let (fc, gc) = c in
+              let f_result = apply_functor(f, morphism)(fc) in
+              let g_result = apply_functor(g, morphism)(gc) in
+              (f_result, g_result)
+            ]
+          ],
+          [a -> [(fa, ga) -> 
+            (@Applicative.pure(f.target, f.obj_map(a)).result,
+             @Applicative.pure(g.target, g.obj_map(a)).result)
+          ]],
+          [((f_fn, g_fn), (f_a, g_a)) -> 
+            (
+              @Applicative.apply(f.target, f_fn, f_a).result,
+              @Applicative.apply(g.target, g_fn, g_a).result
+            )
+          ]
+        )
+      ],
+      
+      unit: identity_functor(@Applicative.standard_applicative),
+      
+      -- Tensor of natural transformations
+      tensor_morphisms: [alpha beta -> 
+        applicative_nat_transformation(
+          alpha.source.name + "⊗" + beta.source.name,
+          alpha.source,
+          beta.target,
+          [a -> [(fa, ga) -> 
+            (alpha.components(a)(fa), beta.components(a)(ga))
+          ]]
+        )
+      ],
+      
+      -- Standard categorical associator and unitors
+      associator: [((a, b), c) -> (a, (b, c))],
+      left_unitor: [(unit, a) -> a],
+      right_unitor: [(a, unit) -> a]
+    },
+    
+    -- Laws
+    law: {
+      -- Basic category laws
+      identity: [nt -> 
+        vertical_composition(id(dom(nt)), nt) == nt && 
+        vertical_composition(nt, id(cod(nt))) == nt
+      ],
+      
+      associativity: [alpha beta gamma -> 
+        vertical_composition(
+          vertical_composition(alpha, beta), 
+          gamma
+        ) == vertical_composition(
+          alpha, 
+          vertical_composition(beta, gamma)
+        )
+      ],
+      
+      -- Functor laws
+      functor_identity: [f a -> 
+        apply_functor(f, [x -o> x]) == [x -o> x]
+      ],
+      
+      functor_composition: [f g h -> 
+        apply_functor(
+          f,
+          [x -o> g(h(x))]
+        ) == [x -o> 
+          apply_functor(f, g)(apply_functor(f, h)(x))
+        ]
+      ],
+      
+      -- Applicative specific laws
+      pure_preservation: [f a -> 
+        -- F(pure a) = pure F(a)
+        f.pure_map(a)(@Applicative.pure(f.source, a).result) ==
+        @Applicative.pure(f.target, f.obj_map(a)).result
+      ],
+      
+      apply_preservation: [f ff fa -> 
+        -- F(ff <*> fa) = F(ff) <*> F(fa)
+        let source_applied = @Applicative.apply(
+          f.source,
+          ff,
+          fa
+        ).result in
+        
+        let mapped_ff = f.pure_map(typeof(ff))(ff) in
+        let mapped_fa = f.pure_map(typeof(fa))(fa) in
+        
+        let target_applied = @Applicative.apply(
+          f.target,
+          mapped_ff,
+          mapped_fa
+        ).result in
+        
+        f.pure_map(typeof(source_applied))(source_applied) ==
+        target_applied
+      ],
+      
+      -- Natural transformation laws
+      naturality: [nt a fa morphism ->
+        let source_mapped = apply_functor(
+          nt.source,
+          morphism
+        )(fa) in
+        
+        let then_transformed = apply_nat_transformation(
+          nt,
+          typeof(source_mapped),
+          source_mapped
+        ) in
+        
+        let transformed = apply_nat_transformation(
+          nt,
+          typeof(fa),
+          fa
+        ) in
+        
+        let then_mapped = apply_functor(
+          nt.target,
+          morphism
+        )(transformed) in
+        
+        then_transformed == then_mapped
+      ],
+      
+      -- Applicative natural transformation laws
+      nt_pure_preservation: [nt a -> 
+        -- η(pure a) = pure η(a)
+        apply_nat_transformation(
+          nt,
+          a,
+          @Applicative.pure(nt.source.source, a).result
+        ) == @Applicative.pure(
+          nt.target.source,
+          a
+        ).result
+      ],
+      
+      nt_apply_preservation: [nt a b ff fa -> 
+        -- η(ff <*> fa) = η(ff) <*> η(fa)
+        let source_applied = @Applicative.apply(
+          nt.source.source,
+          ff,
+          fa
+        ).result in
+        
+        let transformed_applied = apply_nat_transformation(
+          nt,
+          typeof(source_applied),
+          source_applied
+        ) in
+        
+        let transformed_ff = apply_nat_transformation(
+          nt,
+          typeof(ff),
+          ff
+        ) in
+        
+        let transformed_fa = apply_nat_transformation(
+          nt,
+          typeof(fa),
+          fa
+        ) in
+        
+        let applied_transformed = @Applicative.apply(
+          nt.target.source,
+          transformed_ff,
+          transformed_fa
+        ).result in
+        
+        transformed_applied == applied_transformed
+      ],
+      
+      -- Adjunction laws
+      adjunction_unit_counit: [adj a ->
+        let F = adj.left_functor in
+        let G = adj.right_functor in
+        let η = adj.unit in
+        let ε = adj.counit in
+        
+        apply_nat_transformation(
+          vertical_composition(
+            η,
+            horizontal_composition(
+              id(G),
+              ε
+            )
+          ),
+          a,
+          a
+        ) == a
+        &&
+        apply_nat_transformation(
+          vertical_composition(
+            horizontal_composition(
+              ε,
+              id(F)
+            ),
+            η
+          ),
+          F.obj_map(a),
+          F.obj_map(a)
+        ) == F.obj_map(a)
+      ]
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    --[[
+      Example 1: Creating a functor between option and result applicatives
+    ]]--
+    option_result_functor_example: S -> ApplicativeFunctor [
+      error_msg ->
+      let option_app = @Applicative.option_applicative("OptionApplicative").base in
+      let result_app = @Applicative.result_applicative("ResultApplicative", S).base in
+      
+      applicative_functor(
+        "OptionToResult",
+        option_app,
+        result_app,
+        [a -> a],  -- Object mapping
+        [f -> [a -o>
+          let opt_b = f(a) in
+          option_to_result(error_msg, opt_b)
+        ]],
+        [a -> [opt_a -> option_to_result(error_msg, opt_a)]],
+        [((opt_f, opt_a)) -> 
+          (
+            option_to_result(error_msg, opt_f),
+            option_to_result(error_msg, opt_a)
+          )
+        ]
+      )
+    ],
+    
+    --[[
+      Example 2: Creating a natural transformation between functors
+    ]]--
+    natural_transformation_example: S -> ApplicativeNaturalTransformation [
+      error_msg ->
+      let option_result_functor = option_result_functor_example(error_msg) in
+      let result_option_functor = applicative_functor(
+        "ResultToOption",
+        option_result_functor.target,
+        option_result_functor.source,
+        [a -> a],  -- Object mapping
+        [f -> [a -o>
+          let res_b = f(a) in
+          result_to_option(res_b)
+        ]],
+        [a -> [res_a -> result_to_option(res_a)]],
+        [((res_f, res_a)) -> 
+          (
+            result_to_option(res_f),
+            result_to_option(res_a)
+          )
+        ]
+      ) in
+      
+      applicative_nat_transformation(
+        "OptionResultNT",
+        option_result_functor,
+        result_option_functor,
+        [a -> [opt_a -> 
+          result_to_option(option_to_result(error_msg, opt_a))
+        ]]
+      )
+    ],
+    
+    --[[
+      Example 3: Transforming between option and list applicatives
+    ]]--
+    option_list_transform_example: Option Z -> [Z] [
+      opt_z ->
+      let option_app = @Applicative.option_applicative("OptionApp").base in
+      let list_app = @Applicative.list_applicative("ListApp").base in
+      
+      -- Create a functor from Option to List
+      let functor = applicative_functor(
+        "OptionToList",
+        option_app,
+        list_app,
+        [a -> a],  -- Object mapping
+        [f -> [a -o> 
+          option_to_list(f(a))
+        ]],
+        [a -> [opt_a -> option_to_list(opt_a)]],
+        [((opt_f, opt_a)) -> 
+          (
+            option_to_list(opt_f),
+            option_to_list(opt_a)
+          )
+        ]
+      ) in
+      
+      -- Apply the functor to the pure operation
+      functor.pure_map(Z)(opt_z)
+    ],
+    
+    --[[
+      Example 4: Using lift_applicative to transform values
+    ]]--
+    lift_example: Z -> Option Z [
+      z ->
+      let option_app = @Applicative.option_applicative("OptionLiftApp").base in
+      
+      let double = [x -o> x * 2] in
+      
+      let opt_z = @Applicative.pure(option_app, z).result in
+      
+      lift_applicative(option_app, double, opt_z)
+    ],
+    
+    --[[
+      Example 5: Creating an adjunction between applicative categories
+    ]]--
+    adjunction_example: () -> ApplicativeAdjunction [->
+      applicative_cat_adjunction("ExampleAdjunction")
+    ]
+  }
+} 

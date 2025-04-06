@@ -6,8 +6,7 @@
   representing a computational effect.
 
   Kleisli arrows provide a direct way to compose effectful computations
-  without explicitly using monads. This approach focuses on the morphisms
-  and their composition rather than the underlying structure.
+  by focusing on the morphisms and their composition.
 ]]--
 
 @Kleisli: {
@@ -18,7 +17,7 @@
     TypeConstructor
 
     -- Specific effect types
-    MaybeEffect
+    OptionalEffect
     ListEffect
     StateEffect
     ContEffect

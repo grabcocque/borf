@@ -75,13 +75,13 @@ process_users(get_all_user_ids())
 ```borf
 let analyze_logs = [log_file ->
   let lines = file_to_stream(log_file)
-  
+
   // Extract error messages from logs
   let errors = lines
     |> [s -> Stream.filter(s, contains_error)]
     |> [s -> Stream.map(s, parse_error_message)]
     |> [s -> Stream.map(s, add_timestamp)]
-  
+
   // Count error types
   let error_counts = errors
     |> [s -> Stream.map(s, [err -> err.type])]
@@ -89,7 +89,7 @@ let analyze_logs = [log_file ->
          counts[type] = (counts[type] || 0) + 1
          counts
        ], {})]
-  
+
   error_counts
 ]
 
@@ -116,11 +116,11 @@ let transform_data = [raw_data ->
 
 Streams are perfect when you need to:
 
-✅ Process large datasets efficiently  
-✅ Create clear data transformation pipelines  
-✅ Deal with potentially infinite data sources  
-✅ Improve code readability  
-✅ Avoid loading everything into memory  
+✅ Process large datasets efficiently
+✅ Create clear data transformation pipelines
+✅ Deal with potentially infinite data sources
+✅ Improve code readability
+✅ Avoid loading everything into memory
 
 ## Quick Stream Cheat Sheet
 
@@ -198,4 +198,4 @@ let example = Stream.from_range(1, 10, 1)
   |> Stream.collect
 
 // Easy, efficient, and clean!
-``` 
+```

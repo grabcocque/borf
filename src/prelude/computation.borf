@@ -1,74 +1,75 @@
 --[[
   Computation
-  
+
   This module defines computation structures for sequencing operations with effects.
-  It uses Kleisli arrows as the foundation, avoiding traditional monadic operations.
-  
+  It uses linear types as the foundation, ensuring resource tracking and safe
+  composition of effectful operations without relying on monadic structures.
+
   Computations represent sequenceable operations that may include effects,
-  such as optionality, error handling, or state manipulation.
+  such as optionality, error handling, or state manipulation, all handled linearly.
 ]]--
 
 @Computation: {
   typ: {
     -- Core computation types
-    Computation
-    ComputationArrow
-    
+    !Computation
+    !ComputationArrow
+
     -- Specific computation types
-    Optional
-    Result
-    State
-    Reader
-    
+    !Optional
+    !Result
+    !State
+    !Reader
+
     -- Combinators
-    Chain
-    Apply
-    Lift
+    !Sequence
+    !Apply
+    !Transform
   }
 
   op: {
-    -- Sequencing operator (similar to bind)
+    -- Sequencing operator
     >>
-    
-    -- Lifting operator
-    ^
+
+    -- Linear application
+    -o>
   }
 
   fn: {
     -- Core computation functions
     computation
-    pure
-    chain
+    identity
+    sequence
     apply
-    
+
     -- Optional computation
     optional
     some
     none
     match_optional
-    
+
     -- Result computation
     result
     success
     failure
     match_result
-    
+
     -- State computation
     state
     get
     put
     modify
     run_state
-    
+
     -- Reader computation
     reader
     ask
     local
     run_reader
-    
+
     -- Utility functions
-    lift
-    sequence
+    transform
+    pipe
     traverse
   }
 
@@ -77,9 +78,9 @@
   vis: E |> [e -> true]
 
   deps: {
-    (@Computation, @Kleisli, true),   -- Add dependency on Kleisli arrows
-    (@Computation, @Task, false),     -- Add dependency on Task (optional for now)
-    (@Computation, @Cat, true)        -- Add dependency on Category
+    (@Computation, @Linear, true),   -- Add dependency on Linear types
+    (@Computation, @Task, false),    -- Add dependency on Task (optional for now)
+    (@Computation, @Cat, true)       -- Add dependency on Category
   }
 
   --------------------------------------------------
@@ -87,86 +88,83 @@
   --------------------------------------------------
 
   --[[
-    Computation represents a computation with effects.
-    It's essentially a Kleisli arrow (a -> F b) where F is some effect.
+    !Computation represents a computation with effects using linear types.
+    It consumes its input exactly once and produces an output exactly once.
   ]]--
-  Computation: {
+  !Computation: {
     _type: "Computation",
-    run: (a -> b),             -- Function that runs the computation
-    effect_type: S,            -- Name of the effect (Optional, Result, etc.)
-    chain: (a -> b -> c)       -- Function to chain computations
+    run: (a -o> b),           -- Linear function that runs the computation
+    effect_type: S            -- Name of the effect (Optional, Result, etc.)
   }
 
   --[[
-    ComputationArrow represents an arrow between computations.
-    It's a morphism in the Kleisli category.
+    !ComputationArrow represents an arrow between computations.
+    It's a morphism in the category of linear computations.
   ]]--
-  ComputationArrow: {
+  !ComputationArrow: {
     _type: "ComputationArrow",
-    source: Computation,
-    target: Computation,
-    transform: (a -> b)        -- Function that transforms the computation
+    source: !Computation,
+    target: !Computation,
+    transform: (a -o> b)      -- Linear function that transforms the computation
   }
 
   --[[
-    Optional represents a computation that may not produce a value.
+    !Optional represents a computation that may not produce a value.
   ]]--
-  Optional: {
-    _type: "Optional",
-    value: Any | Null
+  !Optional: !{
+    Some: { value: a },
+    None: {}
   }
 
   --[[
-    Result represents a computation that may fail with an error.
+    !Result represents a computation that may fail with an error.
   ]]--
-  Result: {
-    _type: "Result",
-    value: Any | Null,
-    error: Any | Null,
-    is_success: Bool
+  !Result: !{
+    Success: { value: a },
+    Failure: { error: e }
   }
 
   --[[
-    State represents a computation that manipulates state.
+    !State represents a computation that manipulates state.
   ]]--
-  State: {
+  !State: {
     _type: "State",
-    run: (s -> (Any * s))      -- Function from state to (value, new_state)
+    run: (s -o> (a * s))      -- Linear function from state to (value, new_state)
   }
 
   --[[
-    Reader represents a computation that reads from an environment.
+    !Reader represents a computation that reads from an environment.
   ]]--
-  Reader: {
+  !Reader: {
     _type: "Reader",
-    run: (e -> Any)            -- Function from environment to value
+    run: (e -o> a)            -- Linear function from environment to value
   }
 
   --[[
-    Chain represents a sequenced computation.
+    !Sequence represents a linearly sequenced computation.
   ]]--
-  Chain: {
-    _type: "Chain",
-    first: Computation,
-    next: (a -> Computation)
+  !Sequence: {
+    _type: "Sequence",
+    first: !Computation,
+    second: !Computation
   }
 
   --[[
-    Apply represents function application within a computation.
+    !Apply represents linear function application within a computation.
   ]]--
-  Apply: {
+  !Apply: {
     _type: "Apply",
-    func: Computation,
-    arg: Computation
+    func: !Computation,
+    arg: !Computation
   }
 
   --[[
-    Lift represents lifting a pure value into a computation.
+    !Transform represents transforming a pure value in a computation.
   ]]--
-  Lift: {
-    _type: "Lift",
-    value: Any,
-    effect_type: S
+  !Transform: {
+    _type: "Transform",
+    comp: !Computation,
+    func: (a -o> b)
   }
 
   --------------------------------------------------
@@ -174,118 +172,50 @@
   --------------------------------------------------
 
   --[[
-    computation creates a basic computation.
-    This is effectively a Kleisli arrow.
+    computation creates a basic computation with linear behavior.
   ]]--
-  computation: S * (a -> b) * (a -> b -> c) -> Computation.a.b [effect_type run chain_fn ->
+  computation: S * (a -o> b) -> !Computation [effect_type run ->
     {
       _type: "Computation",
       run: run,
-      effect_type: effect_type,
-      chain: chain_fn
+      effect_type: effect_type
     }
   ]
 
   --[[
-    pure lifts a pure value into a computation effect.
-    This corresponds to the η (eta) arrow in a Kleisli triple.
+    identity creates an identity computation that just passes through its input.
   ]]--
-  pure: S * a -> Computation.a [effect_type value ->
-    match effect_type {
-      "Optional" => computation(
-        "Optional",
-        [_ -> some(value)],
-        [_ next -> match_optional(_, 
-          [val -> next(val)], 
-          [-> none()]
-        )]
-      ),
-      
-      "Result" => computation(
-        "Result",
-        [_ -> success(value)],
-        [_ next -> match_result(_, 
-          [val -> next(val)], 
-          [err -> failure(err)]
-        )]
-      ),
-      
-      "State" => computation(
-        "State",
-        [s -> (value, s)],
-        [_ next s -> 
-          let (val, new_state) = _.run(s) in
-          next(val).run(new_state)
-        ]
-      ),
-      
-      "Reader" => computation(
-        "Reader",
-        [e -> value],
-        [_ next e -> next(_.run(e)).run(e)]
-      ),
-      
-      _ => @Kleisli.kleisli_return(value)
-    }
+  identity: S -> !Computation [effect_type ->
+    computation(effect_type, [a -> a])
   ]
 
   --[[
-    chain sequences two computations, passing the result of the first to the second.
-    This corresponds to the Kleisli composition operation (>=>).
+    sequence linearly composes two computations.
+    The first computation is run, then its result is passed to the second.
   ]]--
-  chain: Computation.a.b * (b -> Computation.b.c) -> Computation.a.c [comp next ->
+  sequence: !Computation * !Computation -> !Computation [first second ->
     {
-      _type: "Chain",
-      first: comp,
-      next: next,
-      run: [a -> comp.chain(comp.run(a), next)]
+      _type: "Computation",
+      run: [a ->
+        let b = first.run(a) in
+        second.run(b)
+      ],
+      effect_type: second.effect_type
     }
   ]
 
   --[[
-    apply applies a function wrapped in a computation to a value in a computation.
+    apply applies a computation that returns a function to an argument computation.
   ]]--
-  apply: Computation.(a -> b) * Computation.a -> Computation.b [func_comp val_comp ->
+  apply: !Computation * !Computation -> !Computation [func_comp arg_comp ->
     {
-      _type: "Apply",
-      func: func_comp,
-      arg: val_comp,
-      run: [a -> 
-        let func = func_comp.run(a) in
-        let val = val_comp.run(a) in
-        // Implementation depends on the effect type
-        match func_comp.effect_type {
-          "Optional" => match_optional(func, 
-            [f -> match_optional(val, 
-              [v -> some(f(v))], 
-              [-> none()]
-            )], 
-            [-> none()]
-          ),
-          
-          "Result" => match_result(func, 
-            [f -> match_result(val, 
-              [v -> success(f(v))], 
-              [err -> failure(err)]
-            )], 
-            [err -> failure(err)]
-          ),
-          
-          "State" => [s -> 
-            let (f, s1) = func_comp.run(s) in
-            let (v, s2) = val_comp.run(s1) in
-            (f(v), s2)
-          ],
-          
-          "Reader" => [e -> 
-            let f = func_comp.run(e) in
-            let v = val_comp.run(e) in
-            f(v)
-          ],
-          
-          _ => @Kleisli.kleisli_apply(func, val)
-        }
-      ]
+      _type: "Computation",
+      run: [env ->
+        let f = func_comp.run(env) in
+        let arg = arg_comp.run(env) in
+        f(arg)
+      ],
+      effect_type: func_comp.effect_type
     }
   ]
 
@@ -296,46 +226,31 @@
   --[[
     optional creates an optional computation.
   ]]--
-  optional: (a -> Optional.b) -> Computation.a.b [f ->
-    computation(
-      "Optional",
-      f,
-      [opt next -> match_optional(opt, 
-        [val -> next(val)], 
-        [-> none()]
-      )]
-    )
+  optional: (a -o> !Optional) -> !Computation [f ->
+    computation("Optional", f)
   ]
 
   --[[
-    some wraps a value in an Optional.
+    some wraps a value in a Some variant of Optional.
   ]]--
-  some: a -> Optional.a [value ->
-    {
-      _type: "Optional",
-      value: value
-    }
+  some: a -o> !Optional [value ->
+    !Optional.Some { value: value }
   ]
 
   --[[
-    none creates an empty Optional.
+    none creates a None variant of Optional.
   ]]--
-  none: () -> Optional.a [->
-    {
-      _type: "Optional",
-      value: null
-    }
+  none: () -o> !Optional [->
+    !Optional.None {}
   ]
 
   --[[
-    match_optional pattern-matches an Optional.
+    match_optional pattern matches on an Optional value.
   ]]--
-  match_optional: Optional.a * (a -> b) * (() -> b) -> b [opt some_case none_case ->
-    if opt.value != null {
-      some_case(opt.value)
-    } else {
-      none_case()
-    }
+  match_optional: !Optional * (a -o> b) * (() -o> b) -o> b [opt some_case none_case ->
+    match opt with
+      | !Optional.Some { value } -> some_case(value)
+      | !Optional.None {} -> none_case()
   ]
 
   --------------------------------------------------
@@ -345,50 +260,31 @@
   --[[
     result creates a result computation.
   ]]--
-  result: (a -> Result.b) -> Computation.a.b [f ->
-    computation(
-      "Result",
-      f,
-      [res next -> match_result(res, 
-        [val -> next(val)], 
-        [err -> failure(err)]
-      )]
-    )
+  result: (a -o> !Result) -> !Computation [f ->
+    computation("Result", f)
   ]
 
   --[[
-    success creates a successful Result.
+    success wraps a value in a Success variant of Result.
   ]]--
-  success: a -> Result.a [value ->
-    {
-      _type: "Result",
-      value: value,
-      error: null,
-      is_success: true
-    }
+  success: a -o> !Result [value ->
+    !Result.Success { value: value }
   ]
 
   --[[
-    failure creates a failed Result.
+    failure creates a Failure variant of Result with an error.
   ]]--
-  failure: e -> Result.a.e [error ->
-    {
-      _type: "Result",
-      value: null,
-      error: error,
-      is_success: false
-    }
+  failure: e -o> !Result [error ->
+    !Result.Failure { error: error }
   ]
 
   --[[
-    match_result pattern-matches a Result.
+    match_result pattern matches on a Result value.
   ]]--
-  match_result: Result.a.e * (a -> b) * (e -> b) -> b [res success_case failure_case ->
-    if res.is_success {
-      success_case(res.value)
-    } else {
-      failure_case(res.error)
-    }
+  match_result: !Result * (a -o> c) * (e -o> c) -o> c [res success_case failure_case ->
+    match res with
+      | !Result.Success { value } -> success_case(value)
+      | !Result.Failure { error } -> failure_case(error)
   ]
 
   --------------------------------------------------
@@ -396,62 +292,46 @@
   --------------------------------------------------
 
   --[[
-    state creates a state computation.
+    state creates a stateful computation.
   ]]--
-  state: (s -> (a * s)) -> State.a.s [f ->
-    {
-      _type: "State",
-      run: f
-    }
+  state: (s -o> (a * s)) -> !Computation [f ->
+    computation("State", [s ->
+      let (value, new_state) = f(s) in
+      !State {
+        _type: "State",
+        run: [_ -> (value, new_state)]
+      }
+    ])
   ]
 
   --[[
     get retrieves the current state.
   ]]--
-  get: () -> Computation._.s.s [->
-    computation(
-      "State",
-      [s -> (s, s)],
-      [st next s -> 
-        let (val, new_state) = st.run(s) in
-        next(val).run(new_state)
-      ]
-    )
+  get: () -> !Computation [->
+    state([s -> (s, s)])
   ]
 
   --[[
-    put sets a new state.
+    put updates the state.
   ]]--
-  put: s -> Computation.s.() [new_state ->
-    computation(
-      "State",
-      [_ -> (null, new_state)],
-      [st next s -> 
-        let (_, new_state) = st.run(s) in
-        next(null).run(new_state)
-      ]
-    )
+  put: s -> !Computation [new_state ->
+    state([_ -> ({}, new_state)])
   ]
 
   --[[
-    modify applies a function to the current state.
+    modify applies a function to update the state.
   ]]--
-  modify: (s -> s) -> Computation._.s.() [f ->
-    computation(
-      "State",
-      [s -> (null, f(s))],
-      [st next s -> 
-        let (_, new_state) = st.run(s) in
-        next(null).run(new_state)
-      ]
-    )
+  modify: (s -o> s) -> !Computation [f ->
+    state([s -> ({}, f(s))])
   ]
 
   --[[
-    run_state executes a state computation with an initial state.
+    run_state executes a stateful computation with an initial state.
   ]]--
-  run_state: Computation.a.s * s -> (a * s) [comp initial_state ->
-    comp.run(initial_state)
+  run_state: !Computation * s -o> (a * s) [comp initial_state ->
+    let state_result = comp.run(initial_state) in
+    match state_result with
+      | !State { run } -> run(initial_state)
   ]
 
   --------------------------------------------------
@@ -459,42 +339,45 @@
   --------------------------------------------------
 
   --[[
-    reader creates a reader computation.
+    reader creates a computation that reads from an environment.
   ]]--
-  reader: (e -> a) -> Reader.a.e [f ->
-    {
-      _type: "Reader",
-      run: f
-    }
+  reader: (e -o> a) -> !Computation [f ->
+    computation("Reader", [env ->
+      !Reader {
+        _type: "Reader",
+        run: [_ -> f(env)]
+      }
+    ])
   ]
 
   --[[
-    ask retrieves the environment.
+    ask retrieves the current environment.
   ]]--
-  ask: () -> Computation._.e.e [->
-    computation(
-      "Reader",
-      [e -> e],
-      [rd next e -> next(rd.run(e)).run(e)]
-    )
+  ask: () -> !Computation [->
+    reader([env -> env])
   ]
 
   --[[
     local runs a computation with a modified environment.
   ]]--
-  local: (e -> e) * Computation.a.e -> Computation.a.e [modify comp ->
-    computation(
-      "Reader",
-      [e -> comp.run(modify(e))],
-      [rd next e -> next(rd.run(e)).run(e)]
-    )
+  local: (e -o> e) * !Computation -> !Computation [f comp ->
+    {
+      _type: "Computation",
+      run: [env ->
+        let modified_env = f(env) in
+        comp.run(modified_env)
+      ],
+      effect_type: comp.effect_type
+    }
   ]
 
   --[[
     run_reader executes a reader computation with an environment.
   ]]--
-  run_reader: Computation.a.e * e -> a [comp env ->
-    comp.run(env)
+  run_reader: !Computation * e -o> a [comp env ->
+    let reader_result = comp.run(env) in
+    match reader_result with
+      | !Reader { run } -> run(env)
   ]
 
   --------------------------------------------------
@@ -502,88 +385,100 @@
   --------------------------------------------------
 
   --[[
-    lift transforms a pure function into a computation.
+    transform applies a function to the result of a computation.
   ]]--
-  lift: (a -> b) * S -> Computation.a.b [f effect_type ->
+  transform: !Computation * (a -o> b) -> !Computation [comp f ->
     {
-      _type: "Lift",
-      value: f,
-      effect_type: effect_type,
-      run: [a ->
-        match effect_type {
-          "Optional" => some(f(a)),
-          "Result" => success(f(a)),
-          "State" => [s -> (f(a), s)],
-          "Reader" => [e -> f(a)],
-          _ => f(a)
-        }
-      ]
+      _type: "Computation",
+      run: [env -> f(comp.run(env))],
+      effect_type: comp.effect_type
     }
   ]
 
   --[[
-    sequence converts a list of computations into a computation of a list.
+    pipe sequentially composes multiple computations.
   ]]--
-  sequence: [Computation.a] * S -> Computation.[a] [comps effect_type ->
-    let result = pure(effect_type, []) in
-    
-    for comp in Prim.reverse(comps) {
-      result = apply(
-        apply(
-          pure(effect_type, [x xs -> [x] + xs]),
-          comp
-        ),
-        result
-      )
-    }
-    
-    result
+  pipe: [!Computation] -> !Computation [comps ->
+    match comps with
+      | [] -> identity("Identity")
+      | [comp] -> comp
+      | [first, second @ rest] ->
+          pipe(rest |> cons(sequence(first, second)))
   ]
 
   --[[
-    traverse maps a function returning a computation over a list and sequences the results.
+    traverse applies a computation to each element of a list and collects the results.
   ]]--
-  traverse: (a -> Computation.b) * [a] * S -> Computation.[b] [f xs effect_type ->
-    let comps = xs |> Prim.map([x -> f(x)]) in
-    sequence(comps, effect_type)
+  traverse: (a -o> !Computation) * [a] -> !Computation [[b]] [f list ->
+    let map_comp = [a acc ->
+      let comp_b = f(a) in
+      {
+        _type: "Computation",
+        run: [env ->
+          let b = comp_b.run(env) in
+          [b] + acc
+        ],
+        effect_type: comp_b.effect_type
+      }
+    ] in
+
+    list |> fold(map_comp, identity("Identity"))
   ]
 
   --------------------------------------------------
-  -- Mapping to Kleisli Category
+  -- Operators
   --------------------------------------------------
 
   --[[
-    Maps Computation structures to Kleisli arrows,
-    showing how they relate to the underlying categorical structure.
+    >> is sequential composition
+  ]]--
+  >>: !Computation * !Computation -> !Computation [first second ->
+    sequence(first, second)
+  ]
+
+  --[[
+    -o> is linear function application
+  ]]--
+  -o>: a * (a -o> b) -> b [x f ->
+    f(x)
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping to Category
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @Computation as a category.
+
+    In this categorical structure:
+    - Objects are types
+    - Morphisms are linear computations between types
+    - Identity is the identity computation
+    - Composition is sequential composition of computations
+
+    This forms a proper category with linear semantics rather than
+    using a Kleisli category for monadic effects.
   ]]--
   structure: {
-    -- Correspondence with Kleisli arrows
-    computation_to_kleisli: [comp -> @Kleisli.kleisli(comp.run)],
-    kleisli_to_computation: [k -> computation(
-      "Kleisli",
-      k.run,
-      [a next -> @Kleisli.kleisli_compose(a, next)]
-    )],
-    
-    -- Correspondence with Kleisli operations
-    pure_as_kleisli: [a -> @Kleisli.kleisli_return(a)],
-    chain_as_kleisli: [comp next -> @Kleisli.kleisli_compose(comp, next)],
-    
-    -- Laws demonstrating correspondence with Kleisli laws
+    -- Map Computation to a category
+    objects: typeof(a),          -- Objects are types
+    morphisms: !Computation,     -- Morphisms are computations
+
+    -- Core category structure
+    dom: [f -> typeof(dom(f.run))],     -- Domain of computation
+    cod: [f -> typeof(cod(f.run))],     -- Codomain of computation
+    id: [a -> identity("Identity")],    -- Identity morphism
+    compose: [f g -> sequence(f, g)],   -- Sequential composition
+
+    -- Laws
     law: {
-      left_identity: [a f -> 
-        // pure(a) >> f == f(a)
-        @Kleisli.structure.law.kleisli_left_identity(a, f)
+      identity: [f ->
+        sequence(identity("Identity"), f) == f &&
+        sequence(f, identity("Identity")) == f
       ],
-      
-      right_identity: [m -> 
-        // m >> pure == m
-        @Kleisli.structure.law.kleisli_right_identity(m)
-      ],
-      
-      associativity: [m f g -> 
-        // (m >> f) >> g == m >> (x -> f(x) >> g)
-        @Kleisli.structure.law.kleisli_associativity(m, f, g)
+
+      associativity: [f g h ->
+        sequence(f, sequence(g, h)) == sequence(sequence(f, g), h)
       ]
     }
   }
@@ -594,82 +489,49 @@
 
   example: {
     --[[
-      Example 1: Optional computations
+      Example 1: Optional computation
     ]]--
-    optional_example: () -> Optional.Z [->
-      let safe_div = [a b -> 
-        if b == 0 {
-          none()
-        } else {
-          some(a / b)
-        }
-      ] in
-      
-      let comp1 = optional(safe_div) in
-      let comp2 = chain(comp1, [result -> 
-        optional([_ -> some(result + 10)])
-      ]) in
-      
-      comp2.run(10, 2)  // Returns some(15)
+    optional_example: Z -> !Optional [n ->
+      if n > 0 {
+        some(n)
+      } else {
+        none()
+      }
     ],
-    
+
     --[[
-      Example 2: State computation
+      Example 2: Sequencing computations
     ]]--
-    state_example: () -> Z [->
-      let counter = chain(
-        get(),
-        [current ->
-          chain(
-            put(current + 1),
-            [_ -> pure("State", current)]
-          )
-        ]
-      ) in
-      
-      let comp = chain(
-        counter,
-        [a -> chain(
-          counter,
-          [b -> chain(
-            counter,
-            [c -> pure("State", [a, b, c])]
-          )]
-        )]
-      ) in
-      
-      let (result, final_state) = run_state(comp, 0) in
-      // Returns ([0, 1, 2], 3)
-      result
+    sequence_example: () -> !Computation [->
+      let comp1 = optional([_ -> some(42)]) in
+      let comp2 = optional([n -> if n % 2 == 0 { some(n / 2) } else { none() }]) in
+      sequence(comp1, comp2)
     ],
-    
+
     --[[
-      Example 3: Reader computation
+      Example 3: Stateful computation
     ]]--
-    reader_example: () -> S [->
-      let get_config = chain(
-        ask(),
-        [env -> pure("Reader", env.config)]
-      ) in
-      
-      let get_user = chain(
-        ask(),
-        [env -> pure("Reader", env.user)]
-      ) in
-      
-      let comp = chain(
+    state_example: () -> (!Computation, Z) [->
+      let counter = state([n -> (n, n + 1)]) in
+      let increment = state([n -> ({}, n + 1)]) in
+      let comp = sequence(counter, sequence(increment, counter)) in
+      (comp, run_state(comp, 0))
+    ],
+
+    --[[
+      Example 4: Reader computation
+    ]]--
+    reader_example: () -> (!Computation, S) [->
+      let get_config = reader([env -> env.config]) in
+      let get_user = reader([env -> env.user]) in
+      let comp = sequence(
         get_config,
-        [cfg -> chain(
+        [cfg -> sequence(
           get_user,
-          [user -> pure("Reader", user + " using " + cfg)]
+          [user -> reader([_ -> cfg + ":" + user])]
         )]
       ) in
-      
-      run_reader(comp, { 
-        config: "debug mode", 
-        user: "admin" 
-      })
-      // Returns "admin using debug mode"
+      (comp, run_reader(comp, { config: "debug", user: "admin" }))
     ]
   }
-} 
+}

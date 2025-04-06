@@ -1,0 +1,854 @@
+--[[
+  Extractor Module - Bidirectional Parsing and Extraction
+
+  This module defines extractors, which are bidirectional parsers that can both
+  parse and print values. Extractors combine the power of optics and profunctors
+  to provide a unified framework for parsing, printing, and transforming data.
+
+  Enhanced with:
+  - Parsing with derivatives for elegant composition
+  - Packrat parsing for memoization and linear time complexity
+  - Prefix coding for efficient binary parsing
+  - Continuation-based error handling
+]]--
+
+@Extractor: {
+  typ: {
+    !Extractor !Parser !Printer !Biparser
+    !Result !Error !Position !Span
+    ExtractorRun ExtractorPrompt ExtractorHandler
+    !MemoTable !MemoKey !MemoEntry
+    !Derivative !ParseState
+  }
+
+  op: {
+    -- Composition operators
+    >>> <<< ... *** +++ &&& ||| &&^ |||^
+    
+    -- Lifting operators
+    ^>> >>^ ^<< <<^
+    
+    -- Error handling operators
+    ~> <!> <*> <+> <|>
+
+    -- Derivative operators
+    δ/δx δ_δx derive compact nullable
+  }
+
+  fn: {
+    -- Core extractor operations
+    extractor parse print biparse
+    
+    -- Extractor combinators
+    compose first second both split
+    fanout fanin left right combine
+    loop feedback iterate retry
+    
+    -- Error handling operations
+    error handle try_catch
+    
+    -- Parser operations
+    parser stage parallel branch fork join
+    
+    -- Printer operations
+    printer format pretty print
+    
+    -- Laws
+    law.extractor_id law.extractor_compose law.extractor_first
+    law.extractor_association law.extractor_functor
+  }
+
+  E: typ cup op cup fn
+
+  tau: T.tau
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Extractor, @T, true),         -- Type system
+    (@Extractor, @Cat, true),       -- Category theory
+    (@Extractor, @Optics, true),    -- Optics module
+    (@Extractor, @Profunctor, true),-- Profunctor module
+    (@Extractor, @Arrow, true)      -- Arrow module
+  }
+
+  --------------------------------------------------
+  -- Core Extractor Types
+  --------------------------------------------------
+
+  --[[
+    !Extractor represents a bidirectional parser that can both parse and print.
+  ]]--
+  !Extractor: {
+    parse: (S -> !Result a),        -- Parse function
+    print: (a -> S),                -- Print function
+    _a: T.Type                      -- Type of parsed value
+  }
+
+  --[[
+    !Parser represents a one-way parser that only parses.
+  ]]--
+  !Parser: {
+    parse: (S -> !Result a),        -- Parse function
+    _a: T.Type                      -- Type of parsed value
+  }
+
+  --[[
+    !Printer represents a one-way printer that only prints.
+  ]]--
+  !Printer: {
+    print: (a -> S),                -- Print function
+    _a: T.Type                      -- Type of printed value
+  }
+
+  --[[
+    !Biparser represents a bidirectional parser with error handling.
+  ]]--
+  !Biparser: {
+    parse: (S -> !Result a),        -- Parse function
+    print: (a -> S),                -- Print function
+    error: (S -> !Error),           -- Error handler
+    _a: T.Type                      -- Type of parsed/printed value
+  }
+
+  --[[
+    !Result represents the result of parsing or printing.
+  ]]--
+  !Result: !{
+    Success: { value: a },
+    Failure: { error: !Error }
+  }
+
+  --[[
+    !Error represents a parsing or printing error.
+  ]]--
+  !Error: {
+    message: S,                     -- Error message
+    position: !Position,            -- Position in input
+    span: !Span,                    -- Span of error
+    context: {S: S}                 -- Additional context
+  }
+
+  --[[
+    !Position represents a position in the input.
+  ]]--
+  !Position: {
+    line: Z,                        -- Line number
+    column: Z,                      -- Column number
+    offset: Z                       -- Byte offset
+  }
+
+  --[[
+    !Span represents a span in the input.
+  ]]--
+  !Span: {
+    start: !Position,               -- Start position
+    end: !Position                  -- End position
+  }
+
+  --[[
+    !MemoTable provides memoization for packrat parsing
+  ]]--
+  !MemoTable: {
+    entries: {!MemoKey: !MemoEntry},  -- Map of parse position to parse results
+    hits: Z,                          -- Number of cache hits
+    misses: Z                         -- Number of cache misses
+  }
+
+  --[[
+    !MemoKey is the key for memoization cache entries
+  ]]--
+  !MemoKey: {
+    parser_id: Z,                     -- Unique parser identifier
+    position: !Position,              -- Input position
+    context: {S: S}                   -- Parsing context (if any)
+  }
+
+  --[[
+    !MemoEntry is a cached parsing result
+  ]]--
+  !MemoEntry: {
+    result: !Result,                  -- Cached parse result
+    timestamp: Z                      -- When this entry was cached
+  }
+
+  --[[
+    !ParseState tracks the current state of parsing
+  ]]--
+  !ParseState: {
+    input: S,                         -- Input string
+    position: !Position,              -- Current position
+    memo: !MemoTable,                 -- Memoization table
+    errors: [!Error],                 -- Error stack
+    max_position: !Position           -- Furthest position reached
+  }
+
+  --[[
+    !Derivative represents a parser derivative
+  ]]--
+  !Derivative: {
+    parser: !Parser,                  -- The derived parser
+    with_respect_to: S                -- The token with respect to which we derived
+  }
+
+  --------------------------------------------------
+  -- Core Extractor Operations
+  --------------------------------------------------
+
+  --[[
+    extractor creates a new extractor from parse and print functions.
+  ]]--
+  extractor: (S -> !Result a) * (a -> S) -> !Extractor [parse print ->
+    {
+      parse: parse,
+      print: print,
+      _a: typeof(a)
+    }
+  ]
+
+  --[[
+    parse creates a parser from a parse function.
+  ]]--
+  parse: (S -> !Result a) -> !Parser [parse_fn ->
+    {
+      parse: parse_fn,
+      _a: typeof(a)
+    }
+  ]
+
+  --[[
+    print creates a printer from a print function.
+  ]]--
+  print: (a -> S) -> !Printer [print_fn ->
+    {
+      print: print_fn,
+      _a: typeof(a)
+    }
+  ]
+
+  --[[
+    biparse creates a biparser from parse, print, and error functions.
+  ]]--
+  biparse: (S -> !Result a) * (a -> S) * (S -> !Error) -> !Biparser [parse print error ->
+    {
+      parse: parse,
+      print: print,
+      error: error,
+      _a: typeof(a)
+    }
+  ]
+
+  --------------------------------------------------
+  -- Extractor Combinators
+  --------------------------------------------------
+
+  --[[
+    compose sequentially composes two extractors.
+  ]]--
+  compose: !Extractor * !Extractor -> !Extractor [f g ->
+    extractor(
+      [s -> 
+        match f.parse(s) with
+          | !Result.Success { value } -> g.parse(f.print(value))
+          | !Result.Failure { error } -> !Result.Failure { error }
+      ],
+      [a -> f.print(g.print(a))]
+    )
+  ]
+
+  --[[
+    first lifts an extractor to work on the first component of a pair.
+  ]]--
+  first: !Extractor -> !Extractor [f ->
+    extractor(
+      [s -> 
+        match f.parse(s) with
+          | !Result.Success { value } -> !Result.Success { value: (value, c) }
+          | !Result.Failure { error } -> !Result.Failure { error }
+      ],
+      [(a, c) -> f.print(a)]
+    )
+  ]
+
+  --[[
+    second lifts an extractor to work on the second component of a pair.
+  ]]--
+  second: !Extractor -> !Extractor [f ->
+    extractor(
+      [s -> 
+        match f.parse(s) with
+          | !Result.Success { value } -> !Result.Success { value: (c, value) }
+          | !Result.Failure { error } -> !Result.Failure { error }
+      ],
+      [(c, a) -> f.print(a)]
+    )
+  ]
+
+  --[[
+    both applies two extractors in parallel to the components of a pair.
+  ]]--
+  both: !Extractor * !Extractor -> !Extractor [f g ->
+    extractor(
+      [s -> 
+        match (f.parse(s), g.parse(s)) with
+          | (!Result.Success { value: a }, !Result.Success { value: b }) -> 
+              !Result.Success { value: (a, b) }
+          | (!Result.Failure { error }, _) -> !Result.Failure { error }
+          | (_, !Result.Failure { error }) -> !Result.Failure { error }
+      ],
+      [(a, b) -> f.print(a) + g.print(b)]
+    )
+  ]
+
+  --[[
+    split is an alias for both.
+  ]]--
+  split: !Extractor * !Extractor -> !Extractor [f g ->
+    both(f, g)
+  ]
+
+  --[[
+    fanout applies two extractors to the same input.
+  ]]--
+  fanout: !Extractor * !Extractor -> !Extractor [f g ->
+    extractor(
+      [s -> 
+        match (f.parse(s), g.parse(s)) with
+          | (!Result.Success { value: a }, !Result.Success { value: b }) -> 
+              !Result.Success { value: (a, b) }
+          | (!Result.Failure { error }, _) -> !Result.Failure { error }
+          | (_, !Result.Failure { error }) -> !Result.Failure { error }
+      ],
+      [a -> f.print(a) + g.print(a)]
+    )
+  ]
+
+  --[[
+    fanin applies either of two extractors based on the input type.
+  ]]--
+  fanin: !Extractor * !Extractor -> !Extractor [f g ->
+    extractor(
+      [s -> 
+        match f.parse(s) with
+          | !Result.Success { value } -> !Result.Success { value: Left(value) }
+          | !Result.Failure { _ } -> 
+              match g.parse(s) with
+                | !Result.Success { value } -> !Result.Success { value: Right(value) }
+                | !Result.Failure { error } -> !Result.Failure { error }
+      ],
+      [either -> 
+        match either with
+          | Left(a) -> f.print(a)
+          | Right(b) -> g.print(b)
+      ]
+    )
+  ]
+
+  --[[
+    left lifts an extractor to work on the Left component of an Either.
+  ]]--
+  left: !Extractor -> !Extractor [f ->
+    extractor(
+      [s -> 
+        match f.parse(s) with
+          | !Result.Success { value } -> !Result.Success { value: Left(value) }
+          | !Result.Failure { error } -> !Result.Failure { error }
+      ],
+      [either -> 
+        match either with
+          | Left(a) -> f.print(a)
+          | Right(c) -> ""
+      ]
+    )
+  ]
+
+  --[[
+    right lifts an extractor to work on the Right component of an Either.
+  ]]--
+  right: !Extractor -> !Extractor [f ->
+    extractor(
+      [s -> 
+        match f.parse(s) with
+          | !Result.Success { value } -> !Result.Success { value: Right(value) }
+          | !Result.Failure { error } -> !Result.Failure { error }
+      ],
+      [either -> 
+        match either with
+          | Left(c) -> ""
+          | Right(b) -> f.print(b)
+      ]
+    )
+  ]
+
+  --[[
+    combine two extractors with a combining function.
+  ]]--
+  combine: !Extractor * !Extractor * ((b, c) -> d) -> !Extractor [f g combine_fn ->
+    extractor(
+      [s -> 
+        match (f.parse(s), g.parse(s)) with
+          | (!Result.Success { value: b }, !Result.Success { value: c }) -> 
+              !Result.Success { value: combine_fn(b, c) }
+          | (!Result.Failure { error }, _) -> !Result.Failure { error }
+          | (_, !Result.Failure { error }) -> !Result.Failure { error }
+      ],
+      [d -> f.print(d) + g.print(d)]
+    )
+  ]
+
+  --------------------------------------------------
+  -- Error Handling Operations
+  --------------------------------------------------
+
+  --[[
+    error creates an error handler.
+  ]]--
+  error: S * !Position * !Span -> !Error [message position span ->
+    {
+      message: message,
+      position: position,
+      span: span,
+      context: {}
+    }
+  ]
+
+  --[[
+    handle creates an error handler for an extractor.
+  ]]--
+  handle: !Extractor * (S -> !Error) -> !Extractor [ext error_fn ->
+    extractor(
+      [s -> 
+        match ext.parse(s) with
+          | !Result.Success { value } -> !Result.Success { value }
+          | !Result.Failure { _ } -> !Result.Failure { error: error_fn(s) }
+      ],
+      ext.print
+    )
+  ]
+
+  --[[
+    try_catch wraps an extractor with error handling.
+  ]]--
+  try_catch: !Extractor * !Extractor -> !Extractor [try_ext catch_ext ->
+    extractor(
+      [s -> 
+        match try_ext.parse(s) with
+          | !Result.Success { value } -> !Result.Success { value }
+          | !Result.Failure { _ } -> catch_ext.parse(s)
+      ],
+      [a -> try_ext.print(a)]
+    )
+  ]
+
+  --------------------------------------------------
+  -- Parser Operations
+  --------------------------------------------------
+
+  --[[
+    parser creates a parser from a parse function.
+  ]]--
+  parser: (S -> !Result a) -> !Parser [parse_fn ->
+    {
+      parse: parse_fn,
+      _a: typeof(a)
+    }
+  ]
+
+  --[[
+    stage adds a stage to a parser.
+  ]]--
+  stage: !Parser * !Parser -> !Parser [p1 p2 ->
+    {
+      parse: [s -> 
+        match p1.parse(s) with
+          | !Result.Success { value } -> p2.parse(p1.print(value))
+          | !Result.Failure { error } -> !Result.Failure { error }
+      ],
+      _a: p2._a
+    }
+  ]
+
+  --[[
+    parallel creates a parallel parser.
+  ]]--
+  parallel: [!Parser] -> !Parser [parsers ->
+    {
+      parse: [s -> 
+        let results = [] in
+        for p in parsers {
+          match p.parse(s) with
+            | !Result.Success { value } -> results = results + [value]
+            | !Result.Failure { error } -> return !Result.Failure { error }
+        }
+        !Result.Success { value: results }
+      ],
+      _a: typeof([a])
+    }
+  ]
+
+  --[[
+    branch creates a branching parser.
+  ]]--
+  branch: (a -> Bool) * !Parser * !Parser -> !Parser [condition p1 p2 ->
+    {
+      parse: [s -> 
+        match p1.parse(s) with
+          | !Result.Success { value } -> 
+              if condition(value) {
+                !Result.Success { value }
+              } else {
+                p2.parse(s)
+              }
+          | !Result.Failure { _ } -> p2.parse(s)
+      ],
+      _a: p1._a
+    }
+  ]
+
+  --------------------------------------------------
+  -- Printer Operations
+  --------------------------------------------------
+
+  --[[
+    printer creates a printer from a print function.
+  ]]--
+  printer: (a -> S) -> !Printer [print_fn ->
+    {
+      print: print_fn,
+      _a: typeof(a)
+    }
+  ]
+
+  --[[
+    format creates a formatted printer.
+  ]]--
+  format: S * [a -> S] -> !Printer [format_str formatters ->
+    {
+      print: [a -> 
+        let result = format_str in
+        for i in 0..(Prim.length(formatters) - 1) {
+          result = Prim.replace(result, "{" + to_string(i) + "}", formatters[i](a))
+        }
+        result
+      ],
+      _a: typeof(a)
+    }
+  ]
+
+  --[[
+    pretty creates a pretty printer.
+  ]]--
+  pretty: !Printer * Z -> !Printer [p indent ->
+    {
+      print: [a -> 
+        let s = p.print(a) in
+        let lines = Prim.split(s, "\n") in
+        let result = "" in
+        for line in lines {
+          result = result + " " * indent + line + "\n"
+        }
+        result
+      ],
+      _a: p._a
+    }
+  ]
+
+  --------------------------------------------------
+  -- Laws
+  --------------------------------------------------
+
+  --[[
+    Extractor Identity Law: extractor id >>> f = f = f >>> extractor id
+  ]]--
+  law.extractor_id: !Extractor -> Bool [f ->
+    let id_ext = extractor([s -> !Result.Success { value: s }], [a -> a]) in
+    compose(id_ext, f) == f && compose(f, id_ext) == f
+  ]
+
+  --[[
+    Extractor Composition Law: extractor (f >>> g) = extractor f >>> extractor g
+  ]]--
+  law.extractor_compose: !Extractor * !Extractor -> Bool [f g ->
+    compose(f, g) == extractor(
+      [s -> 
+        match f.parse(s) with
+          | !Result.Success { value } -> g.parse(f.print(value))
+          | !Result.Failure { error } -> !Result.Failure { error }
+      ],
+      [a -> f.print(g.print(a))]
+    )
+  ]
+
+  --[[
+    Extractor First Law: first (extractor f) = extractor (first f)
+  ]]--
+  law.extractor_first: !Extractor -> Bool [f ->
+    first(f) == extractor(
+      [s -> 
+        match f.parse(s) with
+          | !Result.Success { value } -> !Result.Success { value: (value, c) }
+          | !Result.Failure { error } -> !Result.Failure { error }
+      ],
+      [(a, c) -> f.print(a)]
+    )
+  ]
+
+  --[[
+    Extractor Association Law: first (first f) >>> arr assoc = arr assoc >>> first f
+    where assoc ((a,b),c) = (a,(b,c))
+  ]]--
+  law.extractor_association: !Extractor -> Bool [f ->
+    let assoc = [(ab, c) -> 
+      let (a, b) = ab in
+      (a, (b, c))
+    ] in
+    let assoc_inv = [(a, bc) -> 
+      let (b, c) = bc in
+      ((a, b), c)
+    ] in
+    compose(first(first(f)), extractor([s -> assoc(s)], [a -> assoc_inv(a)])) == 
+    compose(extractor([s -> assoc_inv(s)], [a -> assoc(a)]), first(f))
+  ]
+
+  --[[
+    Extractor Functor Law: extractor (f >>> g) = extractor f >>> extractor g
+  ]]--
+  law.extractor_functor: !Extractor * !Extractor -> Bool [f g ->
+    compose(f, g) == extractor(
+      [s -> 
+        match f.parse(s) with
+          | !Result.Success { value } -> g.parse(f.print(value))
+          | !Result.Failure { error } -> !Result.Failure { error }
+      ],
+      [a -> f.print(g.print(a))]
+    )
+  ]
+
+  --------------------------------------------------
+  -- Packrat Parsing Implementation
+  --------------------------------------------------
+
+  --[[
+    create_memo_table creates a new memoization table
+  ]]--
+  create_memo_table: () -> !MemoTable [ ->
+    {
+      entries: {},
+      hits: 0,
+      misses: 0
+    }
+  ]
+
+  --[[
+    memo_key creates a key for the memoization table
+  ]]--
+  memo_key: (Z * !Position * {S: S}) -> !MemoKey [parser_id position context ->
+    {
+      parser_id: parser_id,
+      position: position,
+      context: context
+    }
+  ]
+
+  --[[
+    memoize wraps a parser with memoization
+  ]]--
+  memoize: ((!Parser * Z) -> !Parser) [parser parser_id ->
+    {
+      parse: [state -> 
+        let key = memo_key(parser_id, state.position, {}) in
+        if has_entry(state.memo, key) {
+          state.memo.hits = state.memo.hits + 1
+          get_entry(state.memo, key).result
+        } else {
+          state.memo.misses = state.memo.misses + 1
+          let result = parser.parse(state) in
+          put_entry(state.memo, key, {
+            result: result,
+            timestamp: current_time()
+          })
+          result
+        }
+      ],
+      _a: parser._a
+    }
+  ]
+
+  --[[
+    has_entry checks if an entry exists in the memo table
+  ]]--
+  has_entry: (!MemoTable * !MemoKey -> Bool) [memo key ->
+    key in memo.entries.keys
+  ]
+
+  --[[
+    get_entry retrieves an entry from the memo table
+  ]]--
+  get_entry: (!MemoTable * !MemoKey -> !MemoEntry) [memo key ->
+    memo.entries[key]
+  ]
+
+  --[[
+    put_entry adds an entry to the memo table
+  ]]--
+  put_entry: (!MemoTable * !MemoKey * !MemoEntry -> ()) [memo key entry ->
+    memo.entries[key] = entry
+  ]
+
+  --[[
+    current_time gets the current timestamp
+  ]]--
+  current_time: () -> Z [ ->
+    -- Implementation would depend on the runtime system
+    0
+  ]
+
+  --------------------------------------------------
+  -- Parsing with Derivatives
+  --------------------------------------------------
+
+  --[[
+    derive computes the derivative of a parser with respect to a token
+  ]]--
+  derive: (!Parser * S -> !Parser) [p token ->
+    match p {
+      -- Epsilon parser (matches empty string) is annihilated by derivation
+      | epsilon_parser() -> empty_parser()
+      
+      -- Empty parser (matches nothing) stays empty
+      | empty_parser() -> empty_parser()
+      
+      -- Character parser either becomes epsilon or empty
+      | char_parser(c) -> if c == token { epsilon_parser() } else { empty_parser() }
+      
+      -- Alternation derivatives distribute
+      | alt_parser(p1, p2) -> alt_parser(derive(p1, token), derive(p2, token))
+      
+      -- Sequence derivatives use Leibniz rule
+      | seq_parser(p1, p2) -> if nullable(p1) {
+          alt_parser(
+            seq_parser(derive(p1, token), p2),
+            seq_parser(epsilon_parser(), derive(p2, token))
+          )
+        } else {
+          seq_parser(derive(p1, token), p2)
+        }
+      
+      -- Star derivatives handle repetition
+      | star_parser(inner) -> seq_parser(derive(inner, token), star_parser(inner))
+      
+      -- Default case for other parser types
+      | _ -> make_derivative_parser(p, token)
+    }
+  ]
+
+  --[[
+    nullable checks if a parser matches the empty string
+  ]]--
+  nullable: (!Parser -> Bool) [p ->
+    match p {
+      | epsilon_parser() -> true
+      | empty_parser() -> false
+      | char_parser(_) -> false
+      | alt_parser(p1, p2) -> nullable(p1) or nullable(p2)
+      | seq_parser(p1, p2) -> nullable(p1) and nullable(p2)
+      | star_parser(_) -> true
+      | _ -> p.nullable()
+    }
+  ]
+
+  --[[
+    compact simplifies a parser after derivation
+  ]]--
+  compact: (!Parser -> !Parser) [p ->
+    -- Perform algebraic simplifications
+    match p {
+      | alt_parser(empty_parser(), q) -> compact(q)
+      | alt_parser(q, empty_parser()) -> compact(q)
+      | seq_parser(empty_parser(), _) -> empty_parser()
+      | seq_parser(_, empty_parser()) -> empty_parser()
+      | seq_parser(epsilon_parser(), q) -> compact(q)
+      | seq_parser(q, epsilon_parser()) -> compact(q)
+      | _ -> p
+    }
+  ]
+
+  --[[
+    make_derivative_parser creates a derivative parser for custom types
+  ]]--
+  make_derivative_parser: (!Parser * S -> !Parser) [p token ->
+    {
+      parse: [state -> 
+        let derived_state = {
+          input: drop(1, state.input),
+          position: advance_position(state.position, 1),
+          memo: state.memo,
+          errors: state.errors,
+          max_position: state.max_position
+        } in
+        if state.input == "" or state.input[0] != token {
+          !Result.Failure { error: error("Expected " + token, state.position, {}) }
+        } else {
+          p.parse(derived_state)
+        }
+      ],
+      _a: p._a,
+      nullable: [-> false]
+    }
+  ]
+
+  --------------------------------------------------
+  -- Prefix Coding Support
+  --------------------------------------------------
+
+  --[[
+    prefix_table creates a prefix code table for efficient parsing
+  ]]--
+  prefix_table: ({S: a} -> {S: a}) [codes ->
+    -- Ensure no code is a prefix of another
+    let verified_codes = {} in
+    for (code, value) in codes {
+      let valid = true in
+      for (other_code, _) in codes {
+        if code != other_code and starts_with(other_code, code) {
+          valid = false
+          break
+        }
+      }
+      if valid {
+        verified_codes[code] = value
+      }
+    }
+    verified_codes
+  ]
+
+  --[[
+    prefix_parser creates a parser that uses a prefix code table
+  ]]--
+  prefix_parser: ({S: a} -> !Parser) [codes ->
+    let table = prefix_table(codes) in
+    {
+      parse: [state -> 
+        for (code, value) in table {
+          if starts_with(state.input, code) {
+            return !Result.Success { 
+              value: value,
+              remaining: drop(length(code), state.input),
+              position: advance_position(state.position, length(code))
+            }
+          }
+        }
+        !Result.Failure { error: error("No matching prefix code", state.position, {}) }
+      ],
+      _a: typeof(a)
+    }
+  ]
+
+  --[[
+    starts_with checks if a string starts with a prefix
+  ]]--
+  starts_with: (S * S -> Bool) [str prefix ->
+    length(str) >= length(prefix) and
+    substring(str, 0, length(prefix)) == prefix
+  ]
+} 

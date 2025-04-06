@@ -14,9 +14,12 @@
     -- Box types
     Identity Composite Sequential Parallel
     Tensor Braiding Trace Cap Cup
+    Applicative FreeObject FreeMorphism Comonoid
+    TwoCellBox Operad Terminal Exponential
 
     -- Wire types
     ObjectWire LinearWire Labeled
+    MultiwayWire TwoCellWire
 
     -- Style and layout types
     Style Layout Color Position
@@ -91,7 +94,8 @@
   --[[
     Box: A node in a wire diagram representing a morphism
   ]]--
-  Box: Identity | Composite | Sequential | Parallel | Tensor | Braiding | Trace | Cap | Cup
+  Box: Identity | Composite | Sequential | Parallel | Tensor | Braiding | Trace | Cap | Cup |
+       Applicative | FreeObject | FreeMorphism | Comonoid | TwoCellBox | Operad | Terminal | Exponential
 
   --[[
     Identity: An identity morphism
@@ -286,6 +290,116 @@
     iterations: Z
   }
 
+  --[[
+    Applicative: Box representing applicative functor operations
+  ]]--
+  Applicative: {
+    op_type: S,  -- "pure", "ap", or "liftA2"
+    inputs: [Wire],
+    outputs: [Wire],
+    position: ?Position,
+    style: ?Style
+  }
+
+  --[[
+    FreeObject: Object in a free category (derived from a graph)
+  ]]--
+  FreeObject: {
+    name: S,
+    position: ?Position,
+    style: ?Style
+  }
+
+  --[[
+    FreeMorphism: Morphism in a free category (path in a graph)
+  ]]--
+  FreeMorphism: {
+    name: S,
+    source: S,
+    target: S,
+    path: [S],
+    position: ?Position,
+    style: ?Style
+  }
+
+  --[[
+    Comonoid: Box representing CAVic operations (extract or duplicate)
+  ]]--
+  Comonoid: {
+    op_type: S,  -- "extract" or "duplicate"
+    object: T.T,
+    inputs: [Wire],
+    outputs: [Wire],
+    position: ?Position,
+    style: ?Style
+  }
+
+  --[[
+    TwoCellBox: Box representing a 2-cell in a bicategory
+  ]]--
+  TwoCellBox: {
+    name: S,
+    source_1cell: Box,
+    target_1cell: Box,
+    position: ?Position,
+    style: ?Style
+  }
+
+  --[[
+    Operad: Box representing multi-input operations in an operad
+  ]]--
+  Operad: {
+    name: S,
+    arity: Z,
+    inputs: [Wire],
+    output: Wire,
+    colors: ?[S],
+    position: ?Position,
+    style: ?Style
+  }
+
+  --[[
+    Terminal: Box representing the terminal object in a cartesian category
+  ]]--
+  Terminal: {
+    position: ?Position,
+    style: ?Style
+  }
+
+  --[[
+    Exponential: Box representing function object (exponential) in a CCC
+  ]]--
+  Exponential: {
+    domain: T.T,
+    codomain: T.T,
+    inputs: [Wire],
+    outputs: [Wire],
+    position: ?Position,
+    style: ?Style
+  }
+
+  --[[
+    MultiwayWire: A wire connecting multiple inputs to one output (for operads)
+  ]]--
+  MultiwayWire: {
+    sources: [Box],
+    target: Box,
+    source_ports: [Z],
+    target_port: Z,
+    objects: [T.T],
+    style: ?Style
+  }
+
+  --[[
+    TwoCellWire: A wire connecting morphisms (for bicategories)
+  ]]--
+  TwoCellWire: {
+    source_morphism: Box,
+    target_morphism: Box,
+    object: T.T,
+    style: ?Style
+  }
+
   --------------------------------------------------
   -- Constructor Functions
   --------------------------------------------------
@@ -459,6 +573,146 @@
       wire: wire,
       label: label,
       position: position,
+      style: style
+    }
+  ]
+
+  --[[
+    applicative: Creates an applicative box
+  ]]--
+  applicative: S * [Wire] * [Wire] * ?Position * ?Style -> Box [op_type inputs outputs position style ->
+    {
+      _type: "Applicative",
+      op_type: op_type,
+      inputs: inputs,
+      outputs: outputs,
+      position: position,
+      style: style
+    }
+  ]
+
+  --[[
+    free_object: Creates an object in a free category
+  ]]--
+  free_object: S * ?Position * ?Style -> Box [name position style ->
+    {
+      _type: "FreeObject",
+      name: name,
+      position: position,
+      style: style
+    }
+  ]
+
+  --[[
+    free_morphism: Creates a morphism in a free category
+  ]]--
+  free_morphism: S * S * S * [S] * ?Position * ?Style -> Box [name source target path position style ->
+    {
+      _type: "FreeMorphism",
+      name: name,
+      source: source,
+      target: target,
+      path: path,
+      position: position,
+      style: style
+    }
+  ]
+
+  --[[
+    comonoid: Creates a CAVic operation box
+  ]]--
+  comonoid: S * T.T * [Wire] * [Wire] * ?Position * ?Style -> Box [op_type object inputs outputs position style ->
+    {
+      _type: "Comonoid",
+      op_type: op_type,
+      object: object,
+      inputs: inputs,
+      outputs: outputs,
+      position: position,
+      style: style
+    }
+  ]
+
+  --[[
+    two_cell_box: Creates a 2-cell box in a bicategory
+  ]]--
+  two_cell_box: S * Box * Box * ?Position * ?Style -> Box [name source_1cell target_1cell position style ->
+    {
+      _type: "TwoCellBox",
+      name: name,
+      source_1cell: source_1cell,
+      target_1cell: target_1cell,
+      position: position,
+      style: style
+    }
+  ]
+
+  --[[
+    operad: Creates an operad box for multi-input operations
+  ]]--
+  operad: S * Z * [Wire] * Wire * ?[S] * ?Position * ?Style -> Box [name arity inputs output colors position style ->
+    {
+      _type: "Operad",
+      name: name,
+      arity: arity,
+      inputs: inputs,
+      output: output,
+      colors: colors,
+      position: position,
+      style: style
+    }
+  ]
+
+  --[[
+    terminal: Creates a terminal object box
+  ]]--
+  terminal: ?Position * ?Style -> Box [position style ->
+    {
+      _type: "Terminal",
+      position: position,
+      style: style
+    }
+  ]
+
+  --[[
+    exponential: Creates an exponential (function) object box
+  ]]--
+  exponential: T.T * T.T * [Wire] * [Wire] * ?Position * ?Style -> Box [domain codomain inputs outputs position style ->
+    {
+      _type: "Exponential",
+      domain: domain,
+      codomain: codomain,
+      inputs: inputs,
+      outputs: outputs,
+      position: position,
+      style: style
+    }
+  ]
+
+  --[[
+    multiway_wire: Creates a wire connecting multiple inputs to one output
+  ]]--
+  multiway_wire: [Box] * Box * [Z] * Z * [T.T] * ?Style -> Wire [sources target source_ports target_port objects style ->
+    {
+      _type: "MultiwayWire",
+      sources: sources,
+      target: target,
+      source_ports: source_ports,
+      target_port: target_port,
+      objects: objects,
+      style: style
+    }
+  ]
+
+  --[[
+    two_cell_wire: Creates a wire between morphisms in a bicategory
+  ]]--
+  two_cell_wire: Box * Box * T.T * ?Style -> Wire [source_morphism target_morphism object style ->
+    {
+      _type: "TwoCellWire",
+      source_morphism: source_morphism,
+      target_morphism: target_morphism,
+      object: object,
       style: style
     }
   ]
@@ -735,6 +989,22 @@
           { _type: "Cap", object: o, position: ?Some({ x: x, y: y }), style: s }
       | { _type: "Cup", object: o, style: s } ->
           { _type: "Cup", object: o, position: ?Some({ x: x, y: y }), style: s }
+      | { _type: "Applicative", op_type: ot, inputs: i, outputs: o, style: s } ->
+          { _type: "Applicative", op_type: ot, inputs: i, outputs: o, position: ?Some({ x: x, y: y }), style: s }
+      | { _type: "FreeObject", name: n, style: s } ->
+          { _type: "FreeObject", name: n, position: ?Some({ x: x, y: y }), style: s }
+      | { _type: "FreeMorphism", name: n, source: src, target: tgt, path: p, style: s } ->
+          { _type: "FreeMorphism", name: n, source: src, target: tgt, path: p, position: ?Some({ x: x, y: y }), style: s }
+      | { _type: "Comonoid", op_type: ot, object: o, inputs: i, outputs: out, style: s } ->
+          { _type: "Comonoid", op_type: ot, object: o, inputs: i, outputs: out, position: ?Some({ x: x, y: y }), style: s }
+      | { _type: "TwoCellBox", name: n, source_1cell: s1, target_1cell: t1, style: s } ->
+          { _type: "TwoCellBox", name: n, source_1cell: s1, target_1cell: t1, position: ?Some({ x: x, y: y }), style: s }
+      | { _type: "Operad", name: n, arity: a, inputs: i, output: o, colors: c, style: s } ->
+          { _type: "Operad", name: n, arity: a, inputs: i, output: o, colors: c, position: ?Some({ x: x, y: y }), style: s }
+      | { _type: "Terminal", style: s } ->
+          { _type: "Terminal", position: ?Some({ x: x, y: y }), style: s }
+      | { _type: "Exponential", domain: d, codomain: c, inputs: i, outputs: o, style: s } ->
+          { _type: "Exponential", domain: d, codomain: c, inputs: i, outputs: o, position: ?Some({ x: x, y: y }), style: s }
       | _ -> box  -- Return unchanged if type not recognized
   ]
 

@@ -1,6 +1,6 @@
 --[[
   Streams
-  
+
   A friendly, fluent interface for working with generators.
   This module provides a simpler way to create and manipulate data streams
   without having to understand the underlying implementation details.
@@ -22,7 +22,7 @@
     from_function
     repeat
     cycle
-    
+
     -- Instance methods for Stream
     map
     filter
@@ -33,7 +33,7 @@
     zip
     concat
     flatten
-    
+
     -- Terminal operations
     collect
     to_array
@@ -267,32 +267,32 @@
         |> [s -> filter(s, [x -> x > 5])]
         |> collect
     ],
-    
+
     --[[
       Example 2: Combining Streams
     ]]--
     combining_streams: () -> [(S * Z)] [->
       let letters = from_array(["a", "b", "c"]) in
       let numbers = from_range(1, 4, 1) in
-      
+
       zip(letters, numbers)
         |> collect
     ],
-    
+
     --[[
       Example 3: Processing a large dataset
     ]]--
     process_dataset: () -> Z [->
       -- Simulate a large dataset
       let data = from_range(1, 1000000, 1) in
-      
+
       -- Process it efficiently
       data
         |> [s -> filter(s, [x -> x % 2 == 0])]
         |> [s -> map(s, [x -> x * x])]
         |> [s -> reduce(s, [acc x -> acc + x], 0)]
     ],
-    
+
     --[[
       Example 4: Infinite stream with termination
     ]]--
@@ -301,4 +301,4 @@
         |> [s -> find(s, [x -> x > 1000])]
     ]
   }
-} 
+}

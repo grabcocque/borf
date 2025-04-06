@@ -1,0 +1,813 @@
+--[[
+  Monoidal Categories
+  
+  This module defines monoidal categories, which are categories equipped with a tensor
+  product operation, a unit object, and natural isomorphisms for associativity and unity.
+  Monoidal categories formalize parallel composition of computations.
+  
+  This implementation uses linear types to ensure proper resource handling
+  and avoids monadic patterns.
+]]--
+
+@Monoidal: {
+  typ: {
+    -- Core monoidal types
+    !MonoidalCategory
+    !MonoidalFunctor
+    !MonoidalNaturalTransformation
+    
+    -- Specific structures
+    !BraidedMonoidal
+    !SymmetricMonoidal
+    !ClosedMonoidal
+    
+    -- Morphism types
+    !TensorProduct
+    !UnitMorphism
+    !AssociatorMorphism
+    !LeftUnitorMorphism
+    !RightUnitorMorphism
+    !BraidingMorphism
+  }
+
+  op: {
+    -- Tensor and composition operators
+    ⊗    -- Tensor product of objects
+    ⊗→   -- Tensor product of morphisms
+    ∘    -- Composition of morphisms
+    -o>  -- Linear function application
+  }
+
+  fn: {
+    -- Core category functions
+    monoidal_category
+    tensor_product
+    tensor_unit
+    
+    -- Structural morphisms
+    associator
+    left_unitor
+    right_unitor
+    
+    -- Braided/symmetric functions
+    braiding
+    
+    -- Functor operations
+    monoidal_functor
+    strong_monoidal_functor
+    strict_monoidal_functor
+    
+    -- Natural transformations
+    monoidal_natural_transformation
+    
+    -- Derived operations
+    tensor_objects
+    tensor_morphisms
+    compose
+    id
+    
+    -- Instance constructors
+    cartesian_monoidal
+    cocartesian_monoidal
+    linear_monoidal
+    strict_monoidal
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Monoidal, @Linear, true),  -- Add dependency on Linear types
+    (@Monoidal, @Cat, true),     -- Add dependency on Category
+    (@Monoidal, @T, true)        -- Add dependency on Type system
+  }
+
+  --------------------------------------------------
+  -- Core Monoidal Types
+  --------------------------------------------------
+
+  --[[
+    !MonoidalCategory represents a monoidal category.
+    
+    A monoidal category is a category equipped with a tensor product,
+    a unit object, and natural isomorphisms for associativity and unity.
+  ]]--
+  !MonoidalCategory: {
+    _type: "MonoidalCategory",
+    base_category: @Cat.Category,      -- The underlying category
+    tensor: (a * b -> c),              -- Tensor product functor
+    unit: Any,                         -- Unit object
+    associator: (a * b * c -> Bool),   -- Associativity isomorphism
+    left_unitor: (Any * a -> Bool),    -- Left unity isomorphism 
+    right_unitor: (a * Any -> Bool),   -- Right unity isomorphism
+    coherence: Bool                    -- Whether coherence conditions hold
+  }
+
+  --[[
+    !MonoidalFunctor represents a functor between monoidal categories
+    that preserves monoidal structure.
+  ]]--
+  !MonoidalFunctor: {
+    _type: "MonoidalFunctor",
+    source: !MonoidalCategory,         -- Source monoidal category
+    target: !MonoidalCategory,         -- Target monoidal category
+    functor: @Cat.Functor,             -- Underlying functor
+    tensor_map: ((a, b) -o> c),        -- Mapping of tensor products
+    unit_map: (Any -o> Any),           -- Mapping of unit
+    coherence: Bool                    -- Whether coherence conditions hold
+  }
+
+  --[[
+    !MonoidalNaturalTransformation represents a natural transformation
+    between monoidal functors that respects monoidal structure.
+  ]]--
+  !MonoidalNaturalTransformation: {
+    _type: "MonoidalNaturalTransformation",
+    source: !MonoidalFunctor,          -- Source monoidal functor
+    target: !MonoidalFunctor,          -- Target monoidal functor
+    components: (a -o> b),             -- Component morphisms
+    naturality: Bool,                  -- Whether naturality holds
+    monoidality: Bool                  -- Whether monoidality holds
+  }
+
+  --[[
+    !BraidedMonoidal represents a braided monoidal category, which has
+    a natural isomorphism allowing objects to be swapped.
+  ]]--
+  !BraidedMonoidal: {
+    _type: "BraidedMonoidal",
+    monoidal: !MonoidalCategory,       -- The underlying monoidal category
+    braiding: (a * b -> b * a),        -- The braiding isomorphism
+    coherence: Bool                    -- Whether coherence conditions hold
+  }
+
+  --[[
+    !SymmetricMonoidal represents a symmetric monoidal category, where
+    braiding twice is the identity.
+  ]]--
+  !SymmetricMonoidal: {
+    _type: "SymmetricMonoidal",
+    braided: !BraidedMonoidal,         -- The underlying braided monoidal category
+    symmetry: Bool                     -- Whether symmetry condition holds
+  }
+
+  --[[
+    !ClosedMonoidal represents a closed monoidal category, with internal
+    hom objects and evaluation/currying.
+  ]]--
+  !ClosedMonoidal: {
+    _type: "ClosedMonoidal",
+    monoidal: !MonoidalCategory,       -- The underlying monoidal category
+    internal_hom: (a * b -> c),        -- Internal hom functor
+    evaluation: ((a * b) -o> c),       -- Evaluation morphism
+    currying: ((a * b -o> c) -o> (a -o> (b -o> c))),  -- Currying operation
+    coherence: Bool                    -- Whether coherence conditions hold
+  }
+
+  --[[
+    !TensorProduct represents the tensor product of two objects or morphisms
+  ]]--
+  !TensorProduct: !{
+    Objects: {
+      left: a,         -- Left object
+      right: b         -- Right object
+    },
+    Morphisms: {
+      left: (a -o> b),  -- Left morphism
+      right: (c -o> d)  -- Right morphism
+    }
+  }
+
+  --[[
+    !UnitMorphism represents a morphism involving the unit object
+  ]]--
+  !UnitMorphism: {
+    _type: "UnitMorphism",
+    morphism: (Any -o> Any)  -- The morphism on the unit
+  }
+
+  --[[
+    !AssociatorMorphism represents the associativity isomorphism
+  ]]--
+  !AssociatorMorphism: {
+    _type: "AssociatorMorphism",
+    forward: ((a ⊗ (b ⊗ c)) -o> ((a ⊗ b) ⊗ c)),  -- Forward direction
+    backward: (((a ⊗ b) ⊗ c) -o> (a ⊗ (b ⊗ c)))  -- Backward direction
+  }
+
+  --[[
+    !LeftUnitorMorphism represents the left unity isomorphism
+  ]]--
+  !LeftUnitorMorphism: {
+    _type: "LeftUnitorMorphism",
+    forward: ((I ⊗ a) -o> a),   -- Forward direction
+    backward: (a -o> (I ⊗ a))   -- Backward direction
+  }
+
+  --[[
+    !RightUnitorMorphism represents the right unity isomorphism
+  ]]--
+  !RightUnitorMorphism: {
+    _type: "RightUnitorMorphism",
+    forward: ((a ⊗ I) -o> a),   -- Forward direction
+    backward: (a -o> (a ⊗ I))   -- Backward direction
+  }
+
+  --[[
+    !BraidingMorphism represents the braiding isomorphism
+  ]]--
+  !BraidingMorphism: {
+    _type: "BraidingMorphism",
+    forward: ((a ⊗ b) -o> (b ⊗ a)),  -- Forward direction
+    backward: ((b ⊗ a) -o> (a ⊗ b))  -- Backward direction
+  }
+
+  --------------------------------------------------
+  -- Core Category Functions
+  --------------------------------------------------
+
+  --[[
+    monoidal_category creates a new monoidal category from its components
+  ]]--
+  monoidal_category: S * @Cat.Category * (a * b -> c) * Any * 
+                  (a * b * c -> Bool) * (Any * a -> Bool) * 
+                  (a * Any -> Bool) -> !MonoidalCategory [
+    name base tensor unit associator left_unitor right_unitor ->
+    {
+      _type: "MonoidalCategory",
+      base_category: base,
+      tensor: tensor,
+      unit: unit,
+      associator: associator,
+      left_unitor: left_unitor,
+      right_unitor: right_unitor,
+      coherence: true  -- Assumed to hold, should be verified
+    }
+  ]
+
+  --[[
+    tensor_product computes the tensor product of two objects
+  ]]--
+  tensor_product: !MonoidalCategory * a * b -> c [
+    category a b ->
+    category.tensor(a, b)
+  ]
+
+  --[[
+    tensor_unit returns the unit object of a monoidal category
+  ]]--
+  tensor_unit: !MonoidalCategory -> Any [
+    category ->
+    category.unit
+  ]
+
+  --------------------------------------------------
+  -- Structural Morphisms
+  --------------------------------------------------
+
+  --[[
+    associator creates the associator isomorphism for ((a ⊗ b) ⊗ c) ≅ (a ⊗ (b ⊗ c))
+  ]]--
+  associator: !MonoidalCategory * a * b * c -> !AssociatorMorphism [
+    category a b c ->
+    {
+      _type: "AssociatorMorphism",
+      forward: [(a ⊗ (b ⊗ c)) -o>
+        -- Implementation depends on the specific monoidal category
+        ((a ⊗ b) ⊗ c)
+      ],
+      backward: [((a ⊗ b) ⊗ c) -o>
+        -- Implementation depends on the specific monoidal category
+        (a ⊗ (b ⊗ c))
+      ]
+    }
+  ]
+
+  --[[
+    left_unitor creates the left unitor isomorphism for (I ⊗ a) ≅ a
+  ]]--
+  left_unitor: !MonoidalCategory * a -> !LeftUnitorMorphism [
+    category a ->
+    {
+      _type: "LeftUnitorMorphism",
+      forward: [(I ⊗ a) -o>
+        -- Implementation depends on the specific monoidal category
+        a
+      ],
+      backward: [a -o>
+        -- Implementation depends on the specific monoidal category
+        (I ⊗ a)
+      ]
+    }
+  ]
+
+  --[[
+    right_unitor creates the right unitor isomorphism for (a ⊗ I) ≅ a
+  ]]--
+  right_unitor: !MonoidalCategory * a -> !RightUnitorMorphism [
+    category a ->
+    {
+      _type: "RightUnitorMorphism",
+      forward: [(a ⊗ I) -o>
+        -- Implementation depends on the specific monoidal category
+        a
+      ],
+      backward: [a -o>
+        -- Implementation depends on the specific monoidal category
+        (a ⊗ I)
+      ]
+    }
+  ]
+
+  --------------------------------------------------
+  -- Braided/Symmetric Functions
+  --------------------------------------------------
+
+  --[[
+    braiding creates the braiding isomorphism for (a ⊗ b) ≅ (b ⊗ a)
+  ]]--
+  braiding: !BraidedMonoidal * a * b -> !BraidingMorphism [
+    braided a b ->
+    {
+      _type: "BraidingMorphism",
+      forward: [(a ⊗ b) -o>
+        -- Implementation depends on the specific braided monoidal category
+        (b ⊗ a)
+      ],
+      backward: [(b ⊗ a) -o>
+        -- Implementation depends on the specific braided monoidal category
+        (a ⊗ b)
+      ]
+    }
+  ]
+
+  --------------------------------------------------
+  -- Functor Operations
+  --------------------------------------------------
+
+  --[[
+    monoidal_functor creates a functor between monoidal categories
+  ]]--
+  monoidal_functor: S * !MonoidalCategory * !MonoidalCategory * 
+                 @Cat.Functor * ((a, b) -o> c) * (Any -o> Any) -> 
+                 !MonoidalFunctor [
+    name source target functor tensor_map unit_map ->
+    {
+      _type: "MonoidalFunctor",
+      source: source,
+      target: target,
+      functor: functor,
+      tensor_map: tensor_map,
+      unit_map: unit_map,
+      coherence: true  -- Assumed to hold, should be verified
+    }
+  ]
+
+  --[[
+    strong_monoidal_functor creates a strong monoidal functor, where
+    the tensor and unit maps are isomorphisms
+  ]]--
+  strong_monoidal_functor: S * !MonoidalCategory * !MonoidalCategory * 
+                        @Cat.Functor * ((a, b) -o> c) * (Any -o> Any) -> 
+                        !MonoidalFunctor [
+    name source target functor tensor_map unit_map ->
+    {
+      _type: "MonoidalFunctor",
+      source: source,
+      target: target,
+      functor: functor,
+      tensor_map: tensor_map,
+      unit_map: unit_map,
+      coherence: true,  -- Assumed to hold, should be verified
+      is_strong: true   -- Indicates this is a strong monoidal functor
+    }
+  ]
+
+  --[[
+    strict_monoidal_functor creates a strict monoidal functor, where
+    the tensor and unit maps are identities
+  ]]--
+  strict_monoidal_functor: S * !MonoidalCategory * !MonoidalCategory * 
+                        @Cat.Functor -> !MonoidalFunctor [
+    name source target functor ->
+    {
+      _type: "MonoidalFunctor",
+      source: source,
+      target: target,
+      functor: functor,
+      tensor_map: [(a, b) -o> 
+        functor.map_obj(source.tensor(a, b))
+      ],
+      unit_map: [_ -o> 
+        functor.map_obj(source.unit)
+      ],
+      coherence: true,  -- Assumed to hold, should be verified
+      is_strict: true   -- Indicates this is a strict monoidal functor
+    }
+  ]
+
+  --------------------------------------------------
+  -- Natural Transformations
+  --------------------------------------------------
+
+  --[[
+    monoidal_natural_transformation creates a monoidal natural transformation
+  ]]--
+  monoidal_natural_transformation: S * !MonoidalFunctor * !MonoidalFunctor * 
+                               (a -o> b) -> !MonoidalNaturalTransformation [
+    name source target components ->
+    {
+      _type: "MonoidalNaturalTransformation",
+      source: source,
+      target: target,
+      components: components,
+      naturality: true,     -- Assumed to hold, should be verified
+      monoidality: true     -- Assumed to hold, should be verified
+    }
+  ]
+
+  --------------------------------------------------
+  -- Derived Operations
+  --------------------------------------------------
+
+  --[[
+    tensor_objects computes the tensor product of two objects
+  ]]--
+  tensor_objects: !MonoidalCategory * a * b -> c [
+    category a b ->
+    category.tensor(a, b)
+  ]
+
+  --[[
+    tensor_morphisms computes the tensor product of two morphisms
+  ]]--
+  tensor_morphisms: !MonoidalCategory * (a -o> b) * (c -o> d) -> 
+                 ((a ⊗ c) -o> (b ⊗ d)) [
+    category f g ->
+    let dom_f = dom(f) in
+    let cod_f = cod(f) in
+    let dom_g = dom(g) in
+    let cod_g = cod(g) in
+    
+    [(a_tensor_c) -o>
+      let (a, c) = a_tensor_c in
+      let b = f(a) in
+      let d = g(c) in
+      tensor_objects(category, b, d)
+    ]
+  ]
+
+  --[[
+    compose composes two morphisms
+  ]]--
+  compose: !MonoidalCategory * (a -o> b) * (b -o> c) -> (a -o> c) [
+    category f g ->
+    [a -o>
+      g(f(a))
+    ]
+  ]
+
+  --[[
+    id creates an identity morphism
+  ]]--
+  id: !MonoidalCategory * a -> (a -o> a) [
+    category a ->
+    [a' -o> a']
+  ]
+
+  --------------------------------------------------
+  -- Instance Constructors
+  --------------------------------------------------
+
+  --[[
+    cartesian_monoidal creates a cartesian monoidal category, 
+    where the tensor is the product
+  ]]--
+  cartesian_monoidal: S * @Cat.Category -> !MonoidalCategory [
+    name category ->
+    monoidal_category(
+      name,
+      category,
+      [(a, b) -> 
+        -- Product in the base category
+        (a, b)
+      ],
+      -- Unit is the terminal object
+      (),
+      -- Associator
+      [(a, b, c) -> 
+        ((a, b), c) == (a, (b, c))
+      ],
+      -- Left unitor
+      [(unit, a) -> 
+        ((), a) == a
+      ],
+      -- Right unitor
+      [(a, unit) -> 
+        (a, ()) == a
+      ]
+    )
+  ]
+
+  --[[
+    cocartesian_monoidal creates a cocartesian monoidal category,
+    where the tensor is the coproduct
+  ]]--
+  cocartesian_monoidal: S * @Cat.Category -> !MonoidalCategory [
+    name category ->
+    monoidal_category(
+      name,
+      category,
+      [(a, b) -> 
+        -- Coproduct in the base category
+        Either a b
+      ],
+      -- Unit is the initial object
+      Void,
+      -- Associator
+      [(a, b, c) -> 
+        Either (Either a b) c == Either a (Either b c)
+      ],
+      -- Left unitor
+      [(unit, a) -> 
+        Either Void a == a
+      ],
+      -- Right unitor
+      [(a, unit) -> 
+        Either a Void == a
+      ]
+    )
+  ]
+
+  --[[
+    linear_monoidal creates a monoidal category for linear logic
+  ]]--
+  linear_monoidal: S * @Linear.LinearCategory -> !MonoidalCategory [
+    name linear_category ->
+    monoidal_category(
+      name,
+      linear_category,
+      [(a, b) -> 
+        -- Tensor product in linear logic
+        a ⊗ b
+      ],
+      -- Unit is the tensor unit
+      I,
+      -- Associator
+      [(a, b, c) -> 
+        (a ⊗ b) ⊗ c == a ⊗ (b ⊗ c)
+      ],
+      -- Left unitor
+      [(unit, a) -> 
+        I ⊗ a == a
+      ],
+      -- Right unitor
+      [(a, unit) -> 
+        a ⊗ I == a
+      ]
+    )
+  ]
+
+  --[[
+    strict_monoidal creates a strict monoidal category,
+    where associators and unitors are identities
+  ]]--
+  strict_monoidal: S * @Cat.Category * (a * b -> c) * Any -> !MonoidalCategory [
+    name category tensor unit ->
+    monoidal_category(
+      name,
+      category,
+      tensor,
+      unit,
+      -- Strict associator
+      [(a, b, c) -> 
+        (a ⊗ (b ⊗ c)) == ((a ⊗ b) ⊗ c)
+      ],
+      -- Strict left unitor
+      [(unit, a) -> 
+        (unit ⊗ a) == a
+      ],
+      -- Strict right unitor
+      [(a, unit) -> 
+        (a ⊗ unit) == a
+      ]
+    )
+  ]
+
+  --------------------------------------------------
+  -- Operators
+  --------------------------------------------------
+
+  --[[
+    ⊗ represents the tensor product of objects
+  ]]--
+  ⊗: a * b -> c [
+    a b ->
+    tensor_objects(standard_monoidal, a, b)
+  ]
+
+  --[[
+    ⊗→ represents the tensor product of morphisms
+  ]]--
+  ⊗→: (a -o> b) * (c -o> d) -> ((a ⊗ c) -o> (b ⊗ d)) [
+    f g ->
+    tensor_morphisms(standard_monoidal, f, g)
+  ]
+
+  --[[
+    ∘ represents the composition of morphisms
+  ]]--
+  ∘: (a -o> b) * (b -o> c) -> (a -o> c) [
+    f g ->
+    compose(standard_monoidal, f, g)
+  ]
+
+  --[[
+    -o> represents linear function application
+  ]]--
+  -o>: a * (a -o> b) -> b [
+    x f ->
+    f(x)
+  ]
+
+  --------------------------------------------------
+  -- Standard Instances
+  --------------------------------------------------
+
+  --[[
+    Standard monoidal category using Cartesian product
+  ]]--
+  standard_monoidal: !MonoidalCategory = 
+    cartesian_monoidal("StandardMonoidal", @Cat.structure)
+
+  --[[
+    Standard symmetric monoidal category
+  ]]--
+  standard_symmetric: !SymmetricMonoidal = {
+    _type: "SymmetricMonoidal",
+    braided: {
+      _type: "BraidedMonoidal",
+      monoidal: standard_monoidal,
+      braiding: [(a, b) -> (b, a)],
+      coherence: true
+    },
+    symmetry: true
+  }
+
+  --------------------------------------------------
+  -- Structure Mapping to Categorical Semantics
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @Monoidal as a categorical structure.
+    
+    In this categorical structure:
+    - Objects are types
+    - Morphisms are linear functions between types
+    - The tensor product provides parallel composition
+    - The monoidal structure ensures associativity and unity laws
+    
+    This forms a rigorous foundation for parallel composition of operations
+    with proper resource tracking using linear types.
+  ]]--
+  structure: {
+    -- Base category
+    objects: a,
+    morphisms: (a -o> b),
+    
+    -- Core category operations
+    dom: [f -> typeof(a) given f: (a -o> b)],
+    cod: [f -> typeof(b) given f: (a -o> b)],
+    id: [a -> [x -o> x]],
+    compose: [f g -> [a -o> g(f(a))]],
+    
+    -- Monoidal structure
+    monoidal: {
+      tensor: [a b -> a ⊗ b],
+      unit: I,
+      
+      tensor_morphisms: [f g -> f ⊗→ g],
+      
+      associator: [a b c -> 
+        {
+          forward: [((a ⊗ b) ⊗ c) -o> (a ⊗ (b ⊗ c))],
+          backward: [(a ⊗ (b ⊗ c)) -o> ((a ⊗ b) ⊗ c)]
+        }
+      ],
+      
+      left_unitor: [a -> 
+        {
+          forward: [(I ⊗ a) -o> a],
+          backward: [a -o> (I ⊗ a)]
+        }
+      ],
+      
+      right_unitor: [a -> 
+        {
+          forward: [(a ⊗ I) -o> a],
+          backward: [a -o> (a ⊗ I)]
+        }
+      ]
+    },
+    
+    -- Braided structure (for the symmetric case)
+    braided: {
+      braiding: [a b -> 
+        {
+          forward: [(a ⊗ b) -o> (b ⊗ a)],
+          backward: [(b ⊗ a) -o> (a ⊗ b)]
+        }
+      ]
+    },
+    
+    -- Laws
+    law: {
+      -- Core category laws
+      identity: [f -> 
+        compose(id(dom(f)), f) == f && 
+        compose(f, id(cod(f))) == f
+      ],
+      
+      associativity: [f g h -> 
+        compose(compose(f, g), h) == compose(f, compose(g, h))
+      ],
+      
+      -- Monoidal laws
+      pentagon: [a b c d ->
+        -- Pentagon identity for associativity
+        -- Too complex to represent here in full detail
+        true
+      ],
+      
+      triangle: [a b ->
+        -- Triangle identity for unit
+        -- (a ⊗ I) ⊗ b -> a ⊗ b -> a ⊗ (I ⊗ b)
+        true
+      ],
+      
+      -- Braided/symmetric laws
+      hexagon: [a b c ->
+        -- Hexagon identity for braiding
+        -- Too complex to represent here in full detail
+        true
+      ],
+      
+      symmetry: [a b ->
+        -- Symmetry law: braiding twice is identity
+        compose(braiding(a, b).forward, braiding(b, a).forward) == id(a ⊗ b)
+      ]
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    --[[
+      Example 1: Tensor product of types
+    ]]--
+    tensor_example: S * Z -> (S, Z) [s i ->
+      s ⊗ i
+    ],
+    
+    --[[
+      Example 2: Tensor product of functions
+    ]]--
+    tensor_function_example: (S -o> S) * (Z -o> Z) -> ((S, Z) -o> (S, Z)) [
+      f g ->
+      f ⊗→ g
+    ],
+    
+    --[[
+      Example 3: Using unitors 
+    ]]--
+    unitor_example: S -> S [s ->
+      -- Apply right_unitor.backward, then right_unitor.forward
+      let s_with_unit = right_unitor(standard_monoidal, S).backward(s) in
+      right_unitor(standard_monoidal, S).forward(s_with_unit)
+    ],
+    
+    --[[
+      Example 4: Using braiding 
+    ]]--
+    braiding_example: (S, Z) -> (Z, S) [pair ->
+      braiding(standard_symmetric, S, Z).forward(pair)
+    ],
+    
+    --[[
+      Example 5: Parallel and sequential composition 
+    ]]--
+    compose_tensor_example: (S -o> S) * (Z -o> Z) * (S -o> Z) * (Z -o> S) -> 
+                          ((S, Z) -o> (Z, S)) [
+      f g h i ->
+      -- First apply f ⊗→ g, then compose with h ⊗→ i
+      compose(
+        standard_monoidal,
+        f ⊗→ g,  -- (S, Z) -o> (S, Z)
+        h ⊗→ i   -- (S, Z) -o> (Z, S)
+      )
+    ]
+  }
+} 

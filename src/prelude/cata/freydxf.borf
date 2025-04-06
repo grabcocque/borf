@@ -1,0 +1,648 @@
+--[[
+  Freyd Category Transformations
+  
+  This module defines transformations between Freyd categories
+  and other categorical structures, enabling the representation of
+  effectful computations in different mathematical frameworks.
+]]--
+
+@FreydXf: {
+  typ: {
+    -- Core transformation types
+    FreydFunctor
+    FreydNatTransformation
+    FreydAdjunction
+    
+    -- Special functors
+    CategoryFreydFunctor
+    ProfunctorFreydFunctor
+    ArrowFreydFunctor
+  }
+
+  op: {
+    -- Functor composition
+    ∘
+    
+    -- Freyd operators
+    >>> ** ++
+  }
+
+  fn: {
+    -- Core transformation functions
+    freyd_functor
+    freyd_nat_transformation
+    freyd_adjunction
+    
+    -- Functor constructors
+    category_freyd_functor
+    profunctor_freyd_functor
+    arrow_freyd_functor
+    
+    -- Natural transformation constructors
+    freyd_to_category_nt
+    category_to_freyd_nt
+    freyd_to_profunctor_nt
+    profunctor_to_freyd_nt
+    
+    -- Adjunction constructors
+    freyd_category_adjunction
+    
+    -- Functor operations
+    apply_functor
+    compose_functors
+    
+    -- Natural transformation operations
+    apply_nat_transformation
+    vertical_composition
+    horizontal_composition
+    
+    -- Freyd/Category transformations
+    freyd_to_category
+    category_to_freyd
+    
+    -- Freyd/Profunctor transformations
+    freyd_to_profunctor
+    profunctor_to_freyd
+    
+    -- Freyd/Arrow transformations
+    freyd_to_arrow
+    arrow_to_freyd
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@FreydXf, @Freyd, true),     -- Add dependency on Freyd module
+    (@FreydXf, @Prof, true),      -- Add dependency on Profunctor module
+    (@FreydXf, @Arrow, true),     -- Add dependency on Arrow module
+    (@FreydXf, @Linear, true),    -- Add dependency on Linear module
+    (@FreydXf, @CatXf, true),     -- Add dependency on Category transformations
+    (@FreydXf, @Cat, true)        -- Add dependency on Category
+  }
+
+  --------------------------------------------------
+  -- Core Transformation Types
+  --------------------------------------------------
+
+  --[[
+    FreydFunctor represents a functor between Freyd categories.
+    
+    This structure captures transformations that preserve the Freyd
+    structure while changing the underlying representation.
+  ]]--
+  FreydFunctor: {
+    source_category: @Cat.Category,      -- Source Freyd category
+    target_category: @Cat.Category,      -- Target Freyd category
+    map_obj: (a -> b),                   -- Object mapping component
+    map_morphism: (@Freyd.!FreydMorphism -> @Freyd.!FreydMorphism),  -- Morphism mapping
+    preserves_id: Bool,                  -- Whether it preserves identity morphisms
+    preserves_composition: Bool,         -- Whether it preserves morphism composition
+    preserves_strength: Bool             -- Whether it preserves strength operations
+  }
+
+  --[[
+    FreydNatTransformation represents a natural transformation
+    between Freyd functors.
+  ]]--
+  FreydNatTransformation: {
+    source_functor: FreydFunctor,        -- Source functor
+    target_functor: FreydFunctor,        -- Target functor
+    components: (a -> @Freyd.!FreydMorphism), -- Components of the natural transformation
+    naturality: Bool                     -- Whether naturality condition holds
+  }
+
+  --[[
+    FreydAdjunction represents an adjunction between Freyd categories.
+  ]]--
+  FreydAdjunction: {
+    left_functor: FreydFunctor,          -- Left functor in the adjunction
+    right_functor: FreydFunctor,         -- Right functor in the adjunction
+    unit: FreydNatTransformation,        -- Unit natural transformation
+    counit: FreydNatTransformation,      -- Counit natural transformation
+    adjoint: Bool                        -- Whether adjunction laws hold
+  }
+
+  --------------------------------------------------
+  -- Core Transformation Functions
+  --------------------------------------------------
+
+  --[[
+    freyd_functor creates a functor between Freyd categories
+  ]]--
+  freyd_functor: S * @Cat.Category * @Cat.Category * (a -> b) * 
+              (@Freyd.!FreydMorphism -> @Freyd.!FreydMorphism) -> 
+              FreydFunctor [
+    name source target obj_map morphism_map ->
+    {
+      source_category: source,
+      target_category: target,
+      map_obj: obj_map,
+      map_morphism: morphism_map,
+      preserves_id: true,         -- Should be verified
+      preserves_composition: true, -- Should be verified
+      preserves_strength: true     -- Should be verified
+    }
+  ]
+
+  --[[
+    freyd_nat_transformation creates a natural transformation between Freyd functors
+  ]]--
+  freyd_nat_transformation: S * FreydFunctor * FreydFunctor * 
+                         (a -> @Freyd.!FreydMorphism) -> 
+                         FreydNatTransformation [
+    name source_functor target_functor components ->
+    {
+      source_functor: source_functor,
+      target_functor: target_functor,
+      components: components,
+      naturality: true  -- Should be verified
+    }
+  ]
+
+  --[[
+    freyd_adjunction creates an adjunction between Freyd categories
+  ]]--
+  freyd_adjunction: S * FreydFunctor * FreydFunctor * 
+                 FreydNatTransformation * FreydNatTransformation -> 
+                 FreydAdjunction [
+    name left right unit counit ->
+    {
+      left_functor: left,
+      right_functor: right,
+      unit: unit,
+      counit: counit,
+      adjoint: true  -- Should be verified
+    }
+  ]
+
+  --------------------------------------------------
+  -- Special Functors
+  --------------------------------------------------
+
+  --[[
+    category_freyd_functor creates a functor that maps between a Freyd category and a regular category
+  ]]--
+  category_freyd_functor: S -> CategoryFreydFunctor [name ->
+    freyd_functor(
+      name,
+      @Freyd.structure,
+      @Cat.structure,
+      [(a, s) -> a],  -- Just extract the value component
+      [freyd_morphism -> 
+        -- Extract just the pure part of the morphism, discarding effects
+        let (a, s1) = freyd_morphism.source in
+        let (b, s2) = freyd_morphism.target in
+        
+        -- Create a pure function from the Freyd morphism
+        [a' -> 
+          let (b', _) = freyd_morphism.morphism((a', s1)) in
+          b'
+        ]
+      ]
+    )
+  ]
+
+  --[[
+    profunctor_freyd_functor creates a functor that maps between a Freyd category and a profunctor category
+  ]]--
+  profunctor_freyd_functor: S -> ProfunctorFreydFunctor [name ->
+    freyd_functor(
+      name,
+      @Freyd.structure,
+      @Prof.structure,
+      [(a, s) -> a],  -- Just extract the value component
+      [freyd_morphism -> 
+        -- Convert the Freyd morphism to a profunctor
+        let (a, s1) = freyd_morphism.source in
+        let (b, s2) = freyd_morphism.target in
+        
+        @Prof.profunctor(
+          "FreydProf",
+          a,
+          b,
+          [a' b' -> 
+            let (result, _) = freyd_morphism.morphism((a', s1)) in
+            result == b'
+          ]
+        )
+      ]
+    )
+  ]
+
+  --[[
+    arrow_freyd_functor creates a functor that maps between a Freyd category and an arrow category
+  ]]--
+  arrow_freyd_functor: S -> ArrowFreydFunctor [name ->
+    freyd_functor(
+      name,
+      @Freyd.structure,
+      @Arrow.structure,
+      [(a, s) -> a],  -- Just extract the value component
+      [freyd_morphism -> 
+        -- Convert the Freyd morphism to an arrow
+        let (a, s1) = freyd_morphism.source in
+        let (b, s2) = freyd_morphism.target in
+        
+        @Arrow.arrow(
+          "FreydArrow",
+          [a' -> 
+            let (b', _) = freyd_morphism.morphism((a', s1)) in
+            b'
+          ]
+        )
+      ]
+    )
+  ]
+
+  --------------------------------------------------
+  -- Natural Transformations
+  --------------------------------------------------
+
+  --[[
+    freyd_to_category_nt creates a natural transformation from Freyd to Category
+  ]]--
+  freyd_to_category_nt: S -> FreydNatTransformation [name ->
+    freyd_nat_transformation(
+      name,
+      identity_functor(@Freyd.structure),
+      category_freyd_functor("FreydToCategory"),
+      [a -> freyd_to_category(a)]
+    )
+  ]
+
+  --[[
+    category_to_freyd_nt creates a natural transformation from Category to Freyd
+  ]]--
+  category_to_freyd_nt: S -> FreydNatTransformation [name ->
+    freyd_nat_transformation(
+      name,
+      category_freyd_functor("CategoryToFreyd"),
+      identity_functor(@Freyd.structure),
+      [a -> category_to_freyd(a)]
+    )
+  ]
+
+  --[[
+    freyd_to_profunctor_nt creates a natural transformation from Freyd to Profunctor
+  ]]--
+  freyd_to_profunctor_nt: S -> FreydNatTransformation [name ->
+    freyd_nat_transformation(
+      name,
+      identity_functor(@Freyd.structure),
+      profunctor_freyd_functor("FreydToProfunctor"),
+      [a -> freyd_to_profunctor(a)]
+    )
+  ]
+
+  --[[
+    profunctor_to_freyd_nt creates a natural transformation from Profunctor to Freyd
+  ]]--
+  profunctor_to_freyd_nt: S -> FreydNatTransformation [name ->
+    freyd_nat_transformation(
+      name,
+      profunctor_freyd_functor("ProfunctorToFreyd"),
+      identity_functor(@Freyd.structure),
+      [a -> profunctor_to_freyd(a)]
+    )
+  ]
+
+  --------------------------------------------------
+  -- Utility Functions
+  --------------------------------------------------
+
+  --[[
+    apply_functor applies a Freyd functor to a Freyd morphism
+  ]]--
+  apply_functor: FreydFunctor * @Freyd.!FreydMorphism -> 
+               @Freyd.!FreydMorphism [
+    functor morphism ->
+    functor.map_morphism(morphism)
+  ]
+
+  --[[
+    compose_functors composes two Freyd functors
+  ]]--
+  compose_functors: FreydFunctor * FreydFunctor -> FreydFunctor [
+    f g ->
+    {
+      source_category: g.source_category,
+      target_category: f.target_category,
+      map_obj: [a -> f.map_obj(g.map_obj(a))],
+      map_morphism: [morphism -> f.map_morphism(g.map_morphism(morphism))],
+      preserves_id: f.preserves_id && g.preserves_id,
+      preserves_composition: f.preserves_composition && g.preserves_composition,
+      preserves_strength: f.preserves_strength && g.preserves_strength
+    }
+  ]
+
+  --[[
+    identity_functor creates an identity functor for a category
+  ]]--
+  identity_functor: @Cat.Category -> FreydFunctor [cat ->
+    {
+      source_category: cat,
+      target_category: cat,
+      map_obj: [a -> a],
+      map_morphism: [morphism -> morphism],
+      preserves_id: true,
+      preserves_composition: true,
+      preserves_strength: true
+    }
+  ]
+
+  --[[
+    vertical_composition composes two natural transformations vertically
+  ]]--
+  vertical_composition: FreydNatTransformation * FreydNatTransformation -> 
+                      FreydNatTransformation [
+    alpha beta ->
+    {
+      source_functor: beta.source_functor,
+      target_functor: alpha.target_functor,
+      components: [a -> 
+        let beta_component = beta.components(a) in
+        let alpha_component = alpha.components(a) in
+        @Freyd.compose(beta_component, alpha_component)
+      ],
+      naturality: alpha.naturality && beta.naturality
+    }
+  ]
+
+  --[[
+    horizontal_composition composes two natural transformations horizontally
+  ]]--
+  horizontal_composition: FreydNatTransformation * FreydNatTransformation -> 
+                        FreydNatTransformation [
+    alpha beta ->
+    {
+      source_functor: compose_functors(alpha.source_functor, beta.source_functor),
+      target_functor: compose_functors(alpha.target_functor, beta.target_functor),
+      components: [a -> 
+        let beta_component = beta.components(a) in
+        let mapped_beta = apply_functor(alpha.target_functor, beta_component) in
+        let alpha_component = alpha.components(beta.source_functor.map_obj(a)) in
+        @Freyd.compose(alpha_component, mapped_beta)
+      ],
+      naturality: alpha.naturality && beta.naturality
+    }
+  ]
+
+  --------------------------------------------------
+  -- Freyd/Category Transformations
+  --------------------------------------------------
+
+  --[[
+    freyd_to_category transforms a Freyd morphism into a pure function in a category
+  ]]--
+  freyd_to_category: @Freyd.!FreydMorphism -> (a -> b) [freyd_morphism ->
+    let (a, s) = freyd_morphism.source in
+    let (b, _) = freyd_morphism.target in
+    
+    -- Extract the pure function part
+    [a' -> 
+      let (b', _) = freyd_morphism.morphism((a', s)) in
+      b'
+    ]
+  ]
+
+  --[[
+    category_to_freyd transforms a pure function into a Freyd morphism
+  ]]--
+  category_to_freyd: (a -> b) -> @Freyd.!FreydMorphism [f ->
+    @Freyd.pure_to_effect(f, @Freyd.standard_freyd)
+  ]
+
+  --------------------------------------------------
+  -- Freyd/Profunctor Transformations
+  --------------------------------------------------
+
+  --[[
+    freyd_to_profunctor transforms a Freyd morphism into a profunctor
+  ]]--
+  freyd_to_profunctor: @Freyd.!FreydMorphism -> @Prof.Profunctor [freyd_morphism ->
+    let (a, s1) = freyd_morphism.source in
+    let (b, s2) = freyd_morphism.target in
+    
+    @Prof.profunctor(
+      "FreydProf",
+      a,
+      b,
+      [a' b' -> 
+        let (result, _) = freyd_morphism.morphism((a', s1)) in
+        result == b'
+      ]
+    )
+  ]
+
+  --[[
+    profunctor_to_freyd transforms a profunctor into a Freyd morphism
+  ]]--
+  profunctor_to_freyd: @Prof.Profunctor -> @Freyd.!FreydMorphism [prof ->
+    let a = prof.source in
+    let b = prof.target in
+    
+    @Freyd.freyd_morphism(
+      (a, s),
+      (b, s),
+      [(a', s) -> 
+        -- Find a value that satisfies the profunctor relation
+        let result = find_satisfying(a', prof.relates) in
+        (result, s)
+      ],
+      @Freyd.standard_freyd
+    )
+  ]
+
+  --[[
+    Helper to find a value that satisfies a profunctor relation
+  ]]--
+  find_satisfying: a * ((a, b) -> Bool) -> b [a relates ->
+    -- This is a simplified implementation; in practice you would
+    -- need more sophisticated logic to find a satisfying value
+    b  -- Placeholder value
+  ]
+
+  --------------------------------------------------
+  -- Freyd/Arrow Transformations
+  --------------------------------------------------
+
+  --[[
+    freyd_to_arrow transforms a Freyd morphism into an arrow
+  ]]--
+  freyd_to_arrow: @Freyd.!FreydMorphism -> @Arrow.Arrow [freyd_morphism ->
+    let (a, s1) = freyd_morphism.source in
+    let (b, s2) = freyd_morphism.target in
+    
+    @Arrow.arrow(
+      "FreydArrow",
+      [a' -> 
+        let (b', _) = freyd_morphism.morphism((a', s1)) in
+        b'
+      ]
+    )
+  ]
+
+  --[[
+    arrow_to_freyd transforms an arrow into a Freyd morphism
+  ]]--
+  arrow_to_freyd: @Arrow.Arrow -> @Freyd.!FreydMorphism [arrow ->
+    @Freyd.freyd_morphism(
+      (arrow.source, s),
+      (arrow.target, s),
+      [(a, s) -> (arrow.func(a), s)],
+      @Freyd.standard_freyd
+    )
+  ]
+
+  --------------------------------------------------
+  -- Adjunction Constructors
+  --------------------------------------------------
+
+  --[[
+    freyd_category_adjunction creates an adjunction between Freyd and category
+  ]]--
+  freyd_category_adjunction: S -> FreydAdjunction [name ->
+    freyd_adjunction(
+      name,
+      category_freyd_functor("CategoryToFreyd"),
+      category_freyd_functor("FreydToCategory"),
+      freyd_to_category_nt("Unit"),
+      category_to_freyd_nt("Counit")
+    )
+  ]
+
+  --------------------------------------------------
+  -- Structure Mapping to Categorical Semantics
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @FreydXf as a category of 
+    transformations between Freyd categories.
+    
+    In this categorical structure:
+    - Objects are Freyd functors
+    - Morphisms are natural transformations between Freyd functors
+    - Identity is the identity natural transformation
+    - Composition is vertical composition of natural transformations
+    
+    This structure enables rigorous transformation of effectful computations
+    between different categorical representations.
+  ]]--
+  structure: {
+    -- Map FreydXf to a category
+    objects: FreydFunctor,
+    morphisms: FreydNatTransformation,
+    
+    -- Base category structure
+    dom: [nt -> nt.source_functor],
+    cod: [nt -> nt.target_functor],
+    id: [f -> freyd_nat_transformation(
+      "Identity",
+      f,
+      f,
+      [a -> @Freyd.id(a, @Freyd.standard_freyd)]
+    )],
+    compose: [alpha beta -> vertical_composition(alpha, beta)],
+    
+    -- Functor constructors
+    category_freyd_functor: category_freyd_functor,
+    profunctor_freyd_functor: profunctor_freyd_functor,
+    arrow_freyd_functor: arrow_freyd_functor,
+    
+    -- Natural transformation constructors
+    freyd_to_category_nt: freyd_to_category_nt,
+    category_to_freyd_nt: category_to_freyd_nt,
+    freyd_to_profunctor_nt: freyd_to_profunctor_nt,
+    profunctor_to_freyd_nt: profunctor_to_freyd_nt,
+    
+    -- Functor operations
+    apply_functor: apply_functor,
+    compose_functors: compose_functors,
+    
+    -- Laws of functorial transformations
+    law: {
+      functor_identity: [f freyd_morphism -> 
+        apply_functor(f, @Freyd.id(freyd_morphism.source, freyd_morphism.category)) == 
+        @Freyd.id(f.map_obj(freyd_morphism.source), @Freyd.standard_freyd)
+      ],
+      
+      functor_composition: [f fm1 fm2 ->
+        apply_functor(f, @Freyd.compose(fm1, fm2)) ==
+        @Freyd.compose(apply_functor(f, fm1), apply_functor(f, fm2))
+      ],
+      
+      functor_strength: [f fm ->
+        apply_functor(f, @Freyd.first(fm)) ==
+        @Freyd.first(apply_functor(f, fm))
+      ],
+      
+      naturality: [nt f g a ->
+        let left_path = @Freyd.compose(
+          nt.components(a),
+          apply_functor(nt.target_functor, f)
+        ) in
+        let right_path = @Freyd.compose(
+          apply_functor(nt.source_functor, f),
+          nt.components(g)
+        ) in
+        left_path == right_path
+      ],
+      
+      adjunction_unit_counit: [adj a b ->
+        let F = adj.left_functor in
+        let G = adj.right_functor in
+        let η = adj.unit in
+        let ε = adj.counit in
+        
+        @Freyd.compose(
+          η.components(a),
+          apply_functor(G, ε.components(a))
+        ) == @Freyd.id(a, @Freyd.standard_freyd)
+        &&
+        @Freyd.compose(
+          apply_functor(F, η.components(b)),
+          ε.components(b)
+        ) == @Freyd.id(b, @Freyd.standard_freyd)
+      ]
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    --[[
+      Example 1: Transforming a Freyd morphism to a pure function and back
+    ]]--
+    freyd_category_roundtrip: @Freyd.!FreydMorphism -> @Freyd.!FreydMorphism [fm ->
+      let cat_fn = freyd_to_category(fm) in
+      category_to_freyd(cat_fn)
+    ],
+    
+    --[[
+      Example 2: Transforming a Freyd morphism to a profunctor and back
+    ]]--
+    freyd_profunctor_roundtrip: @Freyd.!FreydMorphism -> @Freyd.!FreydMorphism [fm ->
+      let prof = freyd_to_profunctor(fm) in
+      profunctor_to_freyd(prof)
+    ],
+    
+    --[[
+      Example 3: Using a functor to transform a Freyd morphism
+    ]]--
+    transform_freyd: @Freyd.!FreydMorphism -> @Freyd.!FreydMorphism [fm ->
+      let functor = category_freyd_functor("PureFreyd") in
+      apply_functor(functor, fm)
+    ],
+    
+    --[[
+      Example 4: Creating arrow from a Freyd morphism
+    ]]--
+    freyd_to_arrow_example: @Freyd.!FreydMorphism -> @Arrow.Arrow [fm ->
+      freyd_to_arrow(fm)
+    ]
+  }
+} 

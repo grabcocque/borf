@@ -36,16 +36,16 @@ let first_ten_squares = numbers
 let process_big_csv = [filename ->
   // Create a line-by-line generator from the file
   let lines = file_to_lines(filename)
-  
+
   // Skip the header
   let data = Generator.drop(lines, 1)
-  
+
   // Parse and transform each line
   let results = data
     |> [g -> Generator.map(g, parse_csv_line)]
     |> [g -> Generator.filter(g, is_valid_record)]
     |> [g -> Generator.map(g, transform_record)]
-  
+
   // Process each record one at a time
   Generator.for_each(results, save_to_database)
 ]
@@ -61,14 +61,14 @@ process_big_csv("massive_data.csv")  // Works with terabytes of data
 let sensor_dashboard = [->
   // Create an infinite generator of sensor readings
   let temperature_readings = sensor_generator("temperature")
-  
+
   // Calculate rolling average
   let rolling_avg = rolling_average_generator(temperature_readings, 10)
-  
+
   // Set up UI updates
   Generator.for_each(
     rolling_avg,
-    [avg -> 
+    [avg ->
       update_chart(avg)
       update_gauge(avg)
       check_alerts(avg)
@@ -109,11 +109,11 @@ let hundredth = Generator.drop(fibonacci, 99)
 
 ## Why Generators Are Better
 
-✅ **Memory Efficient** - Process infinite streams with constant memory  
-✅ **Lazy Evaluation** - Only calculate what you actually use  
-✅ **Composable** - Build complex data pipelines with simple parts  
-✅ **Readable** - Makes data transformation logic clear and linear  
-✅ **Flexible** - Works with any data source or transformation  
+✅ **Memory Efficient** - Process infinite streams with constant memory
+✅ **Lazy Evaluation** - Only calculate what you actually use
+✅ **Composable** - Build complex data pipelines with simple parts
+✅ **Readable** - Makes data transformation logic clear and linear
+✅ **Flexible** - Works with any data source or transformation
 
 ## Quick Reference
 
@@ -190,4 +190,4 @@ Ready to make your data processing code more efficient and maintainable? Start u
 import { Generator } from "@borf/prelude"
 
 // Your efficient data processing starts here
-``` 
+```

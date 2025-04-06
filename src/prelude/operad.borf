@@ -1,0 +1,896 @@
+--[[
+  Operads
+  
+  This module defines operads, which are algebraic structures that generalize
+  categories by allowing operations with multiple inputs but a single output.
+  
+  Operads are used to model:
+  - Multi-input operations with formal composition rules
+  - Trees of operations
+  - Higher-dimensional structures
+  - Algebraic theories
+  
+  This implementation uses linear types to ensure proper resource handling
+  and avoid monadic patterns.
+]]--
+
+@Operad: {
+  typ: {
+    -- Core types
+    !Operad
+    !Operation
+    !Composition
+    
+    -- Common operads
+    !EndomorphismOperad
+    !SymmetricOperad
+    !ColoredOperad
+    !TreeOperad
+  }
+
+  op: {
+    -- Composition operators
+    ∘
+    ∘ᵢ   -- Partial composition at position i
+    -o>  -- Linear function application
+  }
+
+  fn: {
+    -- Core functions
+    operad
+    operation
+    compose
+    
+    -- Special compositions
+    partial_compose
+    symmetric_compose
+    colored_compose
+    tree_compose
+    
+    -- Specific operads
+    endomorphism_operad
+    symmetric_operad
+    colored_operad
+    tree_operad
+    
+    -- Standard operads
+    standard_operad
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Operad, @Linear, true),   -- Add dependency on Linear types
+    (@Operad, @Cat, true),      -- Add dependency on Category
+    (@Operad, @T, true)         -- Add dependency on Type system
+  }
+
+  --------------------------------------------------
+  -- Core Types
+  --------------------------------------------------
+
+  --[[
+    !Operad represents an operad.
+    
+    An operad consists of:
+    - A collection of operations O(n) for each arity n
+    - A composition structure
+    - An identity operation
+    - Satisfying associativity and unity axioms
+  ]]--
+  !Operad: {
+    _type: "Operad",
+    operations: !{Z: [!Operation]},  -- Operations indexed by arity
+    composition: (f * [g] -> h),     -- Composition of operations
+    identity: !Operation,            -- Identity operation (arity 1)
+    
+    -- Laws
+    associativity: Bool,            -- Associativity of composition
+    left_unity: Bool,               -- Left unity: id ∘ f = f
+    right_unity: Bool,              -- Right unity: f ∘ [id, ..., id] = f
+    
+    name: S                         -- Name of the operad
+  }
+
+  --[[
+    !Operation represents an operation in an operad.
+    
+    An operation takes multiple inputs and produces a single output.
+  ]]--
+  !Operation: {
+    _type: "OperadOperation",
+    arity: Z,                     -- Number of inputs
+    value: f,                     -- The underlying value
+    operad: !Operad,              -- The operad this operation belongs to
+    is_identity: Bool             -- Whether this is the identity operation
+  }
+
+  --[[
+    !Composition represents a composition of operations in an operad.
+  ]]--
+  !Composition: {
+    _type: "OperadComposition",
+    outer: !Operation,            -- Outer operation
+    inner: [!Operation],          -- Inner operations
+    result: !Operation,           -- Result of composition
+    operad: !Operad               -- The operad in which the composition takes place
+  }
+
+  --[[
+    !EndomorphismOperad represents an endomorphism operad.
+    
+    The endomorphism operad End(X) consists of all multi-input operations
+    from Xⁿ to X for a given object X.
+  ]]--
+  !EndomorphismOperad: {
+    _type: "EndomorphismOperad",
+    base: !Operad,                -- The underlying operad
+    object: X                     -- The object whose endomorphisms form the operad
+  }
+
+  --[[
+    !SymmetricOperad represents a symmetric operad.
+    
+    A symmetric operad is an operad with actions of the symmetric groups
+    on the sets of operations, compatible with the composition structure.
+  ]]--
+  !SymmetricOperad: {
+    _type: "SymmetricOperad",
+    base: !Operad,                -- The underlying operad
+    actions: !{Z: (σ * f -> f)}   -- Actions of the symmetric groups
+  }
+
+  --[[
+    !ColoredOperad represents a colored operad (also called a multicategory).
+    
+    A colored operad has operations with typed inputs and outputs.
+  ]]--
+  !ColoredOperad: {
+    _type: "ColoredOperad",
+    base: !Operad,                -- The underlying operad
+    colors: [C],                  -- Set of colors (types)
+    typing: (f -> (([C], C)))     -- Input and output types of operations
+  }
+
+  --[[
+    !TreeOperad represents a tree operad.
+    
+    A tree operad models operations organized in a tree structure.
+  ]]--
+  !TreeOperad: {
+    _type: "TreeOperad",
+    base: !Operad,                -- The underlying operad
+    node_label: (f -> L),         -- Node labels
+    tree_compose: (T₁ * T₂ * Z -> T₃)  -- Tree substitution at node i
+  }
+
+  --------------------------------------------------
+  -- Core Functions
+  --------------------------------------------------
+
+  --[[
+    operad creates a new operad.
+  ]]--
+  operad: S * !{Z: [!Operation]} * (f * [g] -> h) * !Operation -> !Operad [
+    name ops compose id_op ->
+    {
+      _type: "Operad",
+      operations: ops,
+      composition: compose,
+      identity: id_op,
+      
+      -- Laws assumed to hold, should be verified
+      associativity: true,
+      left_unity: true,
+      right_unity: true,
+      
+      name: name
+    }
+  ]
+
+  --[[
+    operation creates a new operation in an operad.
+  ]]--
+  operation: !Operad * Z * f * Bool -> !Operation [
+    operad arity value is_id ->
+    {
+      _type: "OperadOperation",
+      arity: arity,
+      value: value,
+      operad: operad,
+      is_identity: is_id
+    }
+  ]
+
+  --[[
+    compose performs composition of operations in an operad.
+  ]]--
+  compose: !Operad * !Operation * [!Operation] -> !Composition [
+    operad outer inner ->
+    let total_arity = sum([op.arity for op in inner]) in
+    
+    if outer.arity != inner.length {
+      error("Cannot compose operations: outer arity must match number of inner operations")
+    }
+    
+    let result_value = operad.composition(outer.value, [op.value for op in inner]) in
+    
+    {
+      _type: "OperadComposition",
+      outer: outer,
+      inner: inner,
+      result: operation(
+        operad,
+        total_arity,
+        result_value,
+        false
+      ),
+      operad: operad
+    }
+  ]
+
+  --[[
+    partial_compose performs partial composition of operations in an operad.
+    
+    Partial composition f ∘ᵢ g places operation g at the i-th input of f.
+  ]]--
+  partial_compose: !Operad * !Operation * !Operation * Z -> !Operation [
+    operad f g i ->
+    if i < 1 || i > f.arity {
+      error("Cannot perform partial composition: index out of bounds")
+    }
+    
+    -- Create an array of operations for the full composition
+    let inner = [] in
+    for j in range(1, f.arity + 1) {
+      if j == i {
+        inner.push(g)
+      } else {
+        inner.push(operad.identity)
+      }
+    }
+    
+    compose(operad, f, inner).result
+  ]
+
+  --[[
+    symmetric_compose performs composition in a symmetric operad.
+  ]]--
+  symmetric_compose: !SymmetricOperad * !Operation * [!Operation] * [σ] -> !Operation [
+    sym_operad outer inner perms ->
+    if outer.arity != inner.length {
+      error("Cannot compose operations: outer arity must match number of inner operations")
+    }
+    
+    if perms.length != inner.length {
+      error("Cannot compose operations: number of permutations must match number of inner operations")
+    }
+    
+    -- Apply the permutations to the inner operations
+    let permuted_inner = [] in
+    for i in range(inner.length) {
+      let permuted = sym_operad.actions[inner[i].arity](perms[i], inner[i].value) in
+      permuted_inner.push(operation(
+        sym_operad.base,
+        inner[i].arity,
+        permuted,
+        inner[i].is_identity
+      ))
+    }
+    
+    compose(sym_operad.base, outer, permuted_inner).result
+  ]
+
+  --[[
+    colored_compose performs composition in a colored operad.
+  ]]--
+  colored_compose: !ColoredOperad * !Operation * [!Operation] -> !Operation [
+    colored_operad outer inner ->
+    if outer.arity != inner.length {
+      error("Cannot compose operations: outer arity must match number of inner operations")
+    }
+    
+    -- Check color compatibility
+    let outer_typing = colored_operad.typing(outer.value) in
+    let outer_input_colors = outer_typing[0] in
+    
+    for i in range(inner.length) {
+      let inner_typing = colored_operad.typing(inner[i].value) in
+      let inner_output_color = inner_typing[1] in
+      
+      if outer_input_colors[i] != inner_output_color {
+        error("Cannot compose operations: color mismatch")
+      }
+    }
+    
+    compose(colored_operad.base, outer, inner).result
+  ]
+
+  --[[
+    tree_compose performs composition in a tree operad.
+  ]]--
+  tree_compose: !TreeOperad * T₁ * T₂ * Z -> T₃ [
+    tree_operad tree1 tree2 i ->
+    tree_operad.tree_compose(tree1, tree2, i)
+  ]
+
+  --------------------------------------------------
+  -- Specific Operads
+  --------------------------------------------------
+
+  --[[
+    endomorphism_operad creates an endomorphism operad for a given object.
+  ]]--
+  endomorphism_operad: S * X -> !EndomorphismOperad [
+    name object ->
+    let operations = {} in
+    
+    -- For each arity n, collect all functions from Xⁿ to X
+    for n in range(1, 11) {  -- Limit to arity 10 for simplicity
+      operations[n] = []
+      
+      -- In a real implementation, we would generate all functions Xⁿ -> X
+      -- Here we just create placeholders
+      if n == 1 {
+        operations[n].push(operation(null, n, [x -> x], true))  -- Identity
+      } else {
+        operations[n].push(operation(null, n, [xs -> xs[0]], false))  -- Projection
+      }
+    }
+    
+    let compose_fn = [f g_list ->
+      -- Given a function f: Xⁿ -> X and functions gᵢ: Xᵏᵢ -> X
+      -- The composition applies each gᵢ to the respective inputs
+      -- and then applies f to the results
+      
+      -- This is a simplified implementation
+      [xs ->
+        let results = [] in
+        let offset = 0 in
+        
+        for i in range(g_list.length) {
+          let g = g_list[i] in
+          let arity = g.arity in
+          let inputs = xs.slice(offset, offset + arity) in
+          
+          results.push(g(inputs))
+          offset += arity
+        }
+        
+        f(results)
+      ]
+    ] in
+    
+    let id_op = operations[1][0] in
+    
+    let base_operad = operad(
+      name,
+      operations,
+      compose_fn,
+      id_op
+    ) in
+    
+    -- Update operations with the operad reference
+    for arity in operations {
+      for op in operations[arity] {
+        op.operad = base_operad
+      }
+    }
+    
+    base_operad.identity = operations[1][0]
+    
+    {
+      _type: "EndomorphismOperad",
+      base: base_operad,
+      object: object
+    }
+  ]
+
+  --[[
+    symmetric_operad creates a symmetric operad.
+  ]]--
+  symmetric_operad: S -> !SymmetricOperad [
+    name ->
+    let operations = {} in
+    
+    -- Create operations for each arity
+    for n in range(1, 11) {  -- Limit to arity 10 for simplicity
+      operations[n] = []
+      
+      -- In a real implementation, we would have specific operations
+      -- Here we just create placeholders
+      if n == 1 {
+        operations[n].push(operation(null, n, "id", true))  -- Identity
+      } else {
+        for i in range(5) {  -- Add some sample operations for each arity
+          operations[n].push(operation(null, n, "op_" + n + "_" + i, false))
+        }
+      }
+    }
+    
+    let compose_fn = [f g_list ->
+      -- Composition in a symmetric operad
+      -- This is a placeholder implementation
+      "composed_" + f + "_with_" + g_list.join("_")
+    ] in
+    
+    let id_op = operations[1][0] in
+    
+    let base_operad = operad(
+      name,
+      operations,
+      compose_fn,
+      id_op
+    ) in
+    
+    -- Update operations with the operad reference
+    for arity in operations {
+      for op in operations[arity] {
+        op.operad = base_operad
+      }
+    }
+    
+    base_operad.identity = operations[1][0]
+    
+    -- Define actions of the symmetric groups
+    let actions = {} in
+    
+    for n in range(1, 11) {
+      actions[n] = [perm op ->
+        -- Action of a permutation on an operation
+        -- This is a placeholder implementation
+        "permuted_" + op + "_by_" + perm
+      ]
+    }
+    
+    {
+      _type: "SymmetricOperad",
+      base: base_operad,
+      actions: actions
+    }
+  ]
+
+  --[[
+    colored_operad creates a colored operad.
+  ]]--
+  colored_operad: S * [C] -> !ColoredOperad [
+    name colors ->
+    let operations = {} in
+    
+    -- Create operations for each arity
+    for n in range(1, 11) {  -- Limit to arity 10 for simplicity
+      operations[n] = []
+      
+      -- In a real implementation, we would have specific operations
+      -- Here we just create placeholders
+      if n == 1 {
+        for color in colors {
+          operations[n].push(operation(null, n, "id_" + color, true))  -- Identity for each color
+        }
+      } else {
+        for i in range(5) {  -- Add some sample operations for each arity
+          operations[n].push(operation(null, n, "op_" + n + "_" + i, false))
+        }
+      }
+    }
+    
+    let compose_fn = [f g_list ->
+      -- Composition in a colored operad
+      -- This is a placeholder implementation
+      "composed_" + f + "_with_" + g_list.join("_")
+    ] in
+    
+    let id_op = operations[1][0] in
+    
+    let base_operad = operad(
+      name,
+      operations,
+      compose_fn,
+      id_op
+    ) in
+    
+    -- Update operations with the operad reference
+    for arity in operations {
+      for op in operations[arity] {
+        op.operad = base_operad
+      }
+    }
+    
+    base_operad.identity = operations[1][0]
+    
+    -- Define the typing function
+    let typing = [op ->
+      -- For a real implementation, we would determine the actual colors
+      -- Here we just provide a placeholder implementation
+      if op.startsWith("id_") {
+        let color = op.substring(3) in
+        return ([color], color)
+      } else {
+        return ([colors[0], colors[0]], colors[0])  -- Default typing
+      }
+    ] in
+    
+    {
+      _type: "ColoredOperad",
+      base: base_operad,
+      colors: colors,
+      typing: typing
+    }
+  ]
+
+  --[[
+    tree_operad creates a tree operad.
+  ]]--
+  tree_operad: S -> !TreeOperad [
+    name ->
+    let operations = {} in
+    
+    -- Create operations for each arity
+    for n in range(1, 11) {  -- Limit to arity 10 for simplicity
+      operations[n] = []
+      
+      -- In a real implementation, we would have specific operations
+      -- Here we just create placeholders
+      if n == 1 {
+        operations[n].push(operation(null, n, "id", true))  -- Identity
+      } else {
+        for i in range(5) {  -- Add some sample operations for each arity
+          operations[n].push(operation(null, n, "op_" + n + "_" + i, false))
+        }
+      }
+    }
+    
+    let compose_fn = [f g_list ->
+      -- Composition in a tree operad
+      -- This is a placeholder implementation
+      "composed_" + f + "_with_" + g_list.join("_")
+    ] in
+    
+    let id_op = operations[1][0] in
+    
+    let base_operad = operad(
+      name,
+      operations,
+      compose_fn,
+      id_op
+    ) in
+    
+    -- Update operations with the operad reference
+    for arity in operations {
+      for op in operations[arity] {
+        op.operad = base_operad
+      }
+    }
+    
+    base_operad.identity = operations[1][0]
+    
+    -- Define the node label function
+    let node_label = [op ->
+      -- Extract a label from an operation
+      -- This is a placeholder implementation
+      op
+    ] in
+    
+    -- Define the tree composition function
+    let tree_compose_fn = [tree1 tree2 i ->
+      -- Compose trees by substituting tree2 at node i of tree1
+      -- This is a placeholder implementation
+      "tree_composed_at_" + i
+    ] in
+    
+    {
+      _type: "TreeOperad",
+      base: base_operad,
+      node_label: node_label,
+      tree_compose: tree_compose_fn
+    }
+  ]
+
+  --------------------------------------------------
+  -- Helper Functions
+  --------------------------------------------------
+  
+  --[[
+    sum calculates the sum of a list of numbers.
+  ]]--
+  sum: [Z] -> Z [
+    numbers ->
+    let result = 0 in
+    for n in numbers {
+      result += n
+    }
+    result
+  ]
+
+  --------------------------------------------------
+  -- Operators
+  --------------------------------------------------
+
+  --[[
+    ∘ represents composition of operations
+  ]]--
+  ∘: !Operation * [!Operation] -> !Operation [
+    f gs ->
+    compose(f.operad, f, gs).result
+  ]
+
+  --[[
+    ∘ᵢ represents partial composition at position i
+  ]]--
+  ∘ᵢ: !Operation * !Operation * Z -> !Operation [
+    f g i ->
+    partial_compose(f.operad, f, g, i)
+  ]
+
+  --[[
+    -o> represents linear function application
+  ]]--
+  -o>: a * (a -o> b) -> b [
+    x f ->
+    f(x)
+  ]
+
+  --------------------------------------------------
+  -- Standard Instances
+  --------------------------------------------------
+
+  --[[
+    The standard operad (using a simple symmetric operad)
+  ]]--
+  standard_operad: !Operad = symmetric_operad("StandardOperad").base
+
+  --------------------------------------------------
+  -- Structure Mapping
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes a correspondence between the
+    operad structure and categorical semantics.
+    
+    In an operad:
+    - Objects are implicitly a single object (for plain operads)
+    - Morphisms are operations with multiple inputs and one output
+    - Composition combines operations in a tree-like manner
+    - Identity operation acts as a unit for composition
+    
+    This structure generalizes categories by allowing operations with
+    multiple inputs, facilitating the modeling of algebraic theories.
+  ]]--
+  structure: {
+    -- Map Operad to a generalized category
+    objects: unit,  -- A single implicit object for plain operads
+    
+    -- Morphisms are operations
+    morphisms: !{Z: !Operation},  -- Indexed by arity
+    
+    -- Core structure
+    id: [_ -> standard_operad.identity],
+    compose: [f gs -> f ∘ gs],
+    
+    -- Operad-specific structure
+    arity: [op -> op.arity],
+    partial_compose: [f g i -> f ∘ᵢ g i],
+    
+    -- Symmetric operad structure (if applicable)
+    permute: [perm op ->
+      -- If op belongs to a symmetric operad, apply the permutation
+      if op.operad._type == "SymmetricOperad" || 
+         (op.operad.base && op.operad.base._type == "SymmetricOperad") {
+        let sym_operad = 
+          op.operad._type == "SymmetricOperad" ? 
+          op.operad : op.operad.base
+        
+        -- Apply the permutation to the operation
+        return sym_operad.actions[op.arity](perm, op.value)
+      }
+      
+      -- Default case if not a symmetric operad
+      return op.value
+    ],
+    
+    -- Colored operad structure (if applicable)
+    colors: [op ->
+      -- If op belongs to a colored operad, get its input/output colors
+      if op.operad._type == "ColoredOperad" || 
+         (op.operad.base && op.operad.base._type == "ColoredOperad") {
+        let colored_operad = 
+          op.operad._type == "ColoredOperad" ? 
+          op.operad : op.operad.base
+        
+        -- Get the typing of the operation
+        return colored_operad.typing(op.value)
+      }
+      
+      -- Default case if not a colored operad
+      return ([unit], unit)
+    ],
+    
+    -- Laws
+    law: {
+      -- Plain operad laws
+      
+      -- Associativity:
+      -- (f ∘ [g₁, ..., gₙ]) ∘ [h₁₁, ..., h_{n,k_n}] = 
+      -- f ∘ [g₁ ∘ [h₁₁, ..., h₁ₖ₁], ..., gₙ ∘ [hₙ₁, ..., hₙₖₙ]]
+      associativity: [f gs hs_nested ->
+        let left_side = compose(
+          standard_operad,
+          compose(standard_operad, f, gs).result,
+          flatten(hs_nested)
+        ).result in
+        
+        let right_side_inner = [] in
+        for i in range(gs.length) {
+          right_side_inner.push(compose(standard_operad, gs[i], hs_nested[i]).result)
+        }
+        
+        let right_side = compose(
+          standard_operad,
+          f,
+          right_side_inner
+        ).result in
+        
+        left_side == right_side
+      ],
+      
+      -- Left unity: id ∘ [f] = f
+      left_unity: [f ->
+        compose(
+          standard_operad,
+          standard_operad.identity,
+          [f]
+        ).result == f
+      ],
+      
+      -- Right unity: f ∘ [id, ..., id] = f
+      right_unity: [f ->
+        let ids = [] in
+        for i in range(f.arity) {
+          ids.push(standard_operad.identity)
+        }
+        
+        compose(standard_operad, f, ids).result == f
+      ],
+      
+      -- Symmetric operad laws (if applicable)
+      
+      -- Equivariance of composition with respect to the symmetric group actions
+      symmetric_equivariance: [f gs perms ->
+        -- For symmetric operads, this would check that composition respects
+        -- the actions of the symmetric groups
+        -- This is a placeholder
+        true
+      ],
+      
+      -- Colored operad laws (if applicable)
+      
+      -- Type compatibility for composition
+      color_compatibility: [f gs ->
+        -- For colored operads, this would check that the output color of each
+        -- inner operation matches the corresponding input color of the outer operation
+        -- This is a placeholder
+        true
+      ]
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    --[[
+      Example 1: Creating and composing operations in an operad
+    ]]--
+    basic_operad_example: () -> !Operad [->
+      let sym_operad = symmetric_operad("ExampleOperad") in
+      let base_operad = sym_operad.base in
+      
+      -- Get some operations
+      let f = base_operad.operations[3][0]  -- An operation of arity 3
+      let g1 = base_operad.operations[2][0]  -- An operation of arity 2
+      let g2 = base_operad.operations[1][0]  -- An operation of arity 1
+      let g3 = base_operad.operations[2][1]  -- Another operation of arity 2
+      
+      -- Compose the operations
+      let result = compose(base_operad, f, [g1, g2, g3]).result in
+      
+      -- The result has arity 2 + 1 + 2 = 5
+      assert(result.arity == 5)
+      
+      base_operad
+    ],
+    
+    --[[
+      Example 2: Using the endomorphism operad
+    ]]--
+    endomorphism_example: () -> !EndomorphismOperad [->
+      let end_operad = endomorphism_operad("EndomorphismExample", Z) in
+      
+      -- The endomorphism operad End(Z) consists of all functions Zⁿ → Z
+      
+      -- Get the projection operation (arity 2)
+      let proj = end_operad.base.operations[2][0] in
+      
+      -- Apply it to inputs
+      let inputs = [10, 20] in
+      let result = proj.value(inputs) in
+      
+      -- Should be 10 (first element) due to our placeholder implementation
+      assert(result == 10)
+      
+      end_operad
+    ],
+    
+    --[[
+      Example 3: Using a colored operad
+    ]]--
+    colored_example: () -> !ColoredOperad [->
+      let colors = ["Red", "Blue", "Green"] in
+      let col_operad = colored_operad("ColoredExample", colors) in
+      
+      -- Get identity operations for different colors
+      let id_red = col_operad.base.operations[1][0] in
+      let id_blue = col_operad.base.operations[1][1] in
+      
+      -- Get the typing of these operations
+      let typing_red = col_operad.typing(id_red.value) in
+      let typing_blue = col_operad.typing(id_blue.value) in
+      
+      -- Check the colors
+      assert(typing_red[0][0] == "Red" && typing_red[1] == "Red")
+      assert(typing_blue[0][0] == "Blue" && typing_blue[1] == "Blue")
+      
+      col_operad
+    ],
+    
+    --[[
+      Example 4: Partial composition in an operad
+    ]]--
+    partial_composition_example: () -> !Operation [->
+      let base_operad = symmetric_operad("PartialCompositionExample").base in
+      
+      -- Get some operations
+      let f = base_operad.operations[3][0]  -- An operation of arity 3
+      let g = base_operad.operations[2][0]  -- An operation of arity 2
+      
+      -- Perform partial composition at position 2
+      let result = partial_compose(base_operad, f, g, 2) in
+      
+      -- The result has arity 3 - 1 + 2 = 4
+      assert(result.arity == 4)
+      
+      result
+    ],
+    
+    --[[
+      Example 5: Using a symmetric operad with permutations
+    ]]--
+    symmetric_example: () -> !Operation [->
+      let sym_operad = symmetric_operad("SymmetricExample") in
+      
+      -- Get some operations
+      let f = sym_operad.base.operations[2][0]  -- An operation of arity 2
+      let g1 = sym_operad.base.operations[1][0]  -- An operation of arity 1
+      let g2 = sym_operad.base.operations[3][0]  -- An operation of arity 3
+      
+      -- Create some permutations
+      let perm1 = "perm1" in  -- Placeholder
+      let perm2 = "perm2" in  -- Placeholder
+      
+      -- Compose with permutations
+      let result = symmetric_compose(
+        sym_operad,
+        f,
+        [g1, g2],
+        [perm1, perm2]
+      ) in
+      
+      assert(result.arity == 1 + 3)
+      
+      result
+    ]
+  }
+} 

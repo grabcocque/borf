@@ -1,6 +1,6 @@
 --[[
   Generators
-  
+
   Efficient iterators that produce values on demand, allowing for infinite streams,
   lazy evaluation, and memory-efficient data processing.
 ]]--
@@ -9,19 +9,19 @@
   typ: {
     -- Core generator type
     Generator
-    
+
     -- Generator state types
     GeneratorState
     Yielded
     Completed
-    
+
     -- Generator transformation types
     GeneratorMap
     GeneratorFilter
     GeneratorTake
     GeneratorZip
     GeneratorFlatMap
-    
+
     -- Specialized generators
     RangeGenerator
     RepeatGenerator
@@ -42,12 +42,12 @@
     range
     repeat
     cycle
-    
+
     -- State control functions
     next
     peek
     rewind
-    
+
     -- Transformation functions
     map
     filter
@@ -55,7 +55,7 @@
     drop
     zip
     flatMap
-    
+
     -- Consumption functions
     collect
     reduce
@@ -63,7 +63,7 @@
     find
     any
     all
-    
+
     -- Utility functions
     count
     is_empty
@@ -261,11 +261,11 @@
   range: Z * (Z | Null) * Z -> Generator.Z [start end step ->
     let end_value = end in
     let step_value = step | 1 in
-    
+
     generator(
       [state ->
         if end_value != null && (
-          (step_value > 0 && state >= end_value) || 
+          (step_value > 0 && state >= end_value) ||
           (step_value < 0 && state <= end_value)
         ) {
           { _type: "completed", value: null, next_state: null }
@@ -304,7 +304,7 @@
     if Prim.length(values) == 0 {
       error("Cannot cycle through an empty array")
     }
-    
+
     generator(
       [state ->
         {
@@ -331,38 +331,38 @@
     let apply_transformations = [gen state ->
       -- First get the raw value
       let result = gen.next_fn(state) in
-      
+
       -- Handle completed state
       if result._type == "completed" {
         return result
       }
-      
+
       let value = result.value in
       let next_state = result.next_state in
-      
+
       -- Apply transformation if present
       let transformed_value = gen.transform ? gen.transform(value) : value in
-      
+
       -- Apply filter if present
       if gen.predicate && !gen.predicate(transformed_value) {
         -- Skip this value and recursively get the next one
         return next(gen, next_state)
       }
-      
+
       -- Apply limit if present
       if gen.limit != null {
         if gen.limit <= 0 {
           return { _type: "completed", value: null, next_state: null }
         }
-        
+
         -- Decrement the limit
         gen.limit = gen.limit - 1
       }
-      
+
       -- Return the transformed value
       { _type: "yielded", value: transformed_value, next_state: next_state }
     ] in
-    
+
     apply_transformations(gen, gen.state)
   ]
 
@@ -371,13 +371,13 @@
   ]]--
   peek: Generator.a -> a | Null [gen ->
     let result = next(gen) in
-    
+
     -- Restore the generator state
     if result._type == "yielded" {
       gen.state = gen.state  -- Keep the current state
       return result.value
     }
-    
+
     null
   ]
 
@@ -390,11 +390,11 @@
     let can_rewind = gen._type ? [
       "array", "range", "repeat", "cycle"
     ] |> [type -> type == gen._type] |> any
-    
+
     if !can_rewind {
       error("This generator type cannot be rewound")
     }
-    
+
     match gen._type {
       "array" => gen.state.index = 0,
       "range" => gen.state = gen.start,
@@ -402,7 +402,7 @@
       "cycle" => gen.state.index = 0,
       _ => error("Cannot rewind this generator type")
     }
-    
+
     gen
   ]
 
@@ -418,7 +418,7 @@
       value_type: b,
       state: gen.state,
       next_fn: gen.next_fn,
-      transform: gen.transform 
+      transform: gen.transform
         ? [x -> transform(gen.transform(x))]
         : transform,
       predicate: gen.predicate,
@@ -452,7 +452,7 @@
       next_fn: gen.next_fn,
       transform: gen.transform,
       predicate: gen.predicate,
-      limit: gen.limit != null 
+      limit: gen.limit != null
         ? Prim.min(gen.limit, count)
         : count
     }
@@ -472,7 +472,7 @@
       gen.state = result.next_state
       remaining = remaining - 1
     }
-    
+
     gen
   ]
 
@@ -484,7 +484,7 @@
       [state ->
         let result1 = next(state.gen1) in
         let result2 = next(state.gen2) in
-        
+
         if result1._type == "completed" || result2._type == "completed" {
           { _type: "completed", value: null, next_state: null }
         } else {
@@ -503,35 +503,36 @@
   ]
 
   --[[
-    Applies a function that returns a generator to each element of a generator,
-    flattening the results into a single generator (Kleisli composition).
+    compose_linear applies a linear function that returns a generator to each element of a generator,
+    flattening the results into a single generator using linear composition.
   ]]--
-  flatMap: Generator.a * (a -> Generator.b) -> Generator.b [gen_a fn ->
+  compose_linear: Generator.a * (a -o> Generator.b) -> Generator.b [gen_a linear_fn ->
     generator(
       [state ->
         -- Try to yield from the current inner generator
         if state.current_inner != null {
           let inner_result = next(state.current_inner) in
           if inner_result._type == "yielded" {
-            return { 
-              _type: "yielded", 
-              value: inner_result.value, 
-              next_state: { ...state, current_inner: { ...state.current_inner, state: inner_result.next_state } } 
+            return {
+              _type: "yielded",
+              value: inner_result.value,
+              next_state: { ...state, current_inner: { ...state.current_inner, state: inner_result.next_state } }
             }
           } else {
             -- Inner is completed, clear it and try to get the next outer element
             return state |> [st -> next({ ...st, current_inner: null })]
           }
-        } 
-        
+        }
+
         -- No inner generator, or inner completed. Get next outer element.
         let outer_result = next(state.outer) in
         if outer_result._type == "yielded" {
-          -- Apply the function to get a new inner generator
-          let new_inner = fn(outer_result.value) in
+          -- Apply the linear function to get a new inner generator
+          -- The linear function ensures the value is used exactly once
+          let new_inner = linear_fn(outer_result.value) in
           -- Immediately try to yield from the new inner generator
-          return state |> [st -> next({ 
-            ...st, 
+          return state |> [st -> next({
+            ...st,
             outer: { ...state.outer, state: outer_result.next_state },
             current_inner: new_inner
           })]
@@ -540,8 +541,19 @@
           return { _type: "completed", value: null, next_state: null }
         }
       ],
-      { outer: gen_a, current_inner: null } 
+      { outer: gen_a, current_inner: null }
     )
+  ]
+
+  --[[
+    Applies a function that returns a generator to each element of a generator,
+    flattening the results into a single generator (legacy monadic pattern).
+    Now implemented using linear types internally.
+  ]]--
+  flatMap: Generator.a * (a -> Generator.b) -> Generator.b [gen_a fn ->
+    -- Wrap the regular function in a linear one
+    let linear_fn = [a -o> fn(a)] in
+    compose_linear(gen_a, linear_fn)
   ]
 
   --------------------------------------------------
@@ -554,18 +566,18 @@
   ]]--
   collect: Generator.a -> [a] [gen ->
     let result = [] in
-    
+
     loop {
       let next_result = next(gen) in
-      
+
       if next_result._type == "completed" {
         break
       }
-      
+
       result = result + [next_result.value]
       gen.state = next_result.next_state
     }
-    
+
     result
   ]
 
@@ -574,18 +586,18 @@
   ]]--
   reduce: Generator.a * (b * a -> b) * b -> b [gen reducer initial ->
     let result = initial in
-    
+
     loop {
       let next_result = next(gen) in
-      
+
       if next_result._type == "completed" {
         break
       }
-      
+
       result = reducer(result, next_result.value)
       gen.state = next_result.next_state
     }
-    
+
     result
   ]
 
@@ -595,11 +607,11 @@
   for_each: Generator.a * (a -> ()) -> () [gen fn ->
     loop {
       let next_result = next(gen) in
-      
+
       if next_result._type == "completed" {
         break
       }
-      
+
       fn(next_result.value)
       gen.state = next_result.next_state
     }
@@ -611,15 +623,15 @@
   find: Generator.a * (a -> Bool) -> a | Null [gen predicate ->
     loop {
       let next_result = next(gen) in
-      
+
       if next_result._type == "completed" {
         return null
       }
-      
+
       if predicate(next_result.value) {
         return next_result.value
       }
-      
+
       gen.state = next_result.next_state
     }
   ]
@@ -630,15 +642,15 @@
   any: Generator.a * (a -> Bool) -> Bool [gen predicate ->
     loop {
       let next_result = next(gen) in
-      
+
       if next_result._type == "completed" {
         return false
       }
-      
+
       if predicate(next_result.value) {
         return true
       }
-      
+
       gen.state = next_result.next_state
     }
   ]
@@ -649,15 +661,15 @@
   all: Generator.a * (a -> Bool) -> Bool [gen predicate ->
     loop {
       let next_result = next(gen) in
-      
+
       if next_result._type == "completed" {
         return true
       }
-      
+
       if !predicate(next_result.value) {
         return false
       }
-      
+
       gen.state = next_result.next_state
     }
   ]
@@ -680,12 +692,12 @@
   is_empty: Generator.a -> Bool [gen ->
     let next_result = next(gen) in
     let is_empty = next_result._type == "completed" in
-    
+
     -- Restore the generator state if it's not empty
     if !is_empty {
       gen.state = gen.state  -- Restore original state
     }
-    
+
     is_empty
   ]
 
@@ -716,7 +728,7 @@
       [state ->
         if state.using_first {
           let result = next(state.first) in
-          
+
           if result._type == "completed" {
             -- Switch to the second generator
             state.using_first = false
@@ -734,7 +746,7 @@
         } else {
           -- Using the second generator
           let result = next(state.second) in
-          
+
           if result._type == "completed" {
             { _type: "completed", value: null, next_state: null }
           } else {
@@ -759,13 +771,13 @@
 
   --[[
     Structure mapping that establishes generators as arrows.
-    
+
     This creates a Kleisli arrow-based structure where generators
     are composable, transformable streams of values.
   ]]--
   structure: {
     -- Arrow structure for generators
-    arr: [f -> 
+    arr: [f ->
       generator(
         [state ->
           {
@@ -777,12 +789,12 @@
         0
       )
     ],
-    
+
     compose: [g1 g2 ->
       generator(
         [state ->
           let result1 = next(state.g1) in
-          
+
           if result1._type == "completed" {
             { _type: "completed", value: null, next_state: null }
           } else {
@@ -791,9 +803,9 @@
               ...state.g2,
               state: result1.value
             } in
-            
+
             let result2 = next(g2_with_input) in
-            
+
             {
               _type: result2._type,
               value: result2.value,
@@ -807,12 +819,12 @@
         { g1: g1, g2: g2 }
       )
     ],
-    
+
     first: [g ->
       generator(
         [state ->
           let result = next(state.generator) in
-          
+
           if result._type == "completed" {
             { _type: "completed", value: null, next_state: null }
           } else {
@@ -829,11 +841,11 @@
         { generator: g, b: null }
       )
     ],
-    
+
     -- Helper functions
     id: [x -> x],
     constgen: [x -> repeat(x, null)],
-    
+
     -- Laws for generator arrows
     law: {
       -- Arrow laws
@@ -842,17 +854,17 @@
         let composed_fn = [y -> g(f(y))] in
         let composed_arr = arr(composed_fn) in
         let sequenced_arr = compose(arr(f), arr(g)) in
-        
+
         next(composed_arr).value == next(sequenced_arr).value
       ],
-      
+
       identity: [g ->
         -- arr(id) >>> g == g == g >>> arr(id)
         let id_arr = arr(id) in
-        
+
         compose(id_arr, g) == g && compose(g, id_arr) == g
       ],
-      
+
       association: [g1 g2 g3 ->
         -- (g1 >>> g2) >>> g3 == g1 >>> (g2 >>> g3)
         compose(compose(g1, g2), g3) == compose(g1, compose(g2, g3))
@@ -883,24 +895,24 @@
         { current: 0, next: 1 }
       )
     ],
-    
+
     --[[
       Example 2: Processing a stream of data
     ]]--
     data_processing: () -> [Z] [->
       -- Create a range of numbers
       let numbers = range(1, 100, 1) in
-      
+
       -- Process them with a pipeline
       let result = numbers
         |> [g -> map(g, [x -> x * 2])]           -- Double each number
         |> [g -> filter(g, [x -> x % 3 == 0])]   -- Keep only multiples of 3
         |> [g -> take(g, 10)]                    -- Take only the first 10
         |> collect
-      
+
       result
     ],
-    
+
     --[[
       Example 3: Infinite streams with lazy evaluation
     ]]--
@@ -916,9 +928,9 @@
         ],
         null
       ) in
-      
+
       -- Find the first number that meets our criteria
       find(random_numbers, [x -> x > 90 && x < 95])
     ]
   }
-} 
+}

@@ -16,7 +16,7 @@
   op: {
     -- Composition operators
     >>> <<< ... *** +++ &&&
-    
+
     -- Lifting operators
     ^>> >>^ <<^ ^<<
   }
@@ -24,24 +24,24 @@
   fn: {
     -- Core profunctor operations
     profunctor dimap lmap rmap
-    
+
     -- Strong profunctor operations
     strong first second par both
-    
+
     -- Choice profunctor operations
     choice left right plus fanin
-    
+
     -- Closed profunctor operations
     closed closed_fn curry uncurry
-    
+
     -- Special profunctors
     function codec lens prism adapter
     biparser formlet ui_component
-    
+
     -- Combinators
     beside alongside branch merge
     |||> <<<|||
-    
+
     -- Laws
     law.dimap_id law.dimap_compose
     law.first_second law.left_right
@@ -54,10 +54,75 @@
   vis: E |> [e -> true]
 
   deps: {
+    (@Profunctor, @T, true),        -- Type system
     (@Profunctor, @Cat, true),        -- Category theory
-    (@Profunctor, @T, true),          -- Type system
+    (@Profunctor, @Arrow, true),     -- Arrow combinators
     (@Profunctor, @Optics, true),     -- Optics module
     (@Profunctor, @Flp, true)         -- Functional programming utilities
+  }
+
+  --------------------------------------------------
+  -- Structure Mapping to Profunctor Category
+  --------------------------------------------------
+
+  --[[
+    Profunctor Category Structure
+
+    This mapping establishes @Profunctor as a category where:
+    - Objects are pairs of types (a,b) representing contravariant and covariant parameters
+    - Morphisms are profunctors from a to b
+    - Composition is profunctor composition via dimap
+    - Identity is the identity profunctor
+
+    Profunctors form a proper category with additional structure including:
+    - Strength for handling products (first, second)
+    - Choice for handling coproducts (left, right)
+    - Closed structure for higher-order transformations
+  ]]--
+  structure: {
+    -- Map Profunctor to a category
+    objects: T.Type * T.Type,        -- Objects are type pairs
+    morphisms: !Profunctor,          -- Morphisms are profunctors
+
+    -- Base category structure
+    dom: [p -> (p.a, p.b)],          -- Domain is the input type pair
+    cod: [p -> (p.c, p.d)],          -- Codomain is the output type pair
+    id: [(a, b) -> {                 -- Identity profunctor
+      a: a,
+      b: b,
+      c: a,
+      d: b,
+      dimap: [pre post f -> post(f(pre(x)))]
+    }],
+    compose: [p q -> {               -- Profunctor composition
+      a: q.a,
+      b: q.b,
+      c: p.c,
+      d: p.d,
+      dimap: [pre post f ->
+        p.dimap([x -> q.dimap(pre, [y -> y], x)],
+                post,
+                f)
+      ]
+    }],
+
+    -- Category laws
+    law.identity: [p ->
+      compose(id(dom(p)), p) == p && compose(p, id(cod(p))) == p
+    ],
+    law.associativity: [p q r ->
+      compose(compose(p, q), r) == compose(p, compose(q, r))
+    ],
+
+    -- Profunctor-specific laws
+    law.dimap_id: law.dimap_id,
+    law.dimap_compose: law.dimap_compose,
+
+    -- Strong profunctor structure
+    law.first_second: law.first_second,
+
+    -- Choice profunctor structure
+    law.left_right: law.left_right
   }
 
   --------------------------------------------------
@@ -81,7 +146,7 @@
   !Strong: {
     -- Enhance a function from (a -> b) to ((a, c) -> (b, c))
     first: (a -> b) -> ((a, c) -> (b, c)),
-    
+
     -- Enhance a function from (a -> b) to ((c, a) -> (c, b))
     second: (a -> b) -> ((c, a) -> (c, b))
   }
@@ -93,7 +158,7 @@
   !Choice: {
     -- Enhance a function from (a -> b) to (Either a c -> Either b c)
     left: (a -> b) -> (Either a c -> Either b c),
-    
+
     -- Enhance a function from (a -> b) to (Either c a -> Either c b)
     right: (a -> b) -> (Either c a -> Either c b)
   }
@@ -125,7 +190,7 @@
   --------------------------------------------------
   -- Core Profunctor Operations
   --------------------------------------------------
-  
+
   --[[
     profunctor creates a new profunctor from a dimap function
   ]]--
@@ -165,12 +230,12 @@
   ]]--
   strong: !Profunctor -> !Strong [p ->
     {
-      first: [f -> [ac -> 
+      first: [f -> [ac ->
         let (a, c) = ac in
         (f(a), c)
       ]],
-      
-      second: [f -> [ca -> 
+
+      second: [f -> [ca ->
         let (c, a) = ca in
         (c, f(a))
       ]]
@@ -228,13 +293,13 @@
   ]]--
   choice: !Profunctor -> !Choice [p ->
     {
-      left: [f -> [either -> 
+      left: [f -> [either ->
         match either with
           | Left(a) -> Left(f(a))
           | Right(c) -> Right(c)
       ]],
-      
-      right: [f -> [either -> 
+
+      right: [f -> [either ->
         match either with
           | Left(c) -> Left(c)
           | Right(a) -> Right(f(a))
@@ -356,7 +421,7 @@
     lens creates a profunctor from a lens
   ]]--
   lens: @Optics.!Lens -> !Profunctor [l ->
-    profunctor([pre post f -> [s -> 
+    profunctor([pre post f -> [s ->
       let a = pre(s) in
       let b = f(a) in
       post(s |> @Optics.set(l, b))
@@ -367,7 +432,7 @@
     prism creates a profunctor from a prism
   ]]--
   prism: @Optics.!Prism -> !Profunctor [p ->
-    profunctor([pre post f -> [s -> 
+    profunctor([pre post f -> [s ->
       match pre(s) with
         | ?Some(a) -> post(f(a))
         | ?None -> post(s)
@@ -378,7 +443,7 @@
     adapter creates a profunctor from an isomorphism
   ]]--
   adapter: @Optics.!Iso -> !Profunctor [iso ->
-    profunctor([pre post f -> [s -> 
+    profunctor([pre post f -> [s ->
       let a = pre(s) in
       let b = f(a) in
       post(b)
@@ -389,7 +454,7 @@
     biparser creates a bidirectional parser/printer pair
   ]]--
   biparser: (S -> ?a) * (a -> S) -> !Profunctor [parse print ->
-    profunctor([pre post f -> [s -> 
+    profunctor([pre post f -> [s ->
       match parse(pre(s)) with
         | ?Some(a) -> post(print(f(a)))
         | ?None -> post(pre(s))
@@ -400,7 +465,7 @@
     formlet creates a bidirectional form component
   ]]--
   formlet: (formValue -> a) * (a -> formValue) -> !Profunctor [get set ->
-    profunctor([pre post f -> [form -> 
+    profunctor([pre post f -> [form ->
       let a = get(pre(form)) in
       let b = f(a) in
       post(set(b))
@@ -411,7 +476,7 @@
     ui_component creates a bidirectional UI component
   ]]--
   ui_component: (model -> view) * (view -> action) * (model, action -> model) -> !Profunctor [view_fn action_fn update_fn ->
-    profunctor([pre post f -> [model -> 
+    profunctor([pre post f -> [model ->
       let view = view_fn(pre(model)) in
       let action = action_fn(view) in
       let new_model = update_fn(model, action) in
@@ -427,7 +492,7 @@
     beside combines two profunctors to work alongside each other
   ]]--
   beside: !Profunctor * !Profunctor -> !Profunctor [p1 p2 ->
-    profunctor([pre post f -> [c -> 
+    profunctor([pre post f -> [c ->
       let (a1, a2) = pre(c) in
       let b1 = p1.dimap([x -> x], [x -> x], f)([a1]) in
       let b2 = p2.dimap([x -> x], [x -> x], f)([a2]) in
@@ -446,7 +511,7 @@
     branch combines two profunctors with a choice
   ]]--
   branch: !Profunctor * !Profunctor -> !Profunctor [p1 p2 ->
-    profunctor([pre post f -> [c -> 
+    profunctor([pre post f -> [c ->
       match pre(c) with
         | Left(a1) -> post(Left(p1.dimap([x -> x], [x -> x], f)(a1)))
         | Right(a2) -> post(Right(p2.dimap([x -> x], [x -> x], f)(a2)))
@@ -457,7 +522,7 @@
     merge combines two profunctors into one
   ]]--
   merge: !Profunctor * !Profunctor -> !Profunctor [p1 p2 ->
-    profunctor([pre post f -> [c -> 
+    profunctor([pre post f -> [c ->
       let r1 = p1.dimap(pre, post, f)(c) in
       let r2 = p2.dimap(pre, post, f)(c) in
       -- In a real implementation, we'd need to merge results intelligently
@@ -487,8 +552,8 @@
     ... is profunctor composition
   ]]--
   ...: !Profunctor * !Profunctor -> !Profunctor [p1 p2 ->
-    profunctor([pre post f -> 
-      p1.dimap(pre, [x -> x], [a -> 
+    profunctor([pre post f ->
+      p1.dimap(pre, [x -> x], [a ->
         p2.dimap([x -> x], post, f)(a)
       ])
     ])
@@ -541,4 +606,4 @@
   law.left_right: !Choice * (a -> b) -> Bool [c f ->
     c.left(c.right(f)) == c.right(c.left(f))
   ]
-} 
+}

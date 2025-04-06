@@ -1,9 +1,9 @@
 --[[
   Stream Transformations
-  
+
   This module defines transformations between stream categories,
   providing compatibility with our naming conventions.
-  
+
   While streams are a user-friendly wrapper around generators,
   maintaining a consistent naming pattern with dedicated transformation
   modules is valuable for code organization and discoverability.
@@ -15,14 +15,14 @@
     StreamFunctor
     StreamNatTransformation
     StreamAdjunction
-    
+
     -- Special functors
     MapFunctor
     FilterFunctor
     TakeFunctor
     ZipFunctor
     FlattenFunctor
-    
+
     -- Stream category
     StreamCategory
   }
@@ -37,23 +37,23 @@
     stream_functor
     stream_nat_transformation
     stream_adjunction
-    
+
     -- Functor constructors
     map_functor
     filter_functor
     take_functor
     zip_functor
     flatten_functor
-    
+
     -- Functor operations
     apply_functor
     compose_functors
-    
+
     -- Natural transformation operations
     apply_nat_transformation
     vertical_composition
     horizontal_composition
-    
+
     -- Category construction
     stream_category
   }
@@ -272,9 +272,9 @@
   --------------------------------------------------
 
   --[[
-    Structure mapping that establishes @StreamXf as a category of 
+    Structure mapping that establishes @StreamXf as a category of
     transformations between stream categories.
-    
+
     This forwards to the GeneratorXf structure mapping with
     appropriate adaptations for streams.
   ]]--
@@ -282,27 +282,27 @@
     -- Map StreamXf to a category
     objects: StreamFunctor,
     morphisms: StreamNatTransformation,
-    
+
     -- Base category structure (delegated to GeneratorXf)
     dom: [nt -> nt.source_functor],
     cod: [nt -> nt.target_functor],
     id: [f -> @GeneratorXf.structure.id(f)],
     compose: [alpha beta -> vertical_composition(alpha, beta)],
-    
+
     -- Functor constructors
     map_functor: map_functor,
     filter_functor: filter_functor,
     take_functor: take_functor,
     zip_functor: zip_functor,
     flatten_functor: flatten_functor,
-    
+
     -- Functor operations
     apply_functor: apply_functor,
     compose_functors: compose_functors,
-    
+
     -- Category construction
     stream_category: stream_category,
-    
+
     -- Laws are the same as GeneratorXf
     law: @GeneratorXf.structure.law
   }
@@ -318,27 +318,27 @@
     functor_example: () -> @Stream.Stream.Z [->
       -- Create a stream
       let numbers = @Stream.from_range(1, 10, 1) in
-      
+
       -- Create a map functor
       let double_functor = map_functor([x -> x * 2]) in
-      
+
       -- Apply the specialized functor (converts to generator then back to stream)
       let gen_result = @GeneratorXf.apply_specialized_functor(
         double_functor,
         numbers.generator
       ) in
-      
+
       -- Convert back to stream
       @Stream.stream(gen_result)
     ],
-    
+
     --[[
       Example 2: Stream functors with categories
     ]]--
     stream_category_example: () -> @Stream.Stream.Z [->
       -- Create a stream category
       let stream_cat = stream_category("StreamCat") in
-      
+
       -- Create an endofunctor on streams
       let endo_functor = stream_functor(
         "StreamEndo",
@@ -347,19 +347,19 @@
         [s -> @Stream.map(s, [x -> x * 3])],
         [f -> [x -> f(x * 3)]]
       ) in
-      
+
       -- Apply to a stream
       let numbers = @Stream.from_range(1, 5, 1) in
       apply_functor(endo_functor, numbers)
     ],
-    
+
     --[[
       Example 3: Natural transformations between stream functors
     ]]--
     nat_transformation_example: () -> @Stream.Stream.Z [->
       -- Create a stream category
       let stream_cat = stream_category("StreamCat") in
-      
+
       -- Create two endofunctors
       let double_functor = stream_functor(
         "Double",
@@ -368,7 +368,7 @@
         [s -> @Stream.map(s, [x -> x * 2])],
         [f -> [x -> f(x * 2)]]
       ) in
-      
+
       let square_functor = stream_functor(
         "Square",
         stream_cat,
@@ -376,7 +376,7 @@
         [s -> @Stream.map(s, [x -> x * x])],
         [f -> [x -> f(x * x)]]
       ) in
-      
+
       -- Create a natural transformation between them
       let double_to_square = stream_nat_transformation(
         "DoubleToSquare",
@@ -384,11 +384,11 @@
         square_functor,
         [s -> s]  -- Identity component with different functors
       ) in
-      
+
       -- Apply to a stream
       let numbers = @Stream.from_range(1, 5, 1) in
       let doubled = apply_functor(double_functor, numbers) in
       apply_nat_transformation(double_to_square, doubled)
     ]
   }
-} 
+}

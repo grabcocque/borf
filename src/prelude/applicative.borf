@@ -1,0 +1,682 @@
+--[[
+  Applicative Categories
+  
+  This module defines applicative categories, which are categories equipped with
+  a limited form of computational context that is weaker than monads but stronger
+  than plain functors.
+  
+  Applicative categories provide a foundation for:
+  - Sequential computation with context
+  - Independent/parallel effects
+  - Function lifting and application
+  
+  This implementation uses linear types instead of monadic patterns to
+  ensure proper resource tracking and direct composition.
+]]--
+
+@Applicative: {
+  typ: {
+    -- Core types
+    !ApplicativeCategory
+    !Pure
+    !Apply
+    !Lift
+    
+    -- Specific instances
+    !OptionApplicative
+    !ResultApplicative
+    !ListApplicative
+    !IOApplicative
+  }
+
+  op: {
+    -- Applicative operators
+    <*>   -- Sequential application
+    <$>   -- Functor map
+    <**>  -- Reverse application
+    *>    -- Sequence, discarding first result
+    <*    -- Sequence, discarding second result
+    -o>   -- Linear function application
+  }
+
+  fn: {
+    -- Core functions
+    applicative_category
+    pure
+    apply
+    lift
+    lift2
+    lift3
+    
+    -- Derived operations
+    sequence
+    traverse
+    
+    -- Instance constructors
+    option_applicative
+    result_applicative
+    list_applicative
+    io_applicative
+    
+    -- Standard instances
+    standard_applicative
+  }
+
+  E: typ cup op cup fn
+
+  vis: E |> [e -> true]
+
+  deps: {
+    (@Applicative, @Linear, true),  -- Add dependency on Linear types
+    (@Applicative, @Cat, true),     -- Add dependency on Category
+    (@Applicative, @T, true)        -- Add dependency on Type system
+  }
+
+  --------------------------------------------------
+  -- Core Types
+  --------------------------------------------------
+
+  --[[
+    !ApplicativeCategory represents an applicative category.
+    
+    An applicative category is a category equipped with a pure operation
+    that lifts values into a computational context, and an apply operation
+    that applies a function in a context to a value in the same context.
+  ]]--
+  !ApplicativeCategory: {
+    _type: "ApplicativeCategory",
+    base_category: @Cat.Category,   -- The underlying category
+    pure_op: (a -> F a),            -- Pure operation: lifts values
+    apply_op: (F (a -o> b) * F a -> F b),  -- Apply operation: applies lifted functions
+    
+    -- Laws that should hold for a valid applicative
+    identity_law: Bool,             -- pure id <*> v = v
+    composition_law: Bool,          -- pure (.) <*> u <*> v <*> w = u <*> (v <*> w)
+    homomorphism_law: Bool,         -- pure f <*> pure x = pure (f x)
+    interchange_law: Bool           -- u <*> pure y = pure ($ y) <*> u
+  }
+
+  --[[
+    !Pure represents a pure operation that lifts a value
+    into an applicative context.
+  ]]--
+  !Pure: {
+    _type: "Pure",
+    category: !ApplicativeCategory,  -- The applicative category
+    value: a,                        -- The value to lift
+    result: F a                      -- The lifted value
+  }
+
+  --[[
+    !Apply represents an apply operation that applies a lifted function
+    to a lifted value.
+  ]]--
+  !Apply: {
+    _type: "Apply",
+    category: !ApplicativeCategory,  -- The applicative category
+    function: F (a -o> b),           -- The lifted function
+    value: F a,                      -- The lifted value
+    result: F b                      -- The result of applying the function
+  }
+
+  --[[
+    !Lift represents a lifting of a multi-argument function.
+  ]]--
+  !Lift: {
+    _type: "Lift",
+    category: !ApplicativeCategory,  -- The applicative category
+    function: (a -o> b),             -- The function to lift
+    args: [F a],                     -- The lifted arguments
+    result: F b                      -- The result of the lifting
+  }
+
+  --[[
+    !OptionApplicative represents an applicative category for optional values.
+  ]]--
+  !OptionApplicative: {
+    _type: "OptionApplicative",
+    base: !ApplicativeCategory       -- The underlying applicative category
+  }
+
+  --[[
+    !ResultApplicative represents an applicative category for results with errors.
+  ]]--
+  !ResultApplicative: {
+    _type: "ResultApplicative",
+    base: !ApplicativeCategory,      -- The underlying applicative category
+    error_type: e                    -- The error type
+  }
+
+  --[[
+    !ListApplicative represents an applicative category for lists.
+  ]]--
+  !ListApplicative: {
+    _type: "ListApplicative",
+    base: !ApplicativeCategory       -- The underlying applicative category
+  }
+
+  --[[
+    !IOApplicative represents an applicative category for IO operations.
+  ]]--
+  !IOApplicative: {
+    _type: "IOApplicative",
+    base: !ApplicativeCategory       -- The underlying applicative category
+  }
+
+  --------------------------------------------------
+  -- Core Functions
+  --------------------------------------------------
+
+  --[[
+    applicative_category creates an applicative category.
+  ]]--
+  applicative_category: S * @Cat.Category * 
+                      (a -> F a) * 
+                      (F (a -o> b) * F a -> F b) -> 
+                      !ApplicativeCategory [
+    name base pure_op apply_op ->
+    {
+      _type: "ApplicativeCategory",
+      base_category: base,
+      pure_op: pure_op,
+      apply_op: apply_op,
+      
+      -- Laws are assumed to hold, should be verified
+      identity_law: true,
+      composition_law: true,
+      homomorphism_law: true,
+      interchange_law: true
+    }
+  ]
+
+  --[[
+    pure lifts a value into an applicative context.
+  ]]--
+  pure: !ApplicativeCategory * a -> !Pure [
+    category value ->
+    {
+      _type: "Pure",
+      category: category,
+      value: value,
+      result: category.pure_op(value)
+    }
+  ]
+
+  --[[
+    apply applies a function in a context to a value in a context.
+  ]]--
+  apply: !ApplicativeCategory * F (a -o> b) * F a -> !Apply [
+    category function value ->
+    {
+      _type: "Apply",
+      category: category,
+      function: function,
+      value: value,
+      result: category.apply_op((function, value))
+    }
+  ]
+
+  --[[
+    lift lifts a function to operate on values in an applicative context.
+  ]]--
+  lift: !ApplicativeCategory * (a -o> b) * F a -> F b [
+    category f x ->
+    let lifted_f = pure(category, f).result in
+    apply(category, lifted_f, x).result
+  ]
+
+  --[[
+    lift2 lifts a binary function to operate on values in an applicative context.
+  ]]--
+  lift2: !ApplicativeCategory * (a -o> b -o> c) * F a * F b -> F c [
+    category f x y ->
+    let lifted_f = pure(category, f).result in
+    let intermediate = apply(category, lifted_f, x).result in
+    apply(category, intermediate, y).result
+  ]
+
+  --[[
+    lift3 lifts a ternary function to operate on values in an applicative context.
+  ]]--
+  lift3: !ApplicativeCategory * (a -o> b -o> c -o> d) * F a * F b * F c -> F d [
+    category f x y z ->
+    let lifted_f = pure(category, f).result in
+    let step1 = apply(category, lifted_f, x).result in
+    let step2 = apply(category, step1, y).result in
+    apply(category, step2, z).result
+  ]
+
+  --------------------------------------------------
+  -- Derived Operations
+  --------------------------------------------------
+
+  --[[
+    sequence converts a list of applicative values into an applicative list.
+  ]]--
+  sequence: !ApplicativeCategory * [F a] -> F [a] [
+    category xs ->
+    if xs.length == 0 {
+      pure(category, []).result
+    } else {
+      let cons = [x xs -o> [x] + xs] in
+      let pure_cons = pure(category, cons).result in
+      
+      xs.foldl(
+        pure(category, []).result,
+        [acc x ->
+          let lifted_cons = apply(category, pure_cons, x).result in
+          apply(category, lifted_cons, acc).result
+        ]
+      )
+    }
+  ]
+
+  --[[
+    traverse applies a function that returns an applicative value to each
+    element of a list, and collects the results in an applicative list.
+  ]]--
+  traverse: !ApplicativeCategory * (a -o> F b) * [a] -> F [b] [
+    category f xs ->
+    sequence(category, xs.map(f))
+  ]
+
+  --------------------------------------------------
+  -- Instance Constructors
+  --------------------------------------------------
+
+  --[[
+    option_applicative creates an applicative category for optional values.
+  ]]--
+  option_applicative: S -> !OptionApplicative [
+    name ->
+    let pure_op = [a -> Some(a)] in
+    
+    let apply_op = [(mf, ma) ->
+      match mf {
+        None -> None,
+        Some(f) -> match ma {
+          None -> None,
+          Some(a) -> Some(f(a))
+        }
+      }
+    ] in
+    
+    {
+      _type: "OptionApplicative",
+      base: applicative_category(name, @Cat.structure, pure_op, apply_op)
+    }
+  ]
+
+  --[[
+    result_applicative creates an applicative category for results with errors.
+  ]]--
+  result_applicative: S * e -> !ResultApplicative [
+    name error_type ->
+    let pure_op = [a -> Ok(a)] in
+    
+    let apply_op = [(mf, ma) ->
+      match mf {
+        Err(e) -> Err(e),
+        Ok(f) -> match ma {
+          Err(e) -> Err(e),
+          Ok(a) -> Ok(f(a))
+        }
+      }
+    ] in
+    
+    {
+      _type: "ResultApplicative",
+      base: applicative_category(name, @Cat.structure, pure_op, apply_op),
+      error_type: error_type
+    }
+  ]
+
+  --[[
+    list_applicative creates an applicative category for lists.
+  ]]--
+  list_applicative: S -> !ListApplicative [
+    name ->
+    let pure_op = [a -> [a]] in
+    
+    let apply_op = [(fs, xs) ->
+      -- Apply each function in fs to each element in xs, concatenating the results
+      fs.flatMap([f -> xs.map(f)])
+    ] in
+    
+    {
+      _type: "ListApplicative",
+      base: applicative_category(name, @Cat.structure, pure_op, apply_op)
+    }
+  ]
+
+  --[[
+    io_applicative creates an applicative category for IO operations.
+  ]]--
+  io_applicative: S -> !IOApplicative [
+    name ->
+    let pure_op = [a -> 
+      -- Create an IO computation that just returns the value
+      [() -o> a]
+    ] in
+    
+    let apply_op = [(io_f, io_x) ->
+      -- Sequence the two IO computations and apply the function
+      [() -o>
+        let f = io_f() in
+        let x = io_x() in
+        f(x)
+      ]
+    ] in
+    
+    {
+      _type: "IOApplicative",
+      base: applicative_category(name, @Cat.structure, pure_op, apply_op)
+    }
+  ]
+
+  --------------------------------------------------
+  -- Operators
+  --------------------------------------------------
+
+  --[[
+    <*> represents the apply operation
+  ]]--
+  <*>: F (a -o> b) * F a -> F b [
+    f x ->
+    apply(standard_applicative, f, x).result
+  ]
+
+  --[[
+    <$> represents the functor map operation
+  ]]--
+  <$>: (a -o> b) * F a -> F b [
+    f x ->
+    let pure_f = pure(standard_applicative, f).result in
+    pure_f <*> x
+  ]
+
+  --[[
+    <**> represents reverse application
+  ]]--
+  <**>: F a * F (a -o> b) -> F b [
+    x f ->
+    f <*> x
+  ]
+
+  --[[
+    *> sequences two applicative computations, discarding the result of the first
+  ]]--
+  *>: F a * F b -> F b [
+    a b ->
+    let const_b = [_ _ -o> _2] in
+    const_b <$> a <*> b
+  ]
+
+  --[[
+    <* sequences two applicative computations, discarding the result of the second
+  ]]--
+  <*: F a * F b -> F a [
+    a b ->
+    let const_a = [a _ -o> a] in
+    const_a <$> a <*> b
+  ]
+
+  --[[
+    -o> represents linear function application
+  ]]--
+  -o>: a * (a -o> b) -> b [
+    x f ->
+    f(x)
+  ]
+
+  --------------------------------------------------
+  -- Standard Instances
+  --------------------------------------------------
+
+  --[[
+    Standard applicative category based on the Option type
+  ]]--
+  standard_applicative: !ApplicativeCategory = option_applicative("StandardApplicative").base
+
+  --------------------------------------------------
+  -- Structure Mapping to Categorical Semantics
+  --------------------------------------------------
+
+  --[[
+    Structure mapping that establishes @Applicative as a categorical structure.
+    
+    In this categorical structure:
+    - Objects are types
+    - Morphisms are functions with applicative context
+    - Identity is the pure function lifted into the context
+    - Composition is sequential application in the context
+    
+    This forms an applicative category, which enhances a regular category
+    with the ability to lift values and functions into a computational context
+    and sequence computations within that context.
+  ]]--
+  structure: {
+    -- Map Applicative to a category
+    objects: a,
+    morphisms: (a -o> F b),
+    
+    -- Core category operations
+    dom: [f -> typeof(a) given f: (a -o> F b)],
+    cod: [f -> typeof(F b) given f: (a -o> F b)],
+    id: [a -> [x -o> pure(standard_applicative, x).result]],
+    compose: [f g -> [a -o>
+      let fb = f(a) in
+      
+      -- Extract the function from the result of f
+      -- This requires transforming from F b to F (b -o> c), which depends
+      -- on the specific applicative instance
+      -- For a general case, we'll use flatMap/bind if available
+      let fc = fb.flatMap(g)
+      
+      -- Alternatively, for a general solution:
+      -- let lifted_g = lift(standard_applicative, g, fb)
+      
+      fc
+    ]],
+    
+    -- Applicative structure
+    applicative: {
+      pure: [a -> pure(standard_applicative, a).result],
+      
+      apply: [f x -> apply(standard_applicative, f, x).result],
+      
+      lift: [f x -> lift(standard_applicative, f, x)],
+      
+      lift2: [f x y -> lift2(standard_applicative, f, x, y)],
+      
+      sequence: [xs -> sequence(standard_applicative, xs)],
+      
+      traverse: [f xs -> traverse(standard_applicative, f, xs)]
+    },
+    
+    -- Laws
+    law: {
+      -- Category laws
+      identity: [f -> 
+        compose(id(dom(f)), f) == f && 
+        compose(f, id(cod(f))) == f
+      ],
+      
+      associativity: [f g h -> 
+        compose(compose(f, g), h) == compose(f, compose(g, h))
+      ],
+      
+      -- Applicative laws
+      identity_law: [v -> 
+        -- pure id <*> v = v
+        let id_fn = [x -o> x] in
+        let pure_id = pure(standard_applicative, id_fn).result in
+        apply(standard_applicative, pure_id, v).result == v
+      ],
+      
+      homomorphism_law: [f x -> 
+        -- pure f <*> pure x = pure (f x)
+        let pure_f = pure(standard_applicative, f).result in
+        let pure_x = pure(standard_applicative, x).result in
+        apply(standard_applicative, pure_f, pure_x).result == 
+        pure(standard_applicative, f(x)).result
+      ],
+      
+      interchange_law: [u y -> 
+        -- u <*> pure y = pure ($ y) <*> u
+        let pure_y = pure(standard_applicative, y).result in
+        let apply_to_y = [f -o> f(y)] in
+        let pure_apply_to_y = pure(standard_applicative, apply_to_y).result in
+        
+        apply(standard_applicative, u, pure_y).result ==
+        apply(standard_applicative, pure_apply_to_y, u).result
+      ],
+      
+      composition_law: [u v w -> 
+        -- pure (.) <*> u <*> v <*> w = u <*> (v <*> w)
+        let compose_fn = [f g x -o> f(g(x))] in
+        let pure_compose = pure(standard_applicative, compose_fn).result in
+        
+        apply(
+          standard_applicative,
+          apply(
+            standard_applicative,
+            apply(standard_applicative, pure_compose, u).result,
+            v
+          ).result,
+          w
+        ).result ==
+        apply(
+          standard_applicative,
+          u,
+          apply(standard_applicative, v, w).result
+        ).result
+      ],
+      
+      -- Additional laws for derived operations
+      lift_law: [f x -> 
+        lift(standard_applicative, f, x) == 
+        apply(standard_applicative, pure(standard_applicative, f).result, x).result
+      ],
+      
+      sequence_law: [xs -> 
+        -- sequence is equivalent to traversing with identity
+        sequence(standard_applicative, xs) == 
+        traverse(standard_applicative, [x -o> x], xs)
+      ]
+    }
+  }
+
+  --------------------------------------------------
+  -- Examples
+  --------------------------------------------------
+
+  example: {
+    --[[
+      Example 1: Using the Option applicative
+    ]]--
+    option_example: Z * Z -> Option Z [
+      (x, y) ->
+      let app = option_applicative("OptionExample").base in
+      
+      let add = [a b -o> a + b] in
+      
+      -- Apply the function to two optional values
+      let opt_x = Some(x) in
+      let opt_y = Some(y) in
+      
+      lift2(app, add, opt_x, opt_y)
+    ],
+    
+    --[[
+      Example 2: Using the Result applicative for validation
+    ]]--
+    validation_example: S * Z -> Result Z S [
+      (name, age) ->
+      let app = result_applicative("ValidationExample", S).base in
+      
+      -- Validate inputs independently
+      let validate_name = [name -o>
+        if name.length > 0 {
+          Ok(name)
+        } else {
+          Err("Name cannot be empty")
+        }
+      ] in
+      
+      let validate_age = [age -o>
+        if age >= 0 && age <= 120 {
+          Ok(age)
+        } else {
+          Err("Age must be between 0 and 120")
+        }
+      ] in
+      
+      let make_person = [name age -o> {
+        name: name,
+        age: age
+      }] in
+      
+      -- Apply validations applicatively
+      let name_result = validate_name(name) in
+      let age_result = validate_age(age) in
+      
+      // In real validation, we'd collect all errors, but for simplicity:
+      lift2(app, make_person, name_result, age_result)
+    ],
+    
+    --[[
+      Example 3: Using the List applicative for combinations
+    ]]--
+    list_combination_example: [Z] * [Z] -> [Z] [
+      (xs, ys) ->
+      let app = list_applicative("ListExample").base in
+      
+      let add = [a b -o> a + b] in
+      
+      -- Generate all combinations of elements from xs and ys
+      lift2(app, add, xs, ys)
+    ],
+    
+    --[[
+      Example 4: Using traverse to transform a list
+    ]]--
+    traverse_example: [Z] -> Option [Z] [
+      xs ->
+      let app = option_applicative("TraverseExample").base in
+      
+      let safe_sqrt = [x -o>
+        if x >= 0 {
+          Some(sqrt(x))
+        } else {
+          None
+        }
+      ] in
+      
+      -- Apply safe_sqrt to each element, collecting the results
+      traverse(app, safe_sqrt, xs)
+    ],
+    
+    --[[
+      Example 5: Using the IO applicative for sequencing operations
+    ]]--
+    io_example: S * S -> (() -o> (S, S)) [
+      (file1, file2) ->
+      let app = io_applicative("IOExample").base in
+      
+      -- Create IO operations to read files
+      let read_file = [filename -o> [() -o>
+        -- Simulate reading a file
+        "Contents of " + filename
+      ]] in
+      
+      let read1 = read_file(file1) in
+      let read2 = read_file(file2) in
+      
+      -- Combine the results
+      let combine = [content1 content2 -o> (content1, content2)] in
+      
+      lift2(app, combine, read1, read2)
+    ]
+  }
+} 

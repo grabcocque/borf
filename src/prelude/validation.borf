@@ -17,7 +17,7 @@
   op: {
     -- Applicative operators
     <*> <$> <|> &&&
-    
+
     -- Validation operators
     ==> .? ?? !? |>
   }
@@ -26,30 +26,30 @@
     -- Core validation types
     success failure valid invalid validate
     map_valid is_valid get_value get_errors
-    
+
     -- Validation combinators
     sequence all any when unless check_that
     constraint ensure required optional
     compose_validators transform_errors
-    
+
     -- Common validators
     not_empty min_length max_length matches
     min_value max_value between range in_set is_one_of
     is_email is_url is_date is_numeric is_alpha
-    
+
     -- Object validators
     has_field field_satisfies each_key_satisfies each_value_satisfies
     satisfies_schema with_context
-    
+
     -- Validation runners
     run_validation validate_form validate_object validate_array
-    
+
     -- Reporting helpers
     format_errors group_errors errors_by_field error_summary
-    
+
     -- Applicative interface
     pure apply lift2 lift3 lift4 apply_all
-    
+
     -- Laws
     law.identity law.composition law.homomorphism
     law.interchange law.failure_identity
@@ -187,7 +187,7 @@
   ]]--
   validate: (a -> Bool) * S * S -> !Validator [predicate code message ->
     {
-      validate: [value -> 
+      validate: [value ->
         if predicate(value) {
           success(value)
         } else {
@@ -258,12 +258,12 @@
     } else {
       let results = zip_with(a, validators, [value validator -> validator.validate(value)]) in
       let all_errors = flat_map(results, [result -> get_errors(result)]) in
-      let all_values = flat_map(results, [result -> 
+      let all_values = flat_map(results, [result ->
         match result with
           | !Validation.Valid { value } -> [value]
           | !Validation.Invalid _ -> []
       ]) in
-      
+
       if length(all_errors) > 0 {
         !Validation.Invalid { errors: all_errors }
       } else {
@@ -278,7 +278,7 @@
   all: a * [!Validator] -> !Validation [value validators ->
     let results = validators |> map [validator -> validator.validate(value)] in
     let all_errors = flat_map(results, [result -> get_errors(result)]) in
-    
+
     if length(all_errors) > 0 {
       !Validation.Invalid { errors: all_errors }
     } else {
@@ -292,7 +292,7 @@
   any: a * [!Validator] -> !Validation [value validators ->
     let results = validators |> map [validator -> validator.validate(value)] in
     let valid_result = find(results, [result -> is_valid(result)]) in
-    
+
     match valid_result with
       | ?Some(result) -> result
       | ?None -> !Validation.Invalid { errors: flat_map(results, [result -> get_errors(result)]) }
@@ -303,7 +303,7 @@
   ]]--
   when: (a -> Bool) * !Validator -> !Validator [condition validator ->
     {
-      validate: [value -> 
+      validate: [value ->
         if condition(value) {
           validator.validate(value)
         } else {
@@ -327,7 +327,7 @@
   ]]--
   check_that: !Check -> !Validator [check ->
     {
-      validate: [value -> 
+      validate: [value ->
         if check.predicate(value) {
           success(value)
         } else {
@@ -379,7 +379,7 @@
   ]]--
   optional: !Validator -> !Validator [validator ->
     {
-      validate: [value -> 
+      validate: [value ->
         if value == null || value == undefined {
           success(value)
         } else {
@@ -407,11 +407,11 @@
   ]]--
   transform_errors: !Validator * (S -> S) -> !Validator [validator transform ->
     {
-      validate: [value -> 
+      validate: [value ->
         let result = validator.validate(value) in
         match result with
           | !Validation.Valid _ -> result
-          | !Validation.Invalid { errors } -> 
+          | !Validation.Invalid { errors } ->
               let transformed_errors = errors |> map [error -> {
                 code: error.code,
                 message: transform(error.message),
@@ -606,7 +606,7 @@
   ]]--
   field_satisfies: S * !Validator -> !Validator [field validator ->
     {
-      validate: [obj -> 
+      validate: [obj ->
         if typeof(obj) != typeof({}) {
           failure({
             code: "invalid_object",
@@ -625,7 +625,7 @@
           let result = validator.validate(obj[field]) in
           match result with
             | !Validation.Valid { value } -> success(obj)
-            | !Validation.Invalid { errors } -> 
+            | !Validation.Invalid { errors } ->
                 let field_errors = errors |> map [error -> {
                   code: error.code,
                   message: error.message,
@@ -645,7 +645,7 @@
   ]]--
   each_key_satisfies: !Validator -> !Validator [validator ->
     {
-      validate: [obj -> 
+      validate: [obj ->
         if typeof(obj) != typeof({}) {
           failure({
             code: "invalid_object",
@@ -655,11 +655,11 @@
           })
         } else {
           let keys = object_keys(obj) in
-          let results = keys |> map [key -> 
+          let results = keys |> map [key ->
             let result = validator.validate(key) in
             match result with
               | !Validation.Valid _ -> result
-              | !Validation.Invalid { errors } -> 
+              | !Validation.Invalid { errors } ->
                   let key_errors = errors |> map [error -> {
                     code: error.code,
                     message: error.message,
@@ -669,7 +669,7 @@
                   !Validation.Invalid { errors: key_errors }
           ] in
           let all_errors = flat_map(results, [result -> get_errors(result)]) in
-          
+
           if length(all_errors) > 0 {
             !Validation.Invalid { errors: all_errors }
           } else {
@@ -687,7 +687,7 @@
   ]]--
   each_value_satisfies: !Validator -> !Validator [validator ->
     {
-      validate: [obj -> 
+      validate: [obj ->
         if typeof(obj) != typeof({}) {
           failure({
             code: "invalid_object",
@@ -697,12 +697,12 @@
           })
         } else {
           let entries = object_entries(obj) in
-          let results = entries |> map [entry -> 
+          let results = entries |> map [entry ->
             let [key, value] = entry in
             let result = validator.validate(value) in
             match result with
               | !Validation.Valid _ -> result
-              | !Validation.Invalid { errors } -> 
+              | !Validation.Invalid { errors } ->
                   let value_errors = errors |> map [error -> {
                     code: error.code,
                     message: error.message,
@@ -712,7 +712,7 @@
                   !Validation.Invalid { errors: value_errors }
           ] in
           let all_errors = flat_map(results, [result -> get_errors(result)]) in
-          
+
           if length(all_errors) > 0 {
             !Validation.Invalid { errors: all_errors }
           } else {
@@ -730,7 +730,7 @@
   ]]--
   satisfies_schema: {S: !Validator} -> !Validator [schema ->
     {
-      validate: [obj -> 
+      validate: [obj ->
         if typeof(obj) != typeof({}) {
           failure({
             code: "invalid_object",
@@ -740,7 +740,7 @@
           })
         } else {
           let schema_entries = object_entries(schema) in
-          let results = schema_entries |> map [entry -> 
+          let results = schema_entries |> map [entry ->
             let [key, validator] = entry in
             if obj[key] == null || obj[key] == undefined {
               !Validation.Invalid { errors: [{
@@ -753,7 +753,7 @@
               let result = validator.validate(obj[key]) in
               match result with
                 | !Validation.Valid _ -> result
-                | !Validation.Invalid { errors } -> 
+                | !Validation.Invalid { errors } ->
                     let field_errors = errors |> map [error -> {
                       code: error.code,
                       message: error.message,
@@ -764,7 +764,7 @@
             }
           ] in
           let all_errors = flat_map(results, [result -> get_errors(result)]) in
-          
+
           if length(all_errors) > 0 {
             !Validation.Invalid { errors: all_errors }
           } else {
@@ -782,11 +782,11 @@
   ]]--
   with_context: !Validator * !ValidationContext -> !Validator [validator context ->
     {
-      validate: [value -> 
+      validate: [value ->
         let result = validator.validate(value) in
         match result with
           | !Validation.Valid _ -> result
-          | !Validation.Invalid { errors } -> 
+          | !Validation.Invalid { errors } ->
               let contextualized_errors = errors |> map [error -> {
                 code: error.code,
                 message: error.message,
@@ -818,25 +818,25 @@
     let results = {} in
     let errors_by_field = {} in
     let all_valid = true in
-    
+
     let form_entries = object_entries(form) in
     let schema_entries = object_entries(schema) in
-    
+
     -- Validate each field with its validator
-    schema_entries |> for_each [entry -> 
+    schema_entries |> for_each [entry ->
       let [field, validator] = entry in
       let value = form[field] in
       let validation = validator.validate(value) in
-      
+
       match validation with
         | !Validation.Valid { value } -> results[field] = value
-        | !Validation.Invalid { errors } -> 
+        | !Validation.Invalid { errors } ->
             all_valid = false;
             errors_by_field[field] = errors
     ];
-    
+
     -- Check for fields in schema not in form
-    schema_entries |> for_each [entry -> 
+    schema_entries |> for_each [entry ->
       let [field, _] = entry in
       if form[field] == null || form[field] == undefined {
         if !errors_by_field[field] {
@@ -850,7 +850,7 @@
         }
       }
     ];
-    
+
     {
       values: results,
       errors: errors_by_field,
@@ -873,13 +873,13 @@
     let results = [a] |> map [item -> validator.validate(item)] in
     let errors_by_index = {} in
     let all_valid = true in
-    
-    results |> for_each_with_index [result index -> 
+
+    results |> for_each_with_index [result index ->
       match result with
         | !Validation.Valid _ -> {}
-        | !Validation.Invalid { errors } -> 
+        | !Validation.Invalid { errors } ->
             all_valid = false;
-            
+
             -- Add index to path
             let indexed_errors = errors |> map [error -> {
               code: error.code,
@@ -887,10 +887,10 @@
               path: [to_string(index)] + error.path,
               details: error.details
             }] in
-            
+
             errors_by_index[to_string(index)] = indexed_errors
     ];
-    
+
     if all_valid {
       !Validation.Valid { value: [a] }
     } else {
@@ -906,7 +906,7 @@
     format_errors formats validation errors into readable strings
   ]]--
   format_errors: [!ValidationError] -> [S] [errors ->
-    errors |> map [error -> 
+    errors |> map [error ->
       let path_str = join(error.path, ".") in
       if path_str == "" {
         error.message
@@ -921,15 +921,15 @@
   ]]--
   group_errors: [!ValidationError] -> {S: [!ValidationError]} [errors ->
     let grouped = {} in
-    
-    errors |> for_each [error -> 
+
+    errors |> for_each [error ->
       let path_key = error.path[0] || "general" in
       if !grouped[path_key] {
         grouped[path_key] = []
       }
       grouped[path_key] = grouped[path_key] + [error]
     ];
-    
+
     grouped
   ]
 
@@ -939,18 +939,18 @@
   errors_by_field: !Validation -> {S: [S]} [validation ->
     match validation with
       | !Validation.Valid _ -> {}
-      | !Validation.Invalid { errors } -> 
+      | !Validation.Invalid { errors } ->
           let grouped = group_errors(errors) in
-          
+
           -- Convert each group to string messages
           let result = {} in
           let entries = object_entries(grouped) in
-          
-          entries |> for_each [entry -> 
+
+          entries |> for_each [entry ->
             let [field, field_errors] = entry in
             result[field] = format_errors(field_errors)
           ];
-          
+
           result
   ]
 
@@ -960,7 +960,7 @@
   error_summary: !Validation -> S [validation ->
     match validation with
       | !Validation.Valid _ -> "No errors"
-      | !Validation.Invalid { errors } -> 
+      | !Validation.Invalid { errors } ->
           let messages = format_errors(errors) in
           join(messages, "\n")
   ]
@@ -981,7 +981,7 @@
   ]]--
   apply: !Validation * !Validation -> !Validation [vf va ->
     match (vf, va) with
-      | (!Validation.Valid { value: f }, !Validation.Valid { value: a }) -> 
+      | (!Validation.Valid { value: f }, !Validation.Valid { value: a }) ->
           !Validation.Valid { value: f(a) }
       | (!Validation.Invalid { errors: e1 }, !Validation.Valid _) ->
           !Validation.Invalid { errors: e1 }
@@ -1026,8 +1026,8 @@
     } else {
       let init = map_valid(v[0], [a -> [a]]) in
       let rest = slice(v, 1, length(v)) in
-      
-      rest |> fold [result valid -> 
+
+      rest |> fold [result valid ->
         lift2([acc x -> acc + [x]], result, valid)
       ] init
     }
@@ -1065,15 +1065,15 @@
   ]]--
   &&&: !Validator * !Validator -> !Validator [v1 v2 ->
     {
-      validate: [value -> 
+      validate: [value ->
         let result1 = v1.validate(value) in
         let result2 = v2.validate(value) in
-        
+
         match (result1, result2) with
           | (!Validation.Valid _, !Validation.Valid _) -> success(value)
           | (!Validation.Invalid { errors: e1 }, !Validation.Valid _) -> !Validation.Invalid { errors: e1 }
           | (!Validation.Valid _, !Validation.Invalid { errors: e2 }) -> !Validation.Invalid { errors: e2 }
-          | (!Validation.Invalid { errors: e1 }, !Validation.Invalid { errors: e2 }) -> 
+          | (!Validation.Invalid { errors: e1 }, !Validation.Invalid { errors: e2 }) ->
               !Validation.Invalid { errors: e1 + e2 }
       ],
       code: "combined",
@@ -1134,13 +1134,13 @@
   zip_with: [a] * [b] * (a * b -> c) -> [c] [as bs f ->
     let result = [] in
     let length_to_use = min(length(as), length(bs)) in
-    
+
     let i = 0 in
     while i < length_to_use {
       result = result + [f(as[i], bs[i])];
       i = i + 1
     };
-    
+
     result
   ]
 
@@ -1149,12 +1149,12 @@
   ]]--
   flat_map: [a] * (a -> [b]) -> [b] [xs f ->
     let result = [] in
-    
-    xs |> for_each [x -> 
+
+    xs |> for_each [x ->
       let mapped = f(x) in
       result = result + mapped
     ];
-    
+
     result
   ]
 
@@ -1191,7 +1191,7 @@
       };
       i = i + 1
     };
-    
+
     ?None
   ]
 
@@ -1200,11 +1200,11 @@
   ]]--
   fold: [a] * (b * a -> b) * b -> b [xs f init ->
     let result = init in
-    
-    xs |> for_each [x -> 
+
+    xs |> for_each [x ->
       result = f(result, x)
     ];
-    
+
     result
   ]
 
@@ -1218,13 +1218,13 @@
       strings[0]
     } else {
       let result = strings[0] in
-      
+
       let i = 1 in
       while i < length(strings) {
         result = result + sep + strings[i];
         i = i + 1
       };
-      
+
       result
     }
   ]
@@ -1307,4 +1307,4 @@
     -- In a real implementation, this would validate dates
     false
   ]
-} 
+}
