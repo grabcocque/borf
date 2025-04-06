@@ -61,6 +61,71 @@
 
   vis: E |> [e -> true]
 
+  --------------------------------------------------
+  -- Structure Mapping to Linear Effectful Category
+  --------------------------------------------------
+  
+  --[[
+    Structure mapping that explicitly connects the IO module to the 
+    categorical framework as a Linear Effectful Category. This mapping
+    establishes @IO.IO as a linear effect type constructor with resource
+    tracking guarantees and proper cleanup semantics.
+    
+    Instead of using monadic structure, we use linear morphisms where resources
+    are consumed exactly once and must be explicitly released.
+  ]]--
+  structure: {
+    -- Map IO to LinearEffectCategory
+    objects: T.Type_0,
+    morphisms: [a b -> (!a -o> !IO(!b))],
+    
+    -- Base category structure
+    dom: [f -> f.domain],
+    cod: [f -> f.codomain],
+    id: [a -> [!x -o> !IO(x)]],
+    compose: [f g -> [!x -o> f(x) |>> g]],
+    
+    -- Symmetric monoidal structure (for pairing values linearly)
+    tensor: [a b -> (!a * !b)],
+    unit: T.Unit,
+    
+    -- Effect type constructor
+    effect_obj: [a -> !IO(a)],
+    effect_map: [f -> [!io -o> io |>> [x -> pure(f(x))]]],
+    
+    -- Linear operations on IO
+    pure_linear: [a -> (!a -o> !IO(a))],
+    fail_linear: [a -> (!Error -o> !IO(a))],
+    
+    -- Linear combinators that consume their inputs
+    sequence_linear: [a b -> (!IO(a) * (!a -o> !IO(b)) -o> !IO(b))],
+    combine_linear: [a b -> (!IO(a) * !IO(b) -o> !IO(a * b))],
+    parallel_linear: [a -> ![!IO(a)] -o> !IO([a])],
+    
+    -- Resource handling operations
+    with_resource_linear: [r a -> (!IO(!r) * (!r -o> !IO(a)) * (!r -o> !IO(Unit)) -o> !IO(a))],
+    
+    -- Linear pipe operator that sequences operations
+    pipe_linear: [a b -> (!IO(a) * (!a -o> !IO(b)) -o> !IO(b))],
+    
+    -- Linear resource consumption laws
+    laws: {
+      -- Each resource is acquired and released exactly once
+      resource_lifecycle: forall [acquire use release ->
+        with_resource(acquire, use, release) |> resource_handled_properly
+      ],
+      
+      -- IO operations consume their inputs exactly once
+      linear_consumption: forall [io f -> let !x = io in f(!x) |> resource_consumed_exactly_once],
+      
+      -- Resources can't be duplicated
+      no_copy: forall [r -> let !x = r in {!x, !x} |> type_error],
+      
+      -- Resources can't be discarded without proper cleanup
+      no_discard: forall [r -> let !x = r in unit |> type_error]
+    }
+  }
+
   --[[
     Error codes for IO operations
   ]]--

@@ -67,6 +67,70 @@
     (@Mod, T.Sym, false)
   }
 
+  --------------------------------------------------
+  -- Structure Mapping to Linear Resource Category
+  --------------------------------------------------
+  
+  --[[
+    Structure mapping that explicitly connects the Mod module to the 
+    categorical framework as a Linear Resource Category. This mapping
+    establishes @Mod.Module as a linear resource type with proper
+    lifecycle guarantees (initialization, use, finalization).
+    
+    Module resources must be properly acquired, used exactly once, and
+    explicitly released, following the linear resource management pattern.
+  ]]--
+  structure: {
+    -- Map Mod to LinearResourceCategory
+    objects: T.Type_0,
+    morphisms: [a b -> (!a -o> !b)],
+    
+    -- Base category structure
+    dom: [f -> f.domain],
+    cod: [f -> f.codomain],
+    id: [a -> [!x -o> !x]],
+    compose: [f g -> [!x -o> x |> f |> g]],
+    
+    -- Monoidal structure (for composing modules)
+    tensor: [a b -> (!a * !b)],
+    unit: T.Unit,
+    
+    -- Resource lifecycle structure
+    acquire: [a -> (!Context -o> !Module)],
+    release: [a -> (!Module -o> !Context)],
+    with_resource: [a b -> (!Context * (!Module -o> !a) * (!Module -o> !Context) -o> (!Context * !a))],
+    
+    -- Module-specific operations
+    import_morph: [a -> (!Module * !Module -o> !Module)],
+    export_morph: [a -> (!Module * [S] -o> !Module)],
+    extend_morph: [a -> (!Module * {!Component} -o> !Module)],
+    
+    -- Dependency structure
+    add_dependency_morph: [a -> (!Module * !ModuleRef * S -o> !Module)],
+    remove_dependency_morph: [a -> (!Module * !ModuleRef -o> !Module)],
+    resolve_dependencies_morph: [a -> (!Context * !Module -o> (!Context * !Module * Bool))],
+    
+    -- Linear resource consumption laws
+    laws: {
+      -- Proper lifecycle: modules must be initialized before use and finalized after
+      lifecycle: forall [ctx module use ->
+        with_resource(ctx, init(module), use, finalize) |> proper_lifecycle
+      ],
+      
+      -- Module operations consume their inputs exactly once
+      linear_consumption: forall [module f -> let !m = module in f(!m) |> resource_consumed_exactly_once],
+      
+      -- Modules can't be duplicated
+      no_copy: forall [module -> let !m = module in {!m, !m} |> type_error],
+      
+      -- Modules can't be discarded without finalization
+      no_discard: forall [module -> let !m = module in unit |> type_error],
+      
+      -- Dependency acyclicity: module dependencies must form a DAG
+      acyclic_deps: forall [module -> module |> get_dependencies |> acyclic]
+    }
+  }
+
   -- The following comment is an auto-generated list of all prelude modules
   -- This list is for documentation purposes and is not used by the module loader
   -- Updates to this list should be made when adding or removing modules

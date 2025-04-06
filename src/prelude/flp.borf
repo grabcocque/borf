@@ -35,40 +35,59 @@
   vis: E |> [e -> true]
 
   --------------------------------------------------
-  -- Structure Mapping to Monad Category
+  -- Structure Mapping to Linear Category
   --------------------------------------------------
   
   --[[
     Structure mapping that explicitly connects the Flp module to the 
-    categorical framework as a Monad. This mapping establishes @Flp.Result
-    as a proper monad with appropriate return/unit and bind operations.
+    categorical framework as a Linear Category. This mapping establishes
+    @Flp.Result as a linear type constructor with resource tracking guarantees.
+    
+    Instead of using monadic structure, we use linear morphisms where inputs
+    are consumed exactly once and cannot be duplicated or discarded.
   ]]--
   structure: {
-    -- Map Flp to MonadCategory
+    -- Map Flp to LinearCategory
     objects: T.Type_0,
-    morphisms: [a b -> (a -> b)],
+    morphisms: [a b -> (!a -o> b)],
     
     -- Base category structure
     dom: [f -> f.domain],
     cod: [f -> f.codomain],
-    id: [a -> [x -> x]],
-    compose: [f g -> [x -> g(f(x))]],
+    id: [a -> [!x -o> x]],
+    compose: [f g -> [!x -o> x |> f |> g]],
     
-    -- Functor structure (Result is a functor)
-    functor: [a -> !Result(a)],
-    fmap: [f -> [r -> r |> map(f)]],
+    -- Symmetric monoidal structure (for pairing values linearly)
+    tensor: [a b -> (!a * !b)],
+    unit: T.Unit,
     
-    -- Monad structure
-    unit: [a -> [x -> ok(x)]],             -- return/pure operation (wraps a value)
-    bind: [ma f -> ma |> and_then(f)],     -- bind/flatMap operation (chains computations)
+    -- Result as a functor in linear category
+    result_obj: [a -> !Result(a)],
+    result_map: [f -> [!r -o> r |> map(f)]],
     
-    -- Applicative structure
-    pure: [a -> [x -> ok(x)]],
-    ap: [mf mx -> combine(mf, mx) |> map([pair -> let {f, x} = pair in f(x)])],
+    -- Linear operations on Result
+    ok_linear: [a -> (!a -o> !Result(a))],
+    err_linear: [a -> (!Error -o> !Result(a))],
     
-    -- Monoid structure for error accumulation
-    empty: [a -> ok(a)],
-    append: [r1 r2 -> combine(r1, r2)]
+    -- Linear combinators that consume their inputs
+    and_then_linear: [a b -> (!Result(a) * (!a -o> !Result(b)) -o> !Result(b))],
+    or_else_linear: [a -> (!Result(a) * (!Error -o> !Result(a)) -o> !Result(a))],
+    map_linear: [a b -> (!Result(a) * (!a -o> b) -o> !Result(b))],
+    
+    -- Linear pattern matching that consumes the result
+    match_linear: [a b -> (!Result(a) * (!a -o> b) * (!Error -o> b) -o> b)],
+    
+    -- Linear resource consumption laws
+    laws: {
+      -- Each result is consumed exactly once
+      linear_consumption: forall [r f -> let !x = r in f(!x) |> resource_consumed_exactly_once],
+      
+      -- Results can't be duplicated
+      no_copy: forall [r -> let !x = r in {!x, !x} |> type_error],
+      
+      -- Results can't be discarded
+      no_discard: forall [r -> let !x = r in unit |> type_error]
+    }
   }
 
   --[[
