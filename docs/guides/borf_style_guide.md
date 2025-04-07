@@ -11,6 +11,21 @@ This document outlines the idiomatic style for writing Borf code. Borf is a conc
 
 ## Syntax Conventions
 
+### Comments
+
+Borf uses Lua-style comments:
+
+```borf
+-- This is a single-line comment
+
+--[[
+  This is a multi-line comment
+  that spans multiple lines
+]]--
+```
+
+**Important**: Never use `//` or `/* */` style comments from other languages.
+
 ### Pipeline Operator (`|>`)
 
 The pipeline operator is a fundamental part of Borf syntax that passes the result of an expression to the next function:
@@ -170,7 +185,7 @@ input_data |>
 For generator operations (map, filter, reduce, etc.), always chain with pipelines:
 
 ```borf
-// Stream/generator processing with pipeline
+-- Stream/generator processing with pipeline
 source |>
   [s -> s [item -> item condition] filter] |>
   [s -> s [item -> item transform] map] |>

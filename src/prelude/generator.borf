@@ -34,18 +34,18 @@
     [g -> g [line -> line "ERROR" contains] filter] |>
     [g -> g [line -> line extract_error_info] map] -> log_lines
   
-  // Each line processed individually - works with terabytes
+  -- Each line processed individually - works with terabytes
   log_lines [error -> error alert_system] for_each
   ```
   
   # Stream processing dashboard
   ```borf
-  // Continuous sensor readings
+  -- Continuous sensor readings
   "temperature" sensor_stream |>
     [g -> g [t -> t convert_celsius] map] |>
-    [g -> g 10 rolling_average] -> temps  // 10-point average
+    [g -> g 10 rolling_average] -> temps  -- 10-point average
   
-  // Update UI in real-time
+  -- Update UI in real-time
   temps [avg -> avg update_dashboard] for_each
   ```
 ]]--
@@ -597,7 +597,7 @@
     
     Example: Transform data in a pipeline
     ```borf
-    // Calculate squares and format them
+    -- Calculate squares and format them
     1 5 range |>
       [g -> g [n -> {
         original: n,
@@ -606,7 +606,7 @@
       }] map] |>
       collect -> number_info
     
-    // [{original: 1, squared: 1, is_even: false}, {original: 2, squared: 4, is_even: true}, ...]
+    -- [{original: 1, squared: 1, is_even: false}, {original: 2, squared: 4, is_even: true}, ...]
     ```
   ]]--
   map: Generator.a * (a -> b) -> Generator.b [gen transform ->
@@ -633,10 +633,10 @@
     
     Example: Multiple filter conditions
     ```borf
-    // For user data, find active premium subscribers
+    -- For user data, find active premium subscribers
     user_database |>
       [g -> g [user -> 
-        // Apply multiple conditions
+        -- Apply multiple conditions
         user.status "active" == 
         user.subscription_type "premium" == &&
         user.payment_overdue not &&
