@@ -1,12 +1,58 @@
 --[[
-  Affine Type System
+  Resource Usage Protection - Safe Handling of Disposable Resources
 
-  This module defines an affine type system where resources can be used at most once
-  (can be dropped but not duplicated). Affine types are more permissive than linear types
-  as they allow resources to be discarded, but still prevent duplication.
+  This module provides safe handling of resources that should never be duplicated, letting you:
+  
+  - Safely work with disposable resources like file handles, network connections, or locks
+  - Discard/close resources when no longer needed (unlike linear types)
+  - Prevent accidentally using the same resource twice
+  - Ensure resources can't be accidentally cloned
+  - Implement clean resource management patterns
+  
+  Affine types enforce "use at most once" semantics for resources, allowing safe disposal
+  but preventing any form of duplication. This provides a good balance of safety and flexibility
+  for many types of system resources.
 ]]--
 
 @Affine: {
+  --------------------------------------------------
+  -- AFFINE TYPE SYSTEM USAGE GUIDE
+  --------------------------------------------------
+  
+  --[[
+    WHEN TO USE AFFINE TYPES
+    
+    1. DISPOSABLE SYSTEM RESOURCES
+       For resources that should never be duplicated but can be safely 
+       discarded, like file handles, network connections, or database handles.
+       
+    2. ONE-TIME USE TOKENS
+       For security tokens, authentication credentials, or one-time codes
+       that should be used at most once and then discarded.
+       
+    3. EXCLUSIVE OWNERSHIP
+       When a component needs exclusive access to a resource, but 
+       doesn't necessarily need to use it (can discard it).
+       
+    4. CANCELABLE OPERATIONS
+       For operations that can be canceled (discarded) but should
+       never be duplicated or executed multiple times.
+    
+    COMPARISON TO OTHER TYPE SYSTEMS:
+    
+    1. AFFINE vs LINEAR
+       - Affine: Resources can be dropped but not copied (use 0 or 1 times)
+       - Linear: Resources must be used exactly once (no drops, no copies)
+       
+    2. AFFINE vs UNRESTRICTED
+       - Affine: Resources cannot be duplicated; must track usage
+       - Unrestricted: Resources can be freely copied and used multiple times
+       
+    3. AFFINE vs RELEVANT
+       - Affine: Resources can be dropped (not used)
+       - Relevant: Resources must be used at least once (no drops)
+  ]]--
+  
   typ: {
     -- Core affine types
     AffineType AffineFn AffineCtx
@@ -22,11 +68,11 @@
   }
 
   op: {
-    -- Type operators
-    ⊗ ⊸ & ⊕ !
+    -- Type operators (using ASCII alternatives for code)
+    * -o & + !
 
-    -- Judgment operators
-    ⊢ ⊣ ⊨
+    -- Judgment operators (using ASCII alternatives for code)
+    |- |= |>
 
     -- Resource tracking
     drop
@@ -285,31 +331,79 @@
   ]
 
   --------------------------------------------------
-  -- Structure Mapping to Categorical Semantics
+  -- STRUCTURE & PRACTICAL BENEFITS
   --------------------------------------------------
 
   --[[
-    Structure mapping that establishes @Affine as a symmetric monoidal category
-    with additional structure for affine mappings.
-
-    In this categorical structure:
-    - Objects are affine types
-    - Morphisms are affine functions between types
-    - Tensor product is the multiplicative conjunction
-    - Unit is the tensor unit
-    - The affine structure allows weakening (dropping) but not contraction (copying)
+    This section defines the mathematical properties of affine types
+    and explains their practical benefits for resource management.
   ]]--
   structure: {
-    -- Map Affine to a symmetric monoidal category
+    -- Maps to a symmetric monoidal category with affine structure
     objects: AffineType,
     morphisms: [a b -> AffineFn],
-
+    id: [a -> affine_fn("x", a, [x -> x])],
+    compose: [f g -> affine_fn("x", f.domain, [x -> g(f(x))])],
+    
+    -- PROPERTIES
+    -- Each property explained with practical benefits:
+    
+    composition: (f >>> g) >>> h veq f >>> (g >>> h)
+      -- "Function composition works as expected"
+      -- This means resource transformations can be safely chained in any order
+      -- Example: close_file >>> (write_data >>> open_file) is the same as (close_file >>> write_data) >>> open_file
+    
+    identity: id >>> f veq f and f >>> id veq f
+      -- "A do-nothing function won't affect your resources"
+      -- This lets you conditionally process resources without changing their state
+      -- Example: identity >>> transform is the same as transform (identity preserves resource state)
+    
+    tensor_product: Resource pairs with independent management
+      -- "You can group resources while keeping them independently managed"
+      -- This allows handling multiple resources together while respecting individual usage rules
+      -- Example: (file, connection) lets you handle both resources as a pair
+    
+    unit: The empty resource
+      -- "You can represent having no resources"
+      -- This provides a way to represent the absence of resources in a type-safe way
+      -- Example: Functions that don't use resources can return Unit
+    
+    symmetric: (a, b) can be converted to (b, a)
+      -- "Resource order in pairs doesn't matter"
+      -- This allows flexible reorganization of resource pairs
+      -- Example: Converting (lock, file) to (file, lock) without violating resource rules
+    
+    weakening: You can safely discard resources
+      -- "You don't have to use every resource you create"
+      -- This enables safe cleanup of unused resources
+      -- Example: Conditionally using a resource and explicitly dropping it if unused
+    
+    -- PRACTICAL BENEFITS
+    
+    safe_resource_management:
+      -- "Prevent errors related to using resources after they're closed"
+      -- The type system catches attempts to use resources more than once
+      -- Example: Can't use a file handle after it's been closed
+      
+    explicit_cleanup:
+      -- "Make resource cleanup visible in the code"
+      -- Requires explicit handling of all resources (use or drop)
+      -- Example: Database connections must be explicitly used or closed
+      
+    conditional_usage:
+      -- "Safely handle resources in conditional paths"
+      -- Resources can be dropped when not needed, unlike with linear types
+      -- Example: Creating a resource but only using it if a condition is met
+    
+    resource_isolation:
+      -- "Prevent resource leaks through accidental sharing"
+      -- Resources can't be duplicated or shared unintentionally
+      -- Example: Network connections can't be accidentally shared between threads
+    
     -- Base category structure
     dom: [f -> f.domain],
     cod: [f -> f.codomain],
-    id: [a -> affine_fn("x", a, [x -> x])],
-    compose: [f g -> affine_fn("x", f.domain, [x -> g(f(x))])],
-
+    
     -- Monoidal structure
     tensor_objects: [a b -> Tensor(a, b)],
     tensor_morphisms: [f g -> affine_fn("p", Tensor(f.domain, g.domain), [p ->
@@ -327,87 +421,398 @@
     -- Affine structure (allows weakening)
     discard: [a -> affine_fn("x", a, [x -> drop(x)])],
 
-    -- Laws for affine category
-    laws: {
-      -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
+    -- GUARANTEES
+    -- Each guarantee explained with practical benefits and how to ensure it:
+    
+    guarantees: {
+      -- Associativity: (f . g) . h = f . (g . h)
       associativity: forall [f g h ->
-        compose(compose(f, g), h) == compose(f, compose(g, h))
-      ],
+        compose(compose(f, g), h) veq compose(f, compose(g, h))
+      ]
+        -- "Resource transformation order is predictable"
+        -- Benefit: You can refactor complex resource operations without changing behavior
+        -- To ensure: Keep transformations pure (no side effects except on the resource itself)
+      ,
 
-      -- Identity: id ∘ f = f = f ∘ id
+      -- Identity: id . f = f = f . id
       identity: forall [f ->
-        compose(id(dom(f)), f) == f && compose(f, id(cod(f))) == f
-      ],
+        compose(id(dom(f)), f) veq f and compose(f, id(cod(f))) veq f
+      ]
+        -- "Passing a resource through a no-op doesn't change it"
+        -- Benefit: You can conditionally apply transformations to resources safely
+        -- To ensure: Make sure identity functions truly return their input unchanged
+      ,
 
       -- Functoriality of tensor
       tensor_functorial: forall [f1 f2 g1 g2 ->
-        tensor_morphisms(compose(f1, f2), compose(g1, g2)) ==
+        tensor_morphisms(compose(f1, f2), compose(g1, g2)) veq
         compose(tensor_morphisms(f1, g1), tensor_morphisms(f2, g2))
-      ],
+      ]
+        -- "Transformations on paired resources work predictably"
+        -- Benefit: Allows processing resource pairs without unexpected interactions
+        -- To ensure: Handle each resource in a pair independently
+      ,
 
       -- Symmetric monoidal coherence
       symmetry: forall [a b ->
-        compose(swap(a, b), swap(b, a)) == id(tensor_objects(a, b))
-      ],
+        compose(swap(a, b), swap(b, a)) veq id(tensor_objects(a, b))
+      ]
+        -- "Swapping resource order twice gets you back to the original"
+        -- Benefit: Resource ordering in pairs is flexible and predictable
+        -- To ensure: Don't make resource operations depend on the ordering in pairs
+      ,
 
       -- Affine laws (weakening)
       weakening: forall [a f ->
-        compose(discard(dom(f)), id(unit)) == compose(f, discard(cod(f)))
+        compose(discard(dom(f)), id(unit)) veq compose(f, discard(cod(f)))
       ]
+        -- "You can safely drop resources when not needed"
+        -- Benefit: No need to track or use every resource created
+        -- To ensure: Only drop affine values, which support weakening
     }
   }
 
   --------------------------------------------------
-  -- Example Affine Programs
+  -- PRACTICAL EXAMPLES
   --------------------------------------------------
 
-  --[[
-    Example: Affine file handle usage
-  ]]--
-  example.file_handle: () -> () [->
-    -- Create an affine file handle
-    let file_type = { base: "File", affine: true, weakening: true } in
-    let open_file = affine_fn("path", { base: "String", affine: false, weakening: true }, [path ->
-      { _type: "File", handle: "FileHandle:123" }
-    ]) in
+  example: {
+    --[[
+      Example 1: Database Connection Management
+      
+      Shows safe handling of database connections with proper cleanup
+    ]]--
+    database_operations: S * S -> Map [db_url, query ->
+      -- Create affine types for database resources
+      { base: "DBConnection", affine: true, weakening: true } |> connection_type
+      { base: "DBTransaction", affine: true, weakening: true } |> transaction_type
+      { base: "ResultSet", affine: true, weakening: true } |> result_type
+      
+      -- Database connection function (returns an affine connection)
+      "url" { base: "String", affine: false, weakening: true } [url ->
+        -- Create connection (would actually connect to DB in real code)
+        { _type: "DBConnection", id: "conn-123", url: url }
+      ] affine_fn |> connect
+      
+      -- Begin transaction function (consumes connection, returns transaction)
+      "conn" connection_type [conn ->
+        -- Begin transaction (consumes connection to prevent use during transaction)
+        { _type: "DBTransaction", connection: conn, id: "tx-456" }
+      ] affine_fn |> begin_transaction
+      
+      -- Execute query function (uses transaction, returns results)
+      "tx" transaction_type * "sql" { base: "String", affine: false, weakening: true } [tx, sql ->
+        -- Execute query on transaction
+        { _type: "ResultSet", transaction: tx, rows: [
+          { id: 1, name: "Row 1" },
+          { id: 2, name: "Row 2" }
+        ]}
+      ] affine_fn |> execute_query
+      
+      -- Commit function (consumes transaction, returns connection)
+      "tx" transaction_type [tx ->
+        -- Commit transaction (returns original connection)
+        tx.connection
+      ] affine_fn |> commit
+      
+      -- Rollback function (consumes transaction, returns connection)
+      "tx" transaction_type [tx ->
+        -- Rollback transaction (returns original connection)
+        tx.connection
+      ] affine_fn |> rollback
+      
+      -- Close connection function (consumes connection)
+      "conn" connection_type [conn ->
+        -- Close connection (consumes the connection ensuring it can't be used again)
+        Unit
+      ] affine_fn |> close
+      
+      -- Process results function (consumes results, returns data)
+      "results" result_type [results ->
+        -- Extract data from results (consumes the result set)
+        results.rows
+      ] affine_fn |> process_results
+      
+      -- Actual database operation workflow
+      db_url connect |> conn
+      
+      try {
+        -- Begin transaction (connection consumed, can't be used directly)
+        conn begin_transaction |> tx
+        
+        -- Execute query (transaction used but still available)
+        tx query execute_query |> results
+        
+        -- Process results (consumes results)
+        results process_results |> rows
+        
+        -- Commit transaction (tx consumed, connection returned)
+        tx commit |> conn
+        
+        -- Close connection (conn consumed, can't be used after this)
+        conn close
+        
+        -- Return data
+        { success: true, data: rows }
+      } catch error {
+        -- Error handling with proper resource cleanup
+        
+        -- Check if we have an active transaction that needs rollback
+        tx != null {
+          -- Rollback transaction (tx consumed, connection returned)
+          tx rollback |> conn
+          
+          -- Close connection (conn consumed)
+          conn close
+        } iff
+        
+        -- Check if we still have a connection to close
+        conn != null {
+          -- Close connection (conn consumed)
+          conn close
+        } iff
+        
+        -- Return error result
+        { success: false, error: error.message }
+      }
+    ],
+    
+    --[[
+      Example 2: Security Token Management
+      
+      Shows usage of one-time security tokens that can't be duplicated
+    ]]--
+    token_authentication: S * Bool -> Map [user_id, should_use ->
+      -- Create affine type for security tokens
+      { base: "AuthToken", affine: true, weakening: true } |> token_type
+      
+      -- Generate a one-time authentication token
+      "user_id" { base: "String", affine: false, weakening: true } [user_id ->
+        -- Generate token (would use secure random generation in real code)
+        { 
+          _type: "AuthToken", 
+          token: "token-789", 
+          user: user_id,
+          expires: "2023-12-31T23:59:59Z"
+        }
+      ] affine_fn |> generate_token
+      
+      -- Verify and use token (consumes the token to prevent replay)
+      "token" token_type [token ->
+        -- Verify token is valid (would check signature, expiration, etc.)
+        true |> is_valid
+        
+        -- Return verification result (token is consumed)
+        {
+          valid: is_valid,
+          user: token.user,
+          scope: ["read", "write"]
+        }
+      ] affine_fn |> use_token
+      
+      -- Invalidate token without using it (for revocation)
+      "token" token_type [token ->
+        -- Log token invalidation (audit trail)
+        Prim.log("Token invalidated: " token.token)
+        
+        -- Return invalidation confirmation
+        { invalidated: true, token_id: token.token }
+      ] affine_fn |> invalidate_token
+      
+      -- Generate a token for the user
+      user_id generate_token |> token
+      
+      -- Conditionally use the token or invalidate it
+      should_use {
+        -- Use the token (consumes it, preventing reuse)
+        token use_token |> auth_result
+        
+        -- Return successful authentication
+        {
+          authenticated: true,
+          user: auth_result.user,
+          permissions: auth_result.scope
+        }
+      } {
+        -- Invalidate the token instead of using it
+        token invalidate_token |> invalidation
+        
+        -- Return invalidation result
+        {
+          authenticated: false,
+          invalidated: true,
+          reason: "Token invalidated by request"
+        }
+      } if
+    ],
+    
+    --[[
+      Example 3: Resource Pool Management
+      
+      Shows how to safely manage a pool of affine resources
+    ]]--
+    resource_pool: Z -> Map [pool_size ->
+      -- Create affine types for resources and pool
+      { base: "Resource", affine: true, weakening: true } |> resource_type
+      { base: "ResourcePool", affine: false, weakening: true } |> pool_type
+      
+      -- Create a single resource (would actually allocate in real code)
+      "id" { base: "Integer", affine: false, weakening: true } [id ->
+        { _type: "Resource", id: id, state: "available" }
+      ] affine_fn |> create_resource
+      
+      -- Create a pool of resources (not affine itself, but contains affine resources)
+      "size" { base: "Integer", affine: false, weakening: true } [size ->
+        -- Create pool container
+        {
+          _type: "ResourcePool",
+          available: [],  -- Will hold resource IDs
+          in_use: {}      -- Map of resource ID to reservation info
+        } |> pool
+        
+        -- Create resources and add them to the pool
+        0 size range [i ->
+          -- Create new resource with ID
+          i create_resource |> resource
+          
+          -- Store resource ID in pool, drop the resource itself
+          pool.available [resource.id] + -> pool.available
+          
+          -- Resource is dropped here (valid since it's affine)
+          resource drop
+        ] for_each
+        
+        -- Return pool
+        pool
+      ] affine_fn |> create_pool
+      
+      -- Acquire a resource from pool (returns resource, updates pool)
+      "pool" pool_type * "purpose" { base: "String", affine: false, weakening: true } [pool, purpose ->
+        -- Check if resources available
+        pool.available Prim.length 0 > iff {
+          -- Get first available resource ID
+          pool.available 0 get -> resource_id
+          
+          -- Remove from available list
+          pool.available 1 pool.available Prim.length slice -> pool.available
+          
+          -- Add to in_use map
+          pool.in_use { resource_id: { purpose: purpose, time: Prim.now() } } Prim.merge -> pool.in_use
+          
+          -- Create and return actual resource object
+          resource_id create_resource |> resource
+          
+          -- Return both resource and updated pool
+          { resource: resource, pool: pool }
+        } {
+          -- No resources available
+          { resource: null, pool: pool, error: "No resources available" }
+        }
+      ] affine_fn |> acquire
+      
+      -- Release a resource back to pool
+      "pool" pool_type * "resource" resource_type [pool, resource ->
+        -- Get resource ID
+        resource.id -> resource_id
+        
+        -- Add back to available list
+        pool.available [resource_id] + -> pool.available
+        
+        -- Remove from in_use map
+        pool.in_use resource_id - -> pool.in_use
+        
+        -- Resource itself is dropped (valid for affine resources)
+        resource drop
+        
+        -- Return updated pool
+        pool
+      ] affine_fn |> release
+      
+      -- Create pool with given size
+      pool_size create_pool |> pool
+      
+      -- Acquire some resources
+      pool "web request" acquire |> result1
+      result1.pool "database query" acquire |> result2
+      
+      -- Use resources
+      result1.resource != null {
+        -- Use first resource...
+        -- In real code, would do something with result1.resource
+      } iff
+      
+      result2.resource != null {
+        -- Use second resource...
+        -- In real code, would do something with result2.resource
+      } iff
+      
+      -- Release resources back to pool (if they were acquired)
+      pool |> updated_pool
+      
+      result1.resource != null {
+        result1.resource updated_pool release -> updated_pool
+      } iff
+      
+      result2.resource != null {
+        result2.resource updated_pool release -> updated_pool
+      } iff
+      
+      -- Return pool status
+      {
+        pool_size: pool_size,
+        available: updated_pool.available Prim.length,
+        in_use: updated_pool.in_use Prim.keys Prim.length
+      }
+    ],
+    
+    --[[
+      Example 4: Affine file handle usage
+    ]]--
+    file_handle: () -> () [->
+      -- Create an affine file handle
+      let file_type = { base: "File", affine: true, weakening: true } in
+      let open_file = affine_fn("path", { base: "String", affine: false, weakening: true }, [path ->
+        { _type: "File", handle: "FileHandle:123" }
+      ]) in
 
-    -- Use the file and then close it (handle is used exactly once)
-    let file = open_file("example.txt") in
+      -- Use the file and then close it (handle is used exactly once)
+      let file = open_file("example.txt") in
 
-    -- Read from file (consuming file handle)
-    let close_file = affine_fn("file", file_type, [file ->
-      -- Close file handle
-      ()
-    ]) in
-
-    -- File is used linearly and then closed
-    close_file(file)
-  ]
-
-  --[[
-    Example: Optional resource usage with explicit drop
-  ]]--
-  example.conditional_resource: Bool -> () [condition ->
-    -- Create an affine resource
-    let resource_type = { base: "Resource", affine: true, weakening: true } in
-    let create_resource = affine_fn("unit", Unit, [unit ->
-      { _type: "Resource", data: "ResourceData:456" }
-    ]) in
-
-    -- Create resource
-    let resource = create_resource(()) in
-
-    -- Conditional usage with explicit drop if unused
-    if condition {
-      -- Use resource
-      let use_resource = affine_fn("r", resource_type, [r ->
-        -- Use the resource
+      -- Read from file (consuming file handle)
+      let close_file = affine_fn("file", file_type, [file ->
+        -- Close file handle
         ()
       ]) in
-      use_resource(resource)
-    } else {
-      -- Explicitly drop resource
-      drop(resource)
-    }
-  ]
+
+      -- File is used linearly and then closed
+      close_file(file)
+    ],
+
+    --[[
+      Example 5: Optional resource usage with explicit drop
+    ]]--
+    conditional_resource: Bool -> () [condition ->
+      -- Create an affine resource
+      let resource_type = { base: "Resource", affine: true, weakening: true } in
+      let create_resource = affine_fn("unit", Unit, [unit ->
+        { _type: "Resource", data: "ResourceData:456" }
+      ]) in
+
+      -- Create resource
+      let resource = create_resource(()) in
+
+      -- Conditional usage with explicit drop if unused
+      if condition {
+        -- Use resource
+        let use_resource = affine_fn("r", resource_type, [r ->
+          -- Use the resource
+          ()
+        ]) in
+        use_resource(resource)
+      } else {
+        -- Explicitly drop resource
+        drop(resource)
+      }
+    ]
+  }
 }

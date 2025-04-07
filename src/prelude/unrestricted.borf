@@ -1,12 +1,58 @@
 --[[
-  Unrestricted Type System
+  Regular Value Types - Standard Programming with Reusable Values
 
-  This module defines an unrestricted type system where resources can be used any number
-  of times (can be both duplicated and dropped). Unrestricted types represent the standard
-  notion of types in most programming languages where values can be freely copied or ignored.
+  This module provides the familiar programming model where values can be used freely, letting you:
+  
+  - Use variables multiple times in your code (like x + x)
+  - Ignore variables that aren't needed (no mandatory usage)
+  - Copy data structures freely without restrictions
+  - Create simple functions that use parameters however you want
+  - Work with the standard types found in most programming languages
+  
+  These are the default types in most programming languages, where you don't need
+  to track resource usage. Use these types for regular data that doesn't represent
+  unique resources or need special handling.
 ]]--
 
 @Unrestricted: {
+  --------------------------------------------------
+  -- UNRESTRICTED TYPE SYSTEM USAGE GUIDE
+  --------------------------------------------------
+  
+  --[[
+    WHEN TO USE UNRESTRICTED TYPES
+    
+    1. REGULAR DATA PROCESSING
+       For standard computations where values can be freely copied and
+       discarded, like numbers, strings, and regular data structures.
+       
+    2. MULTI-USE VARIABLES
+       When you need to use the same variable multiple times in an
+       expression, like "x * x" or "name + " " + name".
+       
+    3. OPTIONAL PARAMETERS
+       When some parameters might not be needed in all code paths
+       and can be safely ignored in some cases.
+       
+    4. STANDARD COLLECTIONS
+       For regular collections like lists, maps, and sets where
+       elements can be freely copied and compared.
+    
+    COMPARISON TO OTHER TYPE SYSTEMS:
+    
+    1. UNRESTRICTED vs LINEAR
+       - Unrestricted: Values can be used any number of times (0, 1, or many)
+       - Linear: Values must be used exactly once (no copies, no drops)
+       
+    2. UNRESTRICTED vs AFFINE
+       - Unrestricted: Values can be copied and used multiple times
+       - Affine: Values can be dropped but not copied (use 0 or 1 times)
+       
+    3. UNRESTRICTED vs RELEVANT
+       - Unrestricted: Values can be ignored/dropped if not needed
+       - Relevant: Values must be used at least once (no drops)
+  ]]--
+  
   typ: {
     -- Core unrestricted types
     UnrestrictedType UnrestrictedFn UnrestrictedCtx
@@ -26,7 +72,8 @@
     * + -> ?
 
     -- Judgment operators
-    ⊢ ⊣ ⊨
+    -- (Using ASCII alternatives in actual code)
+    * |- |= |>  
 
     -- Resource tracking
     copy drop
@@ -305,31 +352,84 @@
   ]
 
   --------------------------------------------------
-  -- Structure Mapping to Categorical Semantics
+  -- STRUCTURE & PRACTICAL BENEFITS
   --------------------------------------------------
 
   --[[
-    Structure mapping that establishes @Unrestricted as a cartesian closed category.
-
-    In this categorical structure:
-    - Objects are unrestricted types
-    - Morphisms are unrestricted functions between types
-    - The product is the cartesian product
-    - The coproduct is the disjoint union
-    - The internal hom is the function type
-    - The unrestricted structure allows both weakening (dropping) and contraction (copying)
+    This section defines the mathematical properties of unrestricted types
+    and explains their practical benefits in everyday programming.
   ]]--
   structure: {
-    -- Map Unrestricted to a cartesian closed category
+    -- Maps to a cartesian closed category with additional structure
     objects: UnrestrictedType,
     morphisms: [a, b -> UnrestrictedFn],
-
+    id: [a -> "x" a [x -> x] unrestricted_fn],
+    compose: [f, g -> "x" f domain [x -> x f g] unrestricted_fn],
+    
+    -- PROPERTIES
+    -- Each property explained with practical benefits:
+    
+    composition: f . (g . h) = (f . g) . h
+      -- "Function composition works as expected"
+      -- This means you can build complex functions from simpler ones in any order
+      -- Example: format_data . (validate . parse) is the same as (format_data . validate) . parse
+    
+    identity: id . f = f = f . id
+      -- "A do-nothing function won't affect your data"
+      -- This lets you conditionally apply transformations without changing behavior
+      -- Example: identity . transform === transform (the identity step can be safely added or removed)
+    
+    cartesian_product: (a, b) with projections fst and snd
+      -- "You can group and access data using pairs/tuples"
+      -- This gives you a standard way to package multiple values together
+      -- Example: person = (name, age) lets you access person.fst to get name
+    
+    terminal_object: () - the unit value
+      -- "You can safely discard any information"
+      -- This means you don't need to track or use every value
+      -- Example: Functions can return () if they don't have meaningful results
+    
+    currying: (a × b → c) ≅ (a → (b → c))
+      -- "Multi-argument functions can be partially applied"
+      -- This enables function reuse through partial application
+      -- Example: add(x,y) can be used as add(5) to create a "add5" function
+    
+    weakening: You can freely discard values
+      -- "You don't have to use every variable"
+      -- This lets you ignore parameters or values that aren't needed
+      -- Example: function(x, y) { return x; } safely ignores y
+    
+    contraction: You can freely duplicate values
+      -- "You can use variables multiple times"
+      -- This enables expressions that refer to the same variable repeatedly
+      -- Example: x * x + 2*x + 1 uses x three times
+    
+    -- PRACTICAL BENEFITS
+    
+    standard_programming:
+      -- "Program naturally without worrying about resource usage"
+      -- Follows familiar programming patterns from mainstream languages
+      -- Example: Regular variables and functions like in Python, JavaScript, etc.
+      
+    no_bookkeeping:
+      -- "Don't need to track how many times each variable is used"
+      -- Simplifies reasoning about code and prevents usage-tracking bugs
+      -- Example: No need to pass variables to every function that might need them
+      
+    reusable_data:
+      -- "Use data structures without copying limitations"
+      -- Pass the same data to multiple functions without explicit cloning
+      -- Example: Using a configuration object throughout your application
+    
+    familiar_collections:
+      -- "Use standard collections like arrays, maps, and sets"
+      -- Work with data structures that expect multiple access to elements
+      -- Example: Sorting, searching, and filtering collections
+    
     -- Base category structure
     dom: [f -> f domain],
     cod: [f -> f codomain],
-    id: [a -> "x" a [x -> x] unrestricted_fn],
-    compose: [f, g -> "x" f domain [x -> x f g] unrestricted_fn],
-
+    
     -- Cartesian structure
     product: [a, b -> a b Product],
     proj1: [a, b -> "p" a b Product [p -> p [x, _ ->]] unrestricted_fn],
@@ -356,117 +456,355 @@
       x copy [x1, x2 ->]
       (x1, x2)
     ] unrestricted_fn],
-
-    -- Laws for unrestricted category
-    laws: {
-      -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
+    
+    -- GUARANTEES
+    -- Each guarantee explained with practical benefits and how to ensure it:
+    
+    guarantees: {
+      -- Associativity: (f . g) . h = f . (g . h)
       associativity: forall [f, g, h ->
         f g compose h compose
         f g h compose compose
         veq
-      ],
+      ]
+        -- "Function composition order doesn't matter, only the sequence"
+        -- Benefit: Lets you refactor complex function chains without changing behavior
+        -- To ensure: Keep functions pure (no side effects) and avoid depending on evaluation order
+      ,
 
-      -- Identity: id ∘ f = f = f ∘ id
+      -- Identity: id . f = f = f . id
       identity: forall [f ->
         f dom id f compose
         f veq
         f f cod id compose
         veq and
-      ],
+      ]
+        -- "Identity functions don't change your data"
+        -- Benefit: Makes conditional application of functions safe
+        -- To ensure: Make sure identity functions truly return their input unchanged
+      ,
 
-      -- Cartesian laws
+      -- Cartesian laws (product consistency)
       cartesian: forall [a, b, c, f, g ->
         f g pair b c proj1 compose
         f veq
         f g pair b c proj2 compose
         g veq and
-      ],
+      ]
+        -- "Tuples reliably store and retrieve values"
+        -- Benefit: You can trust that tuple accessors will return the correct component
+        -- To ensure: Use the standard tuple constructors and accessors
+      ,
 
-      -- Closed category laws
+      -- Closed category laws (curry/uncurry consistency)
       closed: forall [a, b, c, f ->
         a b c f curry -> x
         (x, y)
         b c eval
         (x, y) f veq
-      ],
+      ]
+        -- "Partial application preserves function behavior"
+        -- Benefit: You can transform multiargument functions to single-argument ones and back
+        -- To ensure: Keep function arguments independent (don't rely on order of evaluation)
+      ,
 
-      -- Unrestricted laws (weakening and contraction)
+      -- Weakening (ability to discard)
       weakening: forall [a, f ->
         f cod discard
         f compose
         f dom discard veq
-      ],
+      ]
+        -- "Unused values can be safely discarded"
+        -- Benefit: No need to use every variable or track usage
+        -- To ensure: Only discard unrestricted values, not linear resources
+      ,
 
+      -- Contraction (ability to duplicate)
       contraction: forall [a, f ->
         a duplicate -> diag
         f f pair -> f_pair
         diag f_pair compose
         f diag compose veq
       ]
+        -- "Values can be safely duplicated and used multiple times"
+        -- Benefit: Use the same variable in multiple places without worrying
+        -- To ensure: Only duplicate unrestricted values, not linear resources
     }
   }
 
   --------------------------------------------------
-  -- Example Unrestricted Programs
+  -- PRACTICAL EXAMPLES
   --------------------------------------------------
 
+  example: {
+    --[[
+      Example 1: Data Analysis Pipeline
+      
+      Shows how to freely reuse data in different operations
+    ]]--
+    data_analysis: [Z] -> Map [data_points ->
+      -- Define an unrestricted data analysis pipeline that:
+      -- 1. Uses data multiple times for different calculations
+      -- 2. Safely ignores optional components when needed
+      -- 3. Creates reusable function components
+      
+      -- Define type for unrestricted number lists
+      { base: [Z], weakening: true, contraction: true } |> number_list
+      
+      -- Create reusable statistical functions
+      "data" number_list [data ->
+        -- Sum all values
+        0 [acc, x -> acc x +] data fold
+      ] unrestricted_fn |> sum_fn
+      
+      "data" number_list [data ->
+        -- Find largest value
+        data 0 get |> current_max
+        data 1 data length range [i ->
+          data i get -> value
+          current_max value max -> current_max
+        ] for_each
+        current_max
+      ] unrestricted_fn |> max_fn
+      
+      "data" number_list [data ->
+        -- Find smallest value
+        data 0 get |> current_min
+        data 1 data length range [i ->
+          data i get -> value
+          current_min value min -> current_min
+        ] for_each
+        current_min
+      ] unrestricted_fn |> min_fn
+      
+      "data" number_list [data ->
+        -- Calculate average (using the same data multiple times)
+        data copy [data1, data2 ->]
+        data1 sum_fn |> total
+        data2 length |> count
+        total count /
+      ] unrestricted_fn |> avg_fn
+      
+      "data" number_list [data ->
+        -- Calculate standard deviation (uses data multiple times)
+        data copy [data1, data2 ->]
+        data1 avg_fn |> mean
+        
+        -- Calculate sum of squared differences
+        0 [acc, x ->
+          x mean - -> diff
+          diff diff * -> squared_diff
+          acc squared_diff +
+        ] data2 fold |> sum_squared_diffs
+        
+        -- Divide by count and take square root
+        sum_squared_diffs data length / sqrt
+      ] unrestricted_fn |> std_dev_fn
+      
+      -- Process the data (using it multiple times)
+      -- This uses the same data_points in multiple calculations
+      data_points |> [points ->
+        -- Use data multiple times (contraction)
+        points copy [p1, p2 ->]
+        p1 copy [p3, p4 ->]
+        p2 copy [p5, p6 ->]
+        
+        -- Perform different analyses on the same data
+        p1 sum_fn -> total
+        p2 avg_fn -> average
+        p3 max_fn -> maximum
+        p4 min_fn -> minimum
+        p5 std_dev_fn -> std_dev
+        
+        -- Optional outlier detection (can be safely skipped)
+        null |> outliers
+        config.detect_outliers true == iff {
+          -- Calculate outliers (using data again)
+          p6 [point ->
+            point average - abs -> distance
+            distance std_dev 2 * > -- Is outlier if > 2 standard deviations
+          ] filter -> outliers
+        }
+        
+        -- Return a single map with all results
+        {
+          count: points length,
+          sum: total,
+          average: average,
+          min: minimum,
+          max: maximum,
+          std_dev: std_dev,
+          outliers: outliers
+        }
+      ]
+    ],
+    
+    --[[
+      Example 2: Configuration Management
+      
+      Shows how a single config object can be safely reused across components
+    ]]--
+    config_manager: Map -> () [base_config ->
+      -- Create a configuration manager that:
+      -- 1. Can be freely shared across the application
+      -- 2. Allows components to use only the parts they need
+      -- 3. Provides defaults for missing values
+      
+      -- Define unrestricted config type
+      { base: Map, weakening: true, contraction: true } |> config_type
+      
+      -- Merge with default settings
+      {
+        debug: false,
+        timeout_ms: 5000,
+        retry_count: 3,
+        cache_enabled: true,
+        log_level: "info"
+      } base_config merge -> config
+      
+      -- Create components that all share the same config
+      "cfg" config_type [cfg ->
+        -- Database connection uses timeout and retry settings
+        cfg.timeout_ms -> timeout
+        cfg.retry_count -> retries
+        
+        -- Connect to database with these settings
+        connect_db(timeout, retries)
+      ] unrestricted_fn |> db_component
+      
+      "cfg" config_type [cfg ->
+        -- Logger only needs log level setting
+        cfg.log_level -> level
+        cfg.debug -> debug_mode
+        
+        -- Create logger
+        init_logger(level, debug_mode)
+      ] unrestricted_fn |> logger_component
+      
+      "cfg" config_type [cfg ->
+        -- Cache component just needs cache settings
+        cfg.cache_enabled -> enabled
+        
+        -- Setup cache if enabled
+        enabled iff {
+          setup_cache()
+        }
+      ] unrestricted_fn |> cache_component
+      
+      -- Initialize all components with the same config
+      -- This uses the same config object multiple times (contraction)
+      config copy [cfg1, cfg2 ->]
+      cfg1 copy [cfg3, cfg4 ->]
+      
+      -- Each component uses just what it needs from config
+      cfg1 db_component 
+      cfg2 logger_component
+      cfg3 cache_component
+      
+      -- The remaining config copy can be dropped if not needed (weakening)
+      cfg4 drop
+    ],
+    
+    --[[
+      Example 3: Text Processing
+      
+      Shows how unrestricted types enable natural string manipulation
+    ]]--
+    text_processor: S -> Map [text ->
+      -- Initialize text analysis functions
+      "text" { base: S, weakening: true, contraction: true } [text ->
+        -- Count words (splits text multiple times)
+        text copy [t1, t2 ->]
+        
+        -- Count words
+        t1 " " split length -> word_count
+        
+        -- Count sentences
+        t2 [c -> c == "." || c == "?" || c == "!"] split length -> sentence_count
+        
+        {
+          word_count: word_count,
+          sentence_count: sentence_count,
+          words_per_sentence: sentence_count > 0 ? 
+            word_count sentence_count / toFixed(1) : "0"
+        }
+      ] unrestricted_fn |> analyze_text
+      
+      -- Process text multiple ways
+      text copy [t1, t2, t3 ->]
+      
+      -- Generate multiple outputs from the same input
+      t1 analyze_text -> stats
+      t2 to_lowercase -> lowercase_version
+      t3 extract_keywords -> keywords
+      
+      -- Return all results
+      {
+        original: text,
+        stats: stats,
+        lowercase: lowercase_version,
+        keywords: keywords
+      }
+    ],
+    
+    --[[
+      Example 4: Standard function that uses arguments freely
+    ]]--
+    standard_function: T.U -> (Z -> Z) [_ ->
+      -- Create a standard unrestricted function
+      Z true true [base, weakening, contraction ->] |> int_type
+
+      -- Define a function that uses its argument multiple times
+      "x" int_type [x ->
+        -- Use x twice (copying)
+        x copy [x1, x2 ->]
+        x1 x2 *
+      ] unrestricted_fn |> square
+
+      -- Return the function
+      square
+    ],
+
+    --[[
+      Example 5: Data processing with unrestricted types
+    ]]--
+    process_data: [Z] -> Z [data ->
+      -- Define types
+      { base: Z, weakening: true, contraction: true } |> int_type
+      { base: [Z], weakening: true, contraction: true } |> list_type
+
+      -- Define processing functions
+      "list" list_type [list ->
+        -- Implement sum using fold
+        0 [acc, x -> acc x +] list fold
+      ] unrestricted_fn |> sum
+
+      "list" list_type [list ->
+        -- Make multiple uses of the list (contraction)
+        list copy [list1, list2 ->]
+
+        -- Calculate sum and length
+        list1 sum |> s
+        list2 length |> len
+
+        -- Calculate average
+        len 0 veq [0] [s len /] if
+      ] unrestricted_fn |> avg
+
+      -- Process the data (using it in multiple ways)
+      data copy [data1, data2 ->]
+      data1 avg |> result
+
+      -- Optionally use data2 or discard it (weakening)
+      data2 drop
+
+      -- Return result
+      result
+    ]
+  }
+
   --[[
-    Example: Standard function that uses arguments freely
-  ]]--
-  example.standard_function: T.U -> (Z -> Z) [_ ->
-    -- Create a standard unrestricted function
-    Z true true [base, weakening, contraction ->] |> int_type
-
-    -- Define a function that uses its argument multiple times
-    "x" int_type [x ->
-      -- Use x twice (copying)
-      x copy [x1, x2 ->]
-      x1 x2 *
-    ] unrestricted_fn |> square
-
-    -- Return the function
-    square
-  ]
-
-  --[[
-    Example: Complex data processing with unrestricted types
-  ]]--
-  example.process_data: [Z] -> Z [data ->
-    -- Define types
-    { base: Z, weakening: true, contraction: true } |> int_type
-    { base: [Z], weakening: true, contraction: true } |> list_type
-
-    -- Define processing functions
-    "list" list_type [list ->
-      -- Implement sum using fold
-      0 [acc, x -> acc x +] list fold
-    ] unrestricted_fn |> sum
-
-    "list" list_type [list ->
-      -- Make multiple uses of the list (contraction)
-      list copy [list1, list2 ->]
-
-      -- Calculate sum and length
-      list1 sum |> s
-      list2 length |> len
-
-      -- Calculate average
-      len 0 veq [0] [s len /] if
-    ] unrestricted_fn |> avg
-
-    -- Process the data (using it in multiple ways)
-    data copy [data1, data2 ->]
-    data1 avg |> result
-
-    -- Optionally use data2 or discard it (weakening)
-    data2 drop
-
-    -- Return result
-    result
-  ]
-
-  --[[
-    to_path converts a dot-separated string path to an array of keys.
+    Utility: Converts a dot-separated string path to an array of keys.
   ]]--
   to_path: S -> [S] [path_str ->
     path_str "." Prim split |> parts

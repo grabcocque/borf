@@ -26,6 +26,38 @@ Borf uses Lua-style comments:
 
 **Important**: Never use `//` or `/* */` style comments from other languages.
 
+### Logical Operators
+
+Borf uses English words for logical operators, not symbols:
+
+```borf
+-- Correct
+condition1 and condition2   -- Logical AND
+condition1 or condition2    -- Logical OR
+not condition              -- Logical NOT
+condition1 iff condition2  -- Logical IF AND ONLY IF
+
+-- Incorrect (don't use)
+condition1 && condition2   -- Don't use && for AND
+condition1 || condition2   -- Don't use || for OR
+!condition                 -- Don't use ! for NOT
+```
+
+### Equality and Comparison Operators
+
+Borf uses specific equality operators for different types of comparisons:
+
+```borf
+a veq b      -- Value equality (for comparing values and function results)
+a teq b      -- Type equality (for comparing types)
+a ceq b      -- Category equality (for comparing objects in categories)
+a seq b      -- Structural equality (for comparing structures)
+
+a <:: b      -- Subtyping relation (a is a subtype of b)
+```
+
+Never use `==` or `===` for equality comparisons in Borf code.
+
 ### Pipeline Operator (`|>`)
 
 The pipeline operator is a fundamental part of Borf syntax that passes the result of an expression to the next function:
@@ -236,6 +268,150 @@ Examples should:
 - Show composition of multiple operations
 - Use the pipeline operator to make data flow clear
 - Include explanatory comments for each step
+
+### Explaining Concepts in Practical Terms
+
+When documenting abstract or theoretical concepts (like algebraic laws, category theory principles, or mathematical properties), always provide both the formal mathematical definition AND a practical, real-world explanation of benefits:
+
+```borf
+structure: {
+  -- Maps to Category with additional monoidal structure
+  obj: !Pipeline
+  hom: !Transformer
+  id: [x -> x]
+  comp: >>>
+  tensor: |||
+  
+  -- LAWS
+  -- Each law explained with practical benefits:
+  
+  associativity: (f >>> g) >>> h veq f >>> (g >>> h)
+    -- "You can group pipeline steps however you want without changing the result"
+    -- This means you can refactor complex pipelines into logical groups without breaking functionality
+    -- Example: (parse >>> validate) >>> transform is the same as parse >>> (validate >>> transform)
+  
+  left_identity: id >>> f veq f
+    -- "A 'do-nothing' transformation at the start won't affect your pipeline"
+    -- This lets you conditionally add processing steps without changing pipeline structure
+    -- Example: identity >>> transform is the same as transform
+}
+```
+
+This "best of both worlds" approach serves two audiences:
+
+1. **For mathematical/theoretical users**: Preserves formal rigor with precise definitions, laws, and notation
+2. **For practical users**: Provides immediate understanding of real-world benefits without requiring mathematical background
+
+For each abstract concept, provide:
+
+1. **Formal Definition**: State the mathematical law or property precisely
+2. **Plain Language Explanation**: Describe what the property means in everyday terms
+3. **Practical Benefits**: Explain why this property makes the programmer's life easier
+4. **Concrete Example**: Show a code example demonstrating the practical application
+
+**IMPORTANT: Character Restrictions**
+
+- Use only 7-bit ASCII characters in actual code (outside of comments and strings)
+- For mathematical formulas in code definitions, use ASCII alternatives:
+  - Use `.` instead of `∘` for composition
+  - Use `=>` instead of `⇒` for implications
+  - Use `*` instead of `×` for products
+  - Use `a`, `b`, `c` instead of Greek letters like `α`, `β`, `γ`
+- You may use extended Unicode characters within comments or documentation blocks
+- When expressing mathematical concepts in comments, consider providing both:
+  ```borf
+  -- Mathematical: α_B ∘ F(f) = G(f) ∘ α_A  (naturality)
+  -- ASCII version: a_B . F(f) = G(f) . a_A
+  ```
+
+### Documenting Laws/Guarantees
+
+When documenting mathematical laws that function as guarantees or invariants, use the following approach:
+
+1. Keep formal laws in a `guarantees` or `laws` section of the structure
+2. Name laws clearly (e.g., associativity, identity, commutativity)
+3. Include both the formal definition AND practical guidance:
+
+```borf
+guarantees: {
+  -- Associativity: (f >>> g) >>> h veq f >>> (g >>> h)
+  associativity: forall [f g h ->
+    (f >>> g) >>> h veq f >>> (g >>> h)
+  ]
+    -- "Function composition order doesn't matter, only the sequence"
+    -- Benefit: Lets you refactor complex function chains without changing behavior
+    -- To ensure: Keep functions pure (no side effects) and avoid depending on evaluation order
+  ,
+
+  -- Identity: id >>> f veq f and f >>> id veq f
+  identity: forall [f ->
+    id >>> f veq f and f >>> id veq f
+  ]
+    -- "Identity functions don't change your data"
+    -- Benefit: Makes conditional application of functions safe
+    -- To ensure: Make sure identity functions truly return their input unchanged
+}
+```
+
+For each law/guarantee, include:
+
+1. **Formal Definition**: Keep the precise mathematical formulation
+2. **Plain Language Translation**: Explain what the law means in everyday terms
+3. **Practical Benefit**: Articulate clearly why this property is useful to programmers
+4. **Usage Requirements**: If the user must enforce a constraint or invariant to get this benefit, explain how
+
+This approach helps both:
+- Mathematical users who need formal specifications
+- Practical users who need to understand concrete benefits and requirements
+
+### Providing Applied Examples
+
+For theoretical modules, include a comprehensive examples section that shows the practical application of the theoretical concepts:
+
+```borf
+example: {
+  --[[
+    Example 1: Real-World Use Case Title
+    
+    One-line description of what this example demonstrates
+  ]]--
+  real_world_example: InputType -> OutputType [input ->
+    -- 1. Setup and initialization
+    -- Show how to initialize the theoretical structures in a real context
+    
+    -- 2. Practical application
+    -- Demonstrate how the mathematical properties enable practical benefits
+    
+    -- 3. Results and benefits
+    -- Show concrete outcomes that users care about
+  ],
+  
+  --[[
+    Example 2: Another Applied Example
+    
+    Shows a different use case for the same concepts
+  ]]--
+  another_example: OtherInput -> OtherOutput [data ->
+    -- ...implementation...
+  ]
+}
+```
+
+When creating examples for theoretical modules:
+
+1. **Choose Relatable Domains**: Use examples from familiar domains like data processing, configuration management, or text handling
+2. **Highlight Specific Benefits**: Each example should demonstrate a specific practical benefit of the theoretical concept
+3. **Show Real-World Problems**: Address problems users actually encounter, not artificial academic examples
+4. **Connect Theory to Practice**: Explicitly point out where theoretical properties are enabling practical benefits
+5. **Include Multiple Examples**: Provide at least 2-3 different examples to show versatility
+
+Good examples demonstrate how these properties make code:
+- More reliable (fewer bugs)
+- More maintainable (easier to change)
+- More reusable (more general purpose)
+- More efficient (better performance)
+
+This approach makes abstract concepts accessible to all developers while preserving mathematical rigor. Users don't need to understand the mathematics to get the benefits, but those who do understand the math can see how the theoretical foundations inform the design.
 
 ## Common Patterns
 

@@ -1,12 +1,62 @@
 --[[
-  Type System Foundations (Enhanced)
+  Flexible Type System Foundation - Building Blocks for Safe Code
 
-  This module defines the core type system of Borf with improved theoretical foundation,
-  integrating linear types and set theory in a more principled way while maintaining
-  the original syntax structure.
+  This module provides the core type system that powers all Borf code, letting you:
+  
+  - Create precise type definitions for robust code
+  - Build complex data structures with strong guarantees
+  - Express rich relationships between different types
+  - Track and manage resource usage safely
+  - Prevent common errors through type constraints
+  - Build abstraction layers with principled foundations
+  
+  The type system combines practical usability with mathematical rigor,
+  giving you powerful tools to define exactly what your code can and cannot do.
 ]]--
 
 @T: {
+  --------------------------------------------------
+  -- TYPE SYSTEM USAGE GUIDE
+  --------------------------------------------------
+  
+  --[[
+    KEY TYPE SYSTEM CONCEPTS
+    
+    1. BASE TYPES
+       These are the fundamental building blocks like numbers, strings, and
+       booleans that form the basis of all other types.
+       
+    2. COMPOSITE TYPES
+       Ways to combine simpler types into complex structures like products
+       (tuples, records), sums (variants, enums), and functions.
+       
+    3. RESOURCE TYPES
+       Special types that track how values are used, ensuring proper
+       handling of resources like file handles or network connections.
+       
+    4. TYPE RELATIONSHIPS
+       Subtyping relationships that establish which types are compatible
+       with each other and how type conversion works.
+    
+    PRACTICAL TYPE SYSTEM APPLICATIONS:
+    
+    1. ERROR PREVENTION
+       The type system catches errors before code runs by ensuring
+       operations only work on compatible types.
+       
+    2. DOCUMENTATION
+       Types serve as live documentation that describes what data
+       your code expects and produces.
+       
+    3. RESOURCE SAFETY
+       Resource types ensure critical resources like file handles 
+       are properly managed throughout their lifecycle.
+       
+    4. ABSTRACTION
+       Types enable powerful abstractions by defining interfaces and
+       contracts between different parts of your code.
+  ]]--
+  
   typ: {
     -- Core types
     T U
@@ -181,36 +231,79 @@
   (x: T) * (T -> T) -> T Sigma
 
   --------------------------------------------------
-  -- Structure Mapping to Type Universe Category
+  -- STRUCTURE & PRACTICAL BENEFITS
   --------------------------------------------------
-
+  
   --[[
-    Structure mapping that establishes @T as a universe category.
-
-    In this categorical structure:
-    - Objects are types in the universe
-    - Morphisms are functions between types (and subtyping relations)
-    - Identity is the identity function on a type
-    - Composition is function composition
-
-    This categorical structure captures the rich structure of types, including:
-    - Subtyping as a partial order
-    - Product and sum types as categorical products and coproducts
-    - Function types forming a cartesian closed category
-    - Universe hierarchy to avoid paradoxes
-    - Dependent types extending the expressive power
+    This section defines the mathematical properties of the type system
+    and explains their practical benefits for code safety and correctness.
   ]]--
   structure: {
-    -- Map T to a category
+    -- Maps to a category with rich structure
     objects: T,
     morphisms: [a b -> a -> b],
-
+    id: [x -> x],
+    compose: >>>,
+    
+    -- PROPERTIES
+    -- Each property explained with practical benefits:
+    
+    function_composition: (f >>> g) >>> h veq f >>> (g >>> h)
+      -- "Function chaining works predictably regardless of grouping"
+      -- This ensures that complex chains of operations behave consistently
+      -- Example: (validate >>> parse) >>> transform is the same as validate >>> (parse >>> transform)
+    
+    subtyping: Consistent rules for type compatibility
+      -- "Types form a predictable hierarchy that models real-world relationships"
+      -- This prevents errors by ensuring operations receive compatible types
+      -- Example: Integer <:: Number means any operation that works on numbers works on integers
+    
+    product_types: Tuples, records, and other compound data
+      -- "Safely combine multiple values into single composite values"
+      -- This allows building complex data structures with precise type checking
+      -- Example: (name, age) combines two values with their individual type constraints
+    
+    sum_types: Variants, enums, and tagged unions
+      -- "Express values that could be one of several different types"
+      -- This enables safe handling of diverse cases with compiler verification
+      -- Example: Result = Success | Error requires handling both possibilities
+    
+    function_types: Type-safe transformations between values
+      -- "Guarantees that functions receive and return expected types"
+      -- This catches errors where functions are called with incorrect arguments
+      -- Example: (Number -> String) describes a function that must return strings
+    
+    universe_hierarchy: Type system without paradoxes
+      -- "Prevents logical contradictions in the type system"
+      -- This ensures the type system itself is consistent and trustworthy
+      -- Example: Avoids paradoxes like "the set of all sets that don't contain themselves"
+    
+    -- PRACTICAL BENEFITS
+    
+    error_prevention:
+      -- "Catch type errors at compile time rather than runtime"
+      -- The type system identifies mismatches before code is executed
+      -- Example: Can't accidentally pass a string to a function expecting a number
+      
+    code_documentation:
+      -- "Types serve as always-up-to-date documentation"
+      -- Type signatures clearly describe what data functions expect and produce
+      -- Example: Function signature immediately shows required inputs and outputs
+      
+    refactoring_safety:
+      -- "Make changes confidently with type system verification"
+      -- The compiler checks all usages when types are modified
+      -- Example: Changing a parameter type flags all affected code for updates
+    
+    abstraction_support:
+      -- "Build powerful abstractions with type-level guarantees"
+      -- Types define interfaces between components that are verified by the compiler
+      -- Example: Define protocols between systems with type-level contracts
+    
     -- Base category structure
     dom: [f -> Prim.domain(f)],
     cod: [f -> Prim.codomain(f)],
-    id: [t -> [x -> x]],
-    compose: [f g -> [x -> g(f(x))]],
-
+    
     -- Type-specific structure
     subtype: [a b -> a <:: b],
     equivalent: [a b -> a teq b],
@@ -238,56 +331,82 @@
     linear: [t -> !t],                        -- Linear type constructor
     linear_morphism: [a b -> a ->+ b],        -- Resource-tracking morphism
 
-    -- Category laws
-    laws: {
-      -- Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
+    -- GUARANTEES
+    -- Each guarantee explained with practical benefits and how to ensure it:
+    
+    guarantees: {
+      -- Associativity of function composition
       associativity: forall [f g h ->
-        compose(compose(f, g), h) == compose(f, compose(g, h))
-      ],
+        (f >>> g) >>> h veq f >>> (g >>> h)
+      ]
+        -- "Order of function composition is flexible"
+        -- Benefit: You can refactor and reorganize function calls without changing behavior
+        -- To ensure: Keep functions pure without side effects
+      ,
 
-      -- Identity: id ∘ f = f = f ∘ id
+      -- Identity function properties
       identity: forall [f ->
-        compose(id(dom(f)), f) == f && compose(f, id(cod(f))) == f
-      ],
+        id >>> f veq f and f >>> id veq f
+      ]
+        -- "Identity functions don't change your data"
+        -- Benefit: You can add pass-through processing steps without affecting results
+        -- To ensure: Make sure identity functions truly return their input unchanged
+      ,
 
       -- Subtyping forms a partial order (reflexive, transitive, antisymmetric)
       subtype_partial_order: (
-        forall [t -> subtype(t, t)] &&                                 -- Reflexivity
-        forall [a b c -> subtype(a, b) && subtype(b, c) -> subtype(a, c)] && -- Transitivity
-        forall [a b -> subtype(a, b) && subtype(b, a) -> equivalent(a, b)]   -- Antisymmetry
-      ),
+        forall [t -> t <:: t] and                           -- Reflexivity
+        forall [a b c -> a <:: b and b <:: c -> a <:: c] and -- Transitivity
+        forall [a b -> a <:: b and b <:: a -> a teq b]      -- Antisymmetry
+      )
+        -- "Type compatibility follows consistent, predictable rules"
+        -- Benefit: You can rely on type conversions to work consistently throughout your code
+        -- To ensure: Follow the established type hierarchy when defining new types
+      ,
 
       -- Type equivalence forms an equivalence relation
       type_equivalence: (
-        forall [t -> equivalent(t, t)] &&                              -- Reflexivity
-        forall [a b -> equivalent(a, b) -> equivalent(b, a)] &&        -- Symmetry
-        forall [a b c -> equivalent(a, b) && equivalent(b, c) -> equivalent(a, c)] -- Transitivity
-      ),
+        forall [t -> t teq t] and                              -- Reflexivity
+        forall [a b -> a teq b -> b teq a] and                 -- Symmetry
+        forall [a b c -> a teq b and b teq c -> a teq c]       -- Transitivity
+      )
+        -- "Type equality is consistent and predictable"
+        -- Benefit: You can substitute equivalent types without changing program behavior
+        -- To ensure: Define type equivalence based on structure and behavior, not just names
+      ,
 
       -- Product laws (universal property of products)
       product_universal: forall [a b c f g ->
-        let proj1 = [p -> p.1] in
-        let proj2 = [p -> p.2] in
-        let h = [x -> (f(x), g(x))] in
-        compose(h, proj1) == f && compose(h, proj2) == g
-      ],
+        let proj1 = [p -> p.0] in
+        let proj2 = [p -> p.1] in
+        let h = [x -> x f x g (,)] in
+        h >>> proj1 veq f and h >>> proj2 veq g
+      ]
+        -- "Product types behave consistently with their components"
+        -- Benefit: You can build and decompose tuples and records with predictable results
+        -- To ensure: Access product components with the standard accessors
+      ,
 
       -- Coproduct laws (universal property of coproducts)
       coproduct_universal: forall [a b c f g ->
-        let inj1 = [x -> Prim.left(x)] in
-        let inj2 = [x -> Prim.right(x)] in
-        let h = [x -> x |> match [
-          ([Prim.is_left, y] -> f(y)),
-          ([Prim.is_right, y] -> g(y))
-        ]] in
-        compose(inj1, h) == f && compose(inj2, h) == g
-      ],
+        let inj1 = [x -> x Prim.left] in
+        let inj2 = [x -> x Prim.right] in
+        let h = [x -> x {
+          | ([Prim.is_left, y] -> y f)
+          | ([Prim.is_right, y] -> y g)
+        } match] in
+        inj1 >>> h veq f and inj2 >>> h veq g
+      ]
+        -- "Sum types handle all possible cases consistently"
+        -- Benefit: Pattern matching on variants is guaranteed to work as expected
+        -- To ensure: Use proper constructors when creating variant values
+      ,
 
       -- Universe hierarchy is well-founded
       universe_well_founded: (
-        universe_level(Type_0) <:: universe_level(Type_1) &&
-        universe_level(Type_1) <:: universe_level(Type_2) &&
-        forall [t -> universe_level(t) <:: universe_level(universe_level(t))]
+        Type_0 universe_level <:: Type_1 universe_level and
+        Type_1 universe_level <:: Type_2 universe_level and
+        forall [t -> t universe_level <:: t universe_level universe_level]
       )
     }
   }

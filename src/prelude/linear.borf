@@ -50,18 +50,77 @@
   }
 
   --------------------------------------------------
-  -- Resource Management Guarantees Framework
+  -- STRUCTURE & PRACTICAL BENEFITS
   --------------------------------------------------
 
+  --[[
+    This section defines the mathematical properties of linear resource handling
+    and explains how they ensure safe resource management in practical applications.
+  ]]--
   structure: {
-    -- Core resource management guarantees
+    -- Maps to a symmetric monoidal closed category with linear structure
     resource_types: LinearType,
     resource_handlers: [a b -> (!a -o> b)],
     handler_input: [f -> f.domain],
     handler_output: [f -> f.codomain],
     identity_handler: [a -> [!x -o> x]],
     chained_handlers: [f g -> [!x -o> x |> g |> f]],
-
+    
+    -- PROPERTIES
+    -- Each property explained with practical benefits:
+    
+    linearity: Resources must be used exactly once
+      -- "No resource leaks or double-usage errors"
+      -- This prevents both forgetting to close resources and trying to use them after closing
+      -- Example: File handles must be closed exactly once - not forgotten, not closed twice
+    
+    composition: (f >>> g) >>> h veq f >>> (g >>> h)
+      -- "Resource operations can be safely composed in any grouping"
+      -- This allows building complex resource handling from simpler operations
+      -- Example: (read_file >>> open_file) >>> close_file works the same as read_file >>> (open_file >>> close_file)
+    
+    identity: id >>> f veq f and f >>> id veq f
+      -- "Pass-through operations don't affect resource safety"
+      -- This allows adding monitoring or validation without compromising safety
+      -- Example: identity_handler >>> resource_handler preserves all safety guarantees
+    
+    tensor_product: Resource pairs that maintain tracking for both resources
+      -- "Bundle related resources while keeping individual tracking"
+      -- This allows treating multiple resources as a unit without losing safety
+      -- Example: (db_connection, transaction) ensures both are handled properly
+    
+    symmetry: Resource order in pairs doesn't affect safety
+      -- "Change resource ordering without affecting safety"
+      -- This gives flexibility in how resource pairs are organized
+      -- Example: (lock, file) and (file, lock) provide the same safety guarantees
+    
+    closure: Linear functions as first-class values
+      -- "Resource handlers can be passed around safely"
+      -- This enables higher-order resource management patterns
+      -- Example: Passing resource cleanup handlers to other components
+    
+    -- PRACTICAL BENEFITS
+    
+    leak_prevention:
+      -- "Eliminate resource leaks by construction"
+      -- The type system ensures all resources are properly cleaned up
+      -- Example: Prevents database connections from being left open
+      
+    access_safety:
+      -- "Prevent access to closed or invalid resources"
+      -- Resources can't be used after they've been consumed or closed
+      -- Example: Can't read from a file after it's been closed
+      
+    ownership_clarity:
+      -- "Clear ownership rules for critical resources"
+      -- Resources must be explicitly transferred between components
+      -- Example: When a function takes a database connection, it becomes responsible for it
+    
+    composable_safety:
+      -- "Build complex resource management from simple parts"
+      -- Safe resource handlers can be composed into larger systems that remain safe
+      -- Example: Combining connection, transaction, and query operations that maintain safety
+    
     -- Resource bundling guarantees
     resource_pairing: [a b -> a o* b],
     empty_resource: T.Unit,
@@ -82,7 +141,53 @@
       split: [!((a o* b) -o> c) -o> (a -o> (b -o> c))],
       combine: [!(a -o> (b -o> c)) -o> ((a o* b) -o> c)]
     }],
-    apply_handler: [a b -> [!((a -o> b) o* a) -o> b]]
+    apply_handler: [a b -> [!((a -o> b) o* a) -o> b]],
+    
+    -- GUARANTEES
+    -- Each guarantee explained with practical benefits and how to ensure it:
+    
+    guarantees: {
+      -- Linearity: Each resource must be used exactly once
+      linearity: forall [r -> 
+        consume(r) |> [_ -> 
+          use(r) |> [_ -> false] catch [_ -> true]  -- Should fail
+        ]
+      ]
+        -- "Resources can't be accessed after being consumed"
+        -- Benefit: Prevents use-after-close bugs and double-free errors
+        -- To ensure: Always track the ownership of resources and never duplicate them
+      ,
+
+      -- Composition: Resource handlers can be safely composed
+      composition: forall [f g h -> 
+        f g chained_handlers h chained_handlers veq 
+        g h chained_handlers f chained_handlers
+      ]
+        -- "Resource transformations can be grouped however you want"
+        -- Benefit: Build complex resource operations from simple ones with predictable results
+        -- To ensure: Make each handler responsible for exactly one logical operation
+      ,
+
+      -- Resource pairing: Related resources can be bundled
+      pairing: forall [a b ->
+        a b resource_pairing |> pair ->
+          pair resource_swapping.swap |> swapped ->
+            swapped resource_swapping.unswap veq pair
+      ]
+        -- "Resource bundles can be reordered and regrouped safely"
+        -- Benefit: Flexible organization of related resources (like connection + transaction)
+        -- To ensure: Treat each resource in a bundle as independent for tracking purposes
+      ,
+
+      -- Handler application: Resource handlers can be safely applied
+      handler_application: forall [a b f v ->
+        handler_type(a, b) f |> handler ->
+          resource_pairing(handler, v) apply_handler(a, b) veq v f 
+      ]
+        -- "Resource handlers work consistently when applied to resources"
+        -- Benefit: Build higher-order resource management abstractions safely
+        -- To ensure: Keep resource handlers pure and focused on a single responsibility
+    }
   }
 
   --[[
