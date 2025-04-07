@@ -1,13 +1,52 @@
 --[[
-  Parser Transformations
+  Parser Performance Optimizations and Transformations
 
-  This module defines transformations between parser categories
-  and other categorical structures, enabling the representation of
-  parsing operations in different mathematical frameworks while
-  preserving composition guarantees.
+  This module provides tools for optimizing and transforming parsers, letting you:
+  
+  - Convert between different parser implementation styles for better performance
+  - Apply optimizations automatically to make parsers faster
+  - Transform parsers to work with different data formats
+  - Combine parsers in ways that preserve correctness
+  - Debug and visualize parser behavior
+  
+  Use these tools when you need to make your parsers more efficient,
+  when working with complex parsing tasks, or when integrating parsers
+  with other parts of your system.
 ]]--
 
 @ParserXf: {
+  --------------------------------------------------
+  -- PARSER OPTIMIZATION GUIDE
+  --------------------------------------------------
+  
+  --[[
+    WHEN TO OPTIMIZE YOUR PARSERS
+    
+    1. PERFORMANCE BOTTLENECKS
+       When parsing is taking too long or consuming too much memory,
+       especially with large inputs or complex grammars.
+       
+    2. RESOURCE-CONSTRAINED ENVIRONMENTS
+       When parsing needs to happen in environments with limited
+       memory or CPU resources.
+       
+    3. REAL-TIME REQUIREMENTS
+       When parsing needs to happen quickly enough for interactive
+       or streaming applications.
+       
+    4. COMPLEX GRAMMARS
+       When working with complex languages or data formats that
+       would be inefficient with naive parsers.
+    
+    BEST PRACTICES:
+    
+    1. Measure performance before optimizing (use the parser_benchmark function)
+    2. Start with the simplest parser that works correctly
+    3. Apply transformations to match your use case (streaming, batch, etc.)
+    4. Use memoization for parsers with backtracking or repetition
+    5. Consider alternative parser styles for different input characteristics
+  ]]--
+  
   typ: {
     -- Core transformation types
     ParserFunctor
@@ -556,42 +595,138 @@
   }
 
   --------------------------------------------------
-  -- Examples
+  -- PRACTICAL EXAMPLES
   --------------------------------------------------
-
+  
+  --[[
+    OPTIMIZING REAL-WORLD PARSERS
+    
+    These examples demonstrate how to optimize and transform parsers
+    to improve performance and functionality in practical scenarios.
+  ]]--
+  
   example: {
     --[[
-      Example 1: Transforming a parser to a Kleisli arrow and back
+      Example 1: Optimizing a JSON Parser for Performance
+      
+      This example shows how to transform a standard JSON parser into
+      a more efficient version using memoization and derivative techniques.
+      
+      Perfect for applications that process large amounts of JSON data
+      or need to parse JSON with low latency.
     ]]--
-    parser_kleisli_roundtrip: @Parser.Parser -> @Parser.Parser [parser ->
+    optimize_json_parser: () -> @Parser.Parser [->
+      -- Start with a basic JSON parser
+      let base_parser = @Parser.Examples.json_example() in
+      
+      -- Convert to a derivative parser for faster character-by-character parsing
+      let derivative_parser = parser_to_derivative(base_parser) in
+      
+      -- Apply memoization to avoid repeating work on common patterns
+      let memoized_parser = apply_memo_optimization(derivative_parser) in
+      
+      -- Convert back to standard parser interface
+      let optimized_parser = derivative_to_parser(memoized_parser) in
+      
+      -- Benchmark to verify improvement
+      benchmark_comparison(base_parser, optimized_parser, test_json_data) |> [results ->
+        log_info("Optimization results: " + results.speedup + "x faster")
+      ]
+      
+      optimized_parser
+    ],
+
+    --[[
+      Example 2: Creating a Streaming-Friendly Parser
+      
+      This example shows how to transform a parser to work efficiently
+      with streaming data sources, such as reading large files or
+      processing network data on the fly.
+      
+      Essential for handling data that's too large to fit in memory
+      or that arrives incrementally.
+    ]]--
+    create_streaming_parser: @Parser.Parser -> @Parser.Parser [parser ->
+      -- Transform to a Kleisli arrow for composition with streaming operations
       let kleisli = parser_to_kleisli(parser) in
-      kleisli_to_parser(kleisli)
+      
+      -- Apply streaming transformations
+      let streaming_kleisli = apply_streaming_transformations(kleisli) |> [k ->
+        -- Add incremental processing capability
+        k |> add_incremental_support
+          -- Add backpressure handling
+          |> add_backpressure_handling
+          -- Configure for chunk-by-chunk processing
+          |> configure_chunked_processing
+      ]
+      
+      -- Convert back to parser interface
+      let streaming_parser = kleisli_to_parser(streaming_kleisli) in
+      
+      -- Add error recovery for robust streaming
+      streaming_parser |> add_error_recovery
     ],
 
     --[[
-      Example 2: Transforming a parser to a derivative and back
+      Example 3: Building a Parser for a Custom Domain-Specific Language
+      
+      This example demonstrates creating and optimizing a parser for a custom
+      domain language, showing how transformation techniques enable building
+      complex parsers from simpler components.
+      
+      Perfect for configuration formats, data interchange, or specialized notations.
     ]]--
-    parser_derivative_roundtrip: @Parser.Parser -> @Parser.Parser [parser ->
-      let derivative = parser_to_derivative(parser) in
-      derivative_to_parser(derivative)
+    create_dsl_parser: () -> @Parser.Parser [->
+      -- Define basic components of the DSL
+      let identifier = @Parser.string_regex("[a-zA-Z_][a-zA-Z0-9_]*") in
+      let number = @Parser.number() in
+      let operator = @Parser.one_of("+-*/=") in
+      
+      -- Create a simple expression parser
+      let expr_parser = combine_parsers(
+        identifier,
+        operator,
+        choice(number, identifier)
+      ) in
+      
+      -- Transform to a more powerful parser using functorial lifting
+      let functor = alternative_parser_functor("DSL") in
+      let enhanced_parser = apply_functor(functor, expr_parser) in
+      
+      -- Add parsing context for better error messages
+      let contextual_parser = add_parsing_context(enhanced_parser) in
+      
+      -- Optimize for performance
+      contextual_parser |> parser_to_derivative
+                        |> apply_optimizations
+                        |> derivative_to_parser
     ],
 
     --[[
-      Example 3: Using a functor to transform a parser
+      Example 4: Visualizing Parser Behavior for Debugging
+      
+      This example shows how to transform a parser to visualize its behavior,
+      helping to debug complex parsing issues or understand parsing patterns.
+      
+      Invaluable when developing or troubleshooting complex parsers.
     ]]--
-    transform_parser: @Parser.Parser -> @Parser.Parser [parser ->
-      let functor = alternative_parser_functor("Alternative") in
-      apply_functor(functor, parser)
-    ],
-
-    --[[
-      Example 4: Composing parsers using Kleisli composition
-    ]]--
-    compose_parsers_kleisli: @Parser.Parser * @Parser.Parser -> @Parser.Parser [p1 p2 ->
-      let k1 = parser_to_kleisli(p1) in
-      let k2 = parser_to_kleisli(p2) in
-      let composed = @Kleisli.kleisli_compose(k1, k2) in
-      kleisli_to_parser(composed)
+    create_debug_parser: @Parser.Parser -> @Parser.Parser [parser ->
+      -- Transform to a traced version that records steps
+      let traced = parser_to_traced(parser) in
+      
+      -- Add visualization capabilities
+      let visual = add_parse_tree_visualization(traced) in
+      
+      -- Add detailed logging
+      let logged = add_step_logging(visual) in
+      
+      -- Create the debug-friendly parser
+      let debug_parser = traced_to_parser(logged) in
+      
+      -- Run with sample input to generate visualization
+      "sample input" |> debug_parser |> parse |> generate_visualization |> save_svg("parse_tree.svg")
+      
+      debug_parser
     ]
   }
 }
