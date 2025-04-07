@@ -1,15 +1,54 @@
 --[[
-  Task Category
+  Asynchronous Tasks - Simplified Concurrent Programming
 
-  This module defines the category of asynchronous tasks (coroutines) using
-  Kleisli arrows. Tasks represent computations that may suspend, yield control,
-  and resume later, with the ability to produce a value of a specific type.
-
-  The category structure allows for elegant composition of asynchronous
-  computations without callback hell or complex promise chaining.
+  This module provides tools for writing clean, efficient concurrent code, letting you:
+  
+  - Create asynchronous operations that don't block the main thread
+  - Compose complex operations from simpler ones with clear data flow
+  - Run multiple operations in parallel for better performance
+  - Handle errors gracefully in concurrent code
+  - Coordinate between different asynchronous processes
+  - Build responsive applications that remain interactive during long operations
+  
+  Tasks are perfect for I/O-bound operations (network requests, file access),
+  CPU-intensive work that shouldn't block the UI, or any code that needs to
+  yield control periodically.
 ]]--
 
 @Task: {
+  --------------------------------------------------
+  -- ASYNC TASK USAGE GUIDE
+  --------------------------------------------------
+  
+  --[[
+    WHEN TO USE TASKS
+    
+    1. NETWORK OPERATIONS
+       Use tasks for API calls, data fetching, uploads, or any operation
+       that involves network communication and waiting for responses.
+       
+    2. FILE SYSTEM OPERATIONS
+       Reading large files, writing data, or any disk I/O that could
+       take significant time should be done using tasks.
+       
+    3. LONG-RUNNING CALCULATIONS
+       Computationally intensive operations that would otherwise freeze
+       your UI or block other processing should run as tasks.
+       
+    4. PARALLEL PROCESSING
+       When you need to run multiple operations simultaneously and
+       coordinate their results, tasks provide clean composition.
+    
+    BEST PRACTICES:
+    
+    1. Keep individual tasks focused on a single responsibility
+    2. Use task composition (|> or >=>) instead of nested callbacks
+    3. Handle errors at the appropriate level in your task chain
+    4. Prefer parallel execution (<&>) for independent operations
+    5. Use yield to periodically give control back during long operations
+    6. Always provide proper cleanup for resources when tasks complete
+  ]]--
+  
   typ: {
     -- Core task types
     Task TaskArrow Scheduler
@@ -714,6 +753,248 @@
       ], scheduler)
 
       -- Result: Task(-1)
+    ]
+  }
+  
+  --------------------------------------------------
+  -- PRACTICAL EXAMPLES
+  --------------------------------------------------
+  
+  --[[
+    SOLVING REAL PROBLEMS WITH TASKS
+    
+    These examples demonstrate how to use tasks to implement common
+    asynchronous programming patterns in clean, readable code.
+  ]]--
+  
+  example: {
+    --[[
+      Example 1: API Data Fetching with Retry and Timeout
+      
+      This example shows how to create a robust API client that:
+      - Fetches data from a remote server
+      - Handles timeouts gracefully
+      - Implements automatic retry with exponential backoff
+      - Processes the response asynchronously
+      
+      Perfect for building resilient applications that communicate
+      with external services.
+    ]]--
+    fetch_with_retry: S * Z * Z -> Task.({S: Any}) [url, max_retries, timeout ->
+      -- Create scheduler for this operation
+      let scheduler = create_scheduler() in
+      
+      -- Define the core fetch operation
+      let fetch_task = [url, attempt ->
+        create_task([->
+          -- Log the attempt
+          "Fetching " + url + " (attempt " + attempt + ")" |> log_info
+          
+          -- Make the API request
+          try {
+            -- Start the network request
+            let request_task = http_request(url) in
+            
+            -- Set up timeout protection
+            let timeout_task = create_task([->
+              -- Wait for specified time
+              yield(timeout, scheduler)
+              -- Return timeout error
+              error("Request timed out after " + timeout + "ms")
+            ], scheduler) in
+            
+            -- Race between completion and timeout
+            let result = await_first([request_task, timeout_task], scheduler) in
+            
+            -- Parse the successful result
+            result |> parse_json
+          } catch err {
+            -- Check if we should retry
+            if attempt < max_retries {
+              -- Calculate backoff delay (exponential)
+              let delay = 2 ** attempt * 100 in
+              
+              -- Wait before retry
+              yield(delay, scheduler)
+              
+              -- Retry the request
+              fetch_task(url, attempt + 1)
+            } else {
+              -- Max retries reached, propagate the error
+              error("Failed after " + max_retries + " attempts: " + err.message)
+            }
+          }
+        ], scheduler)
+      ] in
+      
+      -- Start the fetch process with attempt 1
+      fetch_task(url, 1)
+    ],
+    
+    --[[
+      Example 2: Parallel Data Processing Pipeline
+      
+      This example demonstrates using tasks to create a data processing
+      pipeline that performs multiple operations in parallel, then
+      combines the results.
+      
+      Ideal for data enrichment, transformations, or any workflow with
+      independent processing steps.
+    ]]--
+    process_data_pipeline: [Any] -> Task.([Any]) [input_data ->
+      -- Create scheduler
+      let scheduler = create_scheduler() in
+      
+      create_task([->
+        -- Map each input item to a task that processes it
+        let processing_tasks = input_data [item ->
+          create_task([->
+            -- Run multiple enrichment operations in parallel
+            let validation_task = validate_item(item) in
+            let enrichment_task = enrich_item(item) in
+            let scoring_task = score_item(item) in
+            
+            -- Wait for all three operations to complete
+            let results = await_all([
+              validation_task,
+              enrichment_task,
+              scoring_task
+            ], scheduler) in
+            
+            -- Destructure results
+            let [validation, enrichment, score] = results in
+            
+            -- Only keep items that passed validation
+            if validation.valid {
+              -- Combine the results into an enhanced item
+              {
+                ...item,
+                ...enrichment,
+                score: score
+              }
+            } else {
+              -- Return null for invalid items (will filter these out)
+              null
+            }
+          ], scheduler)
+        ] in
+        
+        -- Wait for all items to be processed (in parallel)
+        let results = await_all(processing_tasks, scheduler) in
+        
+        -- Filter out null results (invalid items)
+        results [r -> r != null] filter
+      ], scheduler)
+    ],
+    
+    --[[
+      Example 3: Responsive File Processing with Progress Updates
+      
+      This example shows how to process a large file asynchronously
+      while providing progress updates to keep the UI responsive.
+      
+      Essential for maintaining responsiveness during lengthy operations
+      like file uploads, imports, or analysis.
+    ]]--
+    process_large_file: S * (Z -> ()) -> Task.(Any) [file_path, progress_callback ->
+      -- Create scheduler
+      let scheduler = create_scheduler() in
+      
+      create_task([->
+        -- Open the file
+        let file = await(open_file(file_path), scheduler) in
+        
+        -- Get file size for progress calculation
+        let file_size = await(get_file_size(file), scheduler) in
+        let processed_bytes = 0 in
+        
+        -- Create result accumulator
+        let results = [] in
+        
+        -- Process the file in chunks
+        loop {
+          -- Read a chunk of data
+          let chunk = await(read_chunk(file, 8192), scheduler) in
+          
+          -- Check if we've reached EOF
+          if chunk.length == 0 {
+            break
+          }
+          
+          -- Process this chunk
+          let chunk_result = await(process_chunk(chunk), scheduler) in
+          results = results + [chunk_result]
+          
+          -- Update processed bytes and report progress
+          processed_bytes = processed_bytes + chunk.length in
+          let progress_percent = (processed_bytes * 100) / file_size in
+          progress_callback(progress_percent)
+          
+          -- Yield control periodically to keep UI responsive
+          yield(1, scheduler)
+        }
+        
+        -- Close the file
+        await(close_file(file), scheduler)
+        
+        -- Return the combined results
+        combine_results(results)
+      ], scheduler)
+    ],
+    
+    --[[
+      Example 4: Resource Management with Cleanup
+      
+      This example demonstrates proper resource management with
+      guaranteed cleanup, even when errors occur.
+      
+      Critical for working with databases, file handles, network
+      connections, and other resources that need proper cleanup.
+    ]]--
+    with_managed_resource: (S -> Task.(a)) * (a -> Task.(Null)) * (a -> Task.(b)) -> Task.(b) [
+      acquire, release, use
+    ->
+      -- Create scheduler
+      let scheduler = create_scheduler() in
+      
+      create_task([->
+        -- Track resource and result
+        let resource = null in
+        let result = null in
+        
+        try {
+          -- Acquire the resource
+          resource = await(acquire(), scheduler)
+          
+          -- Use the resource
+          result = await(use(resource), scheduler)
+        } catch err {
+          -- Store the error to re-throw after cleanup
+          let saved_error = err in
+          
+          -- Always attempt cleanup
+          if resource != null {
+            try {
+              -- Release resource even if we had an error
+              await(release(resource), scheduler)
+            } catch cleanup_err {
+              -- Log cleanup error but don't override original error
+              "Error during resource cleanup: " + cleanup_err.message |> log_error
+            }
+          }
+          
+          -- Re-throw the original error
+          throw saved_error
+        }
+        
+        -- Normal cleanup path (no errors)
+        if resource != null {
+          await(release(resource), scheduler)
+        }
+        
+        -- Return the result
+        result
+      ], scheduler)
     ]
   }
 }
