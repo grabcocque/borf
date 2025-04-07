@@ -4,10 +4,11 @@ This guide helps maintain consistent, idiomatic Borf code throughout the prelude
 
 ## Core Principles of Idiomatic Borf
 
-1. **Concatenative Style**: Values come before operations
-2. **Named Parameters**: Use `[x, y -> ...]` for quotations with named parameters
-3. **Pipeline Operator**: Use `|>` for readability when composing operations
+1. **Concatenative Style**: Values come before operations (`x y f` not `f(x, y)`)
+2. **Named Parameters**: Use `[x, y -> ...]` with commas for quotations with named parameters
+3. **Pipeline Operator**: Use `|>` for explicit data flow and readability when chaining operations
 4. **Stack-Based Thinking**: Consider data flow in terms of stack operations
+5. **Explicit Data Flow**: Make transformations clear and follow the data through your program
 
 ## Common Transformations
 
@@ -95,7 +96,7 @@ x |> [x ->
 
 ## Using the Pipeline Operator
 
-The pipeline operator (`|>`) is particularly useful for maintaining readability in concatenative code:
+The pipeline operator (`|>`) is essential for maintaining readability in Borf code. It makes data flow explicit by showing how values move through transformations.
 
 **Non-idiomatic:**
 ```
@@ -110,10 +111,27 @@ x |> f |> g |> h
 This is especially valuable for complex transformations:
 
 ```
-data 
-|> [data -> data transform1] 
-|> [result -> result transform2]
+input_data |> 
+  [data -> data normalize] |> 
+  [data -> data [item -> item is_valid] filter] |> 
+  [filtered -> filtered process]
 ```
+
+### Pipeline Operator Benefits
+
+1. **Explicit Data Flow**: Makes it obvious how data flows through transformations
+2. **Readability**: Creates a clear top-to-bottom or left-to-right reading pattern
+3. **Modularity**: Allows easy addition or removal of processing steps
+4. **Debuggability**: Makes it easier to isolate and test individual transformation steps
+
+### When to Use Pipeline Operators
+
+**ALWAYS use pipeline operators when:**
+- Chaining multiple operations
+- Creating data processing pipelines
+- Working with generator/stream transformations
+- Building sequences of data transformations
+- Creating complex processing workflows
 
 ## Error Handling
 
@@ -169,7 +187,7 @@ let transformed = map(filtered, [x -> transform(x)]) in
 process_result(transformed)
 ```
 
-**Idiomatic:**
+**Idiomatic with intermediate variables:**
 ```
 get_data |> [data ->
   data [x -> x is_valid] filter |> [filtered ->
@@ -180,17 +198,31 @@ get_data |> [data ->
 ]
 ```
 
-Or more concisely:
+**Idiomatic with pipeline flow:**
 ```
-get_data
-[x -> x is_valid] filter
-[x -> x transform] map
-process_result
+get_data |>
+  [data -> data [x -> x is_valid] filter] |>
+  [filtered -> filtered [x -> x transform] map] |>
+  [result -> result process_result]
 ```
 
-## Common Idioms
+**Most idiomatic (clean pipeline):**
+```
+get_data |>
+  [data -> data [x -> x is_valid] filter] |>
+  [data -> data [x -> x transform] map] |>
+  process_result
+```
+
+## Common Idioms and Best Practices
 
 1. **Data Flow**: Think of operations as transformations on a data stack
-2. **Point-Free Style**: When possible, compose functions without naming parameters
-3. **Parameter Naming**: Use descriptive parameter names in quotations
-4. **Pipeline for Clarity**: Use `|>` when direct concatenation becomes unclear
+2. **Use Pipeline Operators**: Always use `|>` when chaining operations for explicit data flow
+3. **Parameter Naming**: Use descriptive parameter names in quotations with commas between them
+4. **Consistent Indentation**: Align pipeline stages for readability
+5. **Intermediate Variables**: Use named variables when it improves clarity
+6. **Pipeline Stages**: Each pipeline stage should do one clear transformation
+7. **Quotation Parameters**: Include commas between parameters: `[x, y -> ...]` not `[x y -> ...]`
+8. **Terminal Operations**: End pipelines with a clear terminal operation that produces output
+9. **Point-Free Style**: When appropriate, compose functions without naming intermediate results
+10. **Generator Pipelines**: Always use pipelines when working with generators/streams

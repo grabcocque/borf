@@ -13,24 +13,39 @@ This document outlines the idiomatic style for writing Borf code. Borf is a conc
 
 ### Pipeline Operator (`|>`)
 
-The pipeline operator passes the result of an expression to the next function:
+The pipeline operator is a fundamental part of Borf syntax that passes the result of an expression to the next function:
 
 ```borf
-value function |> result
+value |> function |> result
 ```
 
-This is equivalent to:
+Using the pipeline operator makes the flow of data explicit and improves readability, especially in longer chains:
 
 ```borf
-value function -> result
+initial_value |>
+  first_operation |> 
+  second_operation |> 
+  third_operation
 ```
 
-But using the pipeline operator makes the flow of data more explicit and improves readability, especially in longer chains:
+**ESSENTIAL RULE:** Always use the pipeline operator when chaining multiple operations or creating data processing pipelines. This makes your code more readable and maintainable.
 
+**Good example (clear data flow):**
 ```borf
-initial_value
-  first_operation |> intermediate_result
-  second_operation |> final_result
+input_data |>
+  [data -> data first_transform] |>
+  [data -> data second_transform] |>
+  [data -> data third_transform] |>
+  final_operation
+```
+
+**Bad example (unclear flow):**
+```borf
+input_data
+  first_transform
+  second_transform
+  third_transform
+  final_operation
 ```
 
 ### Assignment Arrow (`->`)
@@ -142,10 +157,36 @@ my_function(a, b, c)            -- Avoid this style for function application
 
 ### Data Transformation Pipeline
 
+Data transformation pipelines are a core pattern in Borf, especially for generators, streams, and collections. Always use the pipeline operator to make these flows explicit:
+
 ```borf
-input_data
-  first_transformation |> intermediate_result
-  second_transformation |> final_result
+input_data |>
+  [data -> data first_transformation] |>
+  [data -> data second_transformation] |>
+  [data -> data third_transformation] |>
+  final_operation
+```
+
+For generator operations (map, filter, reduce, etc.), always chain with pipelines:
+
+```borf
+// Stream/generator processing with pipeline
+source |>
+  [s -> s [item -> item condition] filter] |>
+  [s -> s [item -> item transform] map] |>
+  [s -> s count limit] |>
+  collect
+```
+
+When processing needs intermediate variables for clarity:
+
+```borf
+source |>
+  first_operation |> [intermediate ->
+    intermediate |>
+      next_operation |>
+      final_operation
+  ]
 ```
 
 ### Function Definition with Parameters

@@ -13,41 +13,40 @@
   
   # Basic number generator
   ```borf
-  let numbers = range(1, 10)  // Creates 1,2,3,...,10
-  for_each(numbers, [n -> print(n)])  // Prints each number
+  1 10 range -> numbers  
+  numbers [n -> n print] for_each  
   ```
   
   # Efficient data pipeline
   ```borf
-  let result = range(1, 100)
-    |> [g -> map(g, [x -> x * 2])]         // Double each number
-    |> [g -> filter(g, [x -> x % 3 == 0])] // Keep multiples of 3
-    |> [g -> take(g, 5)]                   // Take only first 5
-    |> collect                             // Convert to array
+  1 100 range |>
+    [g -> g [x -> x 2 *] map] |>
+    [g -> g [x -> x 3 % 0 ==] filter] |>
+    [g -> g 5 take] |>
+    collect -> result
   
-  print(result)  // [6, 12, 18, 24, 30]
+  result print  // [6, 12, 18, 24, 30]
   ```
   
   # Process large files without memory issues
   ```borf
-  // Read large log file line by line
-  let log_lines = from_file("access_log.txt")
-    |> [g -> filter(g, [line -> line.contains("ERROR")])]
-    |> [g -> map(g, [line -> extract_error_info(line)])]
+  "access_log.txt" file_to_lines |>
+    [g -> g [line -> line "ERROR" contains] filter] |>
+    [g -> g [line -> line extract_error_info] map] -> log_lines
   
   // Each line processed individually - works with terabytes
-  for_each(log_lines, [error -> alert_system(error)])
+  log_lines [error -> error alert_system] for_each
   ```
   
   # Stream processing dashboard
   ```borf
   // Continuous sensor readings
-  let temps = sensor_stream("temperature")
-    |> [g -> map(g, [t -> convert_celsius(t)])]
-    |> [g -> rolling_average(g, 10)]  // 10-point average
+  "temperature" sensor_stream |>
+    [g -> g [t -> t convert_celsius] map] |>
+    [g -> g 10 rolling_average] -> temps  // 10-point average
   
   // Update UI in real-time
-  for_each(temps, [avg -> update_dashboard(avg)])
+  temps [avg -> avg update_dashboard] for_each
   ```
 ]]--
 
@@ -56,40 +55,40 @@
     PERFORMANCE TIPS & BEST PRACTICES
     
     DO:
-    ✅ Process data in pipelines (|> operator makes this clean)
-    ✅ Use take() before collect() on large/infinite generators
-    ✅ Prefer for_each() over collect() when possible
+    ✅ Process data step-by-step in pipelines
+    ✅ Use take before collect on large/infinite generators
+    ✅ Prefer for_each over collect when possible
     ✅ Process files line-by-line with generators
-    ✅ Keep transformations (map, filter) pure
+    ✅ Keep transformations (map, filter) pure and simple
     
     DON'T:
-    ❌ Call collect() on infinite generators
-    ❌ Create complex transformations that modify external state
-    ❌ Reuse generators after consuming them (use rewind() if needed)
+    ❌ Call collect on infinite generators
+    ❌ Create transformations that modify external state
+    ❌ Reuse generators after consuming them (use rewind if needed)
     ❌ Put expensive operations inside generator transformations
     ❌ Create deeply nested generators (use flatMap instead)
     
     COMMON PATTERNS:
     
     1. Data Processing Pipeline
-    ```
-    data_source() 
-      |> [g -> filter(g, is_valid)]
-      |> [g -> map(g, transform)]
-      |> [g -> take(g, limit)]
-      |> terminal_operation
+    ```borf
+    data_source |>
+      [g -> g is_valid filter] |>
+      [g -> g transform map] |>
+      [g -> g limit take] |>
+      terminal_operation
     ```
     
     2. Chunked Processing (for large datasets)
-    ```
-    process_in_chunks(data_source(), chunk_size, processor)
+    ```borf
+    data_source chunk_size processor process_in_chunks
     ```
     
     3. Lazy File Processing
-    ```
-    file_to_lines(filename)
-      |> process_pipeline
-      |> for_each(save_result)
+    ```borf
+    filename file_to_lines |>
+      process_pipeline |>
+      [result -> result save_result] for_each
     ```
   ]]--
 
@@ -311,7 +310,7 @@
     )
     ```
   ]]--
-  generator: (Any -> GeneratorState.a) * Any -> Generator.a [next_fn initial_state ->
+  generator: (Any -> GeneratorState.a) * Any -> Generator.a [next_fn, initial_state ->
     {
       value_type: a,
       state: initial_state,
@@ -597,15 +596,15 @@
     - Data normalization
     
     Example: Transform data in a pipeline
-    ```
+    ```borf
     // Calculate squares and format them
-    let number_info = range(1, 5)
-      |> [g -> map(g, [n -> {
+    1 5 range |>
+      [g -> g [n -> {
         original: n,
-        squared: n * n,
-        is_even: n % 2 == 0
-      }])]
-      |> collect
+        squared: n n *,
+        is_even: n 2 % 0 ==
+      }] map] |>
+      collect -> number_info
     
     // [{original: 1, squared: 1, is_even: false}, {original: 2, squared: 4, is_even: true}, ...]
     ```
@@ -633,18 +632,18 @@
     - Error handling (skip problematic records)
     
     Example: Multiple filter conditions
-    ```
+    ```borf
     // For user data, find active premium subscribers
-    let premium_users = user_database()
-      |> [g -> filter(g, [user -> 
+    user_database |>
+      [g -> g [user -> 
         // Apply multiple conditions
-        user.status == "active" && 
-        user.subscription_type == "premium" &&
-        !user.payment_overdue
-      ])]
-      |> collect
+        user.status "active" == 
+        user.subscription_type "premium" == &&
+        user.payment_overdue not &&
+      ] filter] |>
+      collect -> premium_users
     
-    send_promotion(premium_users)
+    premium_users send_promotion
     ```
   ]]--
   filter: Generator.a * (a -> Bool) -> Generator.a [gen predicate ->
@@ -1167,27 +1166,27 @@
       
       Process large CSV files with minimal memory footprint
     ]]--
-    process_csv: S * (Map -> Map) -> [Map] [filename transform ->
+    process_csv: S * (Map -> Map) -> [Map] [filename, transform ->
       -- Open file as line-by-line generator (never loads entire file)
-      let lines = file_to_lines(filename) in
+      filename file_to_lines -> lines
       
       -- Extract header and create parser
-      let header = next(lines).value in
-      let header_fields = parse_csv_header(header) in
+      lines next value -> header
+      header parse_csv_header -> header_fields
       
       -- Process the file efficiently
-      lines
+      lines |>
         -- Parse each line into object
-        |> [g -> map(g, [line -> parse_csv_line(line, header_fields)])]
+        [g -> g [line -> line header_fields parse_csv_line] map] |>
         
         -- Skip invalid records
-        |> [g -> filter(g, [record -> is_valid_record(record)])]
+        [g -> g [record -> record is_valid_record] filter] |>
         
         -- Apply custom transformations
-        |> [g -> map(g, transform)]
+        [g -> g transform map] |>
         
         -- Get all records (each processed individually)
-        |> collect
+        collect
     ],
     
     --[[
@@ -1195,40 +1194,40 @@
       
       Create an infinite stream processor for sensor data
     ]]--
-    sensor_dashboard: S * Z -> () [sensor_id update_interval ->
+    sensor_dashboard: S * Z -> () [sensor_id, update_interval ->
       -- Create an infinite generator for sensor readings
-      let readings = sensor_stream(sensor_id) in
+      sensor_id sensor_stream -> readings
       
       -- Calculate rolling statistics
-      let processed = readings
+      readings |>
         -- Convert raw values
-        |> [g -> map(g, normalize_reading)]
+        [g -> g normalize_reading map] |>
         
         -- Calculate rolling average (last 10 readings)
-        |> [g -> window(g, 10)]
-        |> [g -> map(g, [window -> {
-          avg: avg(window),
-          min: min(window),
-          max: max(window),
-          trend: calculate_trend(window)
-        }])] in
+        [g -> g 10 window] |>
+        [g -> g [window -> {
+          avg: window avg,
+          min: window min,
+          max: window max,
+          trend: window calculate_trend
+        }] map] -> processed
       
       -- Update dashboard in real-time (forever)
       loop {
         -- Get next computed value
-        let stats = next(processed).value in
+        processed next value -> stats
         
         -- Update different dashboard components
-        update_chart(stats)
-        update_gauge(stats.avg)
+        stats update_chart
+        stats.avg update_gauge
         
         -- Check for anomalies
-        if stats.avg > THRESHOLD {
-          trigger_alert(stats)
-        }
+        stats.avg THRESHOLD > {
+          stats trigger_alert
+        } iff
         
         -- Wait before next update
-        sleep(update_interval)
+        update_interval sleep
       }
     ],
     
@@ -1237,49 +1236,49 @@
       
       Efficiently analyze massive log files
     ]]--
-    analyze_logs: S * S * (Map -> ()) -> Map [log_path pattern reporter ->
+    analyze_logs: S * S * (Map -> ()) -> Map [log_path, pattern, reporter ->
       -- Counters and stats
-      let stats = {
+      {
         total_lines: 0,
         matched_lines: 0,
         errors_by_type: {},
         response_times: []
-      } in
+      } -> stats
       
       -- Process log file line by line
-      let lines = file_to_lines(log_path) in
+      log_path file_to_lines -> lines
       
-      for_each(lines, [line ->
+      lines [line ->
         -- Update total count
-        stats.total_lines = stats.total_lines + 1
+        stats.total_lines 1 + -> stats.total_lines
         
         -- Only process lines matching our pattern
-        if line.contains(pattern) {
+        line pattern contains {
           -- Extract useful information
-          let entry = parse_log_entry(line)
+          line parse_log_entry -> entry
           
           -- Update statistics
-          stats.matched_lines = stats.matched_lines + 1
+          stats.matched_lines 1 + -> stats.matched_lines
           
           -- Group by error type
-          if entry.error_type {
-            stats.errors_by_type[entry.error_type] = 
-              (stats.errors_by_type[entry.error_type] || 0) + 1
-          }
+          entry.error_type {
+            stats.errors_by_type entry.error_type get 0 or 1 + 
+              -> stats.errors_by_type entry.error_type
+          } iff
           
           -- Track response times
-          if entry.response_time {
-            stats.response_times = stats.response_times + [entry.response_time]
-          }
+          entry.response_time {
+            stats.response_times [entry.response_time] + -> stats.response_times
+          } iff
           
           -- Report individual entries
-          reporter(entry)
-        }
-      ])
+          entry reporter
+        } iff
+      ] for_each
       
       -- Calculate summary statistics
-      stats.avg_response_time = avg(stats.response_times)
-      stats.max_response_time = max(stats.response_times)
+      stats.response_times avg -> stats.avg_response_time
+      stats.response_times max -> stats.max_response_time
       
       stats
     ],
