@@ -1,17 +1,53 @@
 --[[
-  Data Stream Tools - Process Data Efficiently and Elegantly
+  Data Stream Tools - Process Data Without Memory Overload
 
-  This module provides powerful tools for working with sequences of data, letting you:
+  This module provides powerful stream processing tools for handling data efficiently, letting you:
 
-  - Process collections with minimal memory usage
-  - Work with potentially infinite data sources
-  - Transform data through clean, chainable operations
-  - Express complex data pipelines in readable code
-  - Process large datasets without loading everything at once
-  - Perform lazy evaluation for better performance
+  - Process gigabytes of data with minimal memory footprint
+  - Work with potentially infinite data sources (like sensors or events)
+  - Create clean, readable data transformation pipelines
+  - Process one item at a time for consistent performance
+  - Handle files too large to fit in memory comfortably
+  - Chain operations together for complex data processing
+
+  Streams are perfect for processing logs, large datasets, continuous inputs,
+  or any situation where you need to handle data one piece at a time.
 ]]--
 
 @Stream: {
+  --------------------------------------------------
+  -- STREAM USAGE GUIDE
+  --------------------------------------------------
+  
+  --[[
+    WHEN TO USE STREAMS
+    
+    1. LARGE DATA PROCESSING
+       Use streams when working with data too large to fit comfortably in memory,
+       such as log files, datasets, or data exports.
+       
+    2. INFINITE DATA SOURCES
+       Perfect for handling continuous inputs that never complete, like
+       sensor readings, event streams, or user interactions.
+       
+    3. MEMORY-CONSTRAINED ENVIRONMENTS
+       Ideal for processing data on devices with limited memory or when
+       you need predictable memory usage patterns.
+       
+    4. COMPLEX DATA TRANSFORMATIONS
+       Create clean, readable pipelines of operations when you need to
+       apply multiple transformations to your data.
+    
+    BEST PRACTICES:
+    
+    1. Chain operations with the pipeline operator (|>) for readability
+    2. Process data one item at a time rather than loading everything at once
+    3. Use terminal operations (collect, reduce, for_each) only when necessary
+    4. Place expensive operations as late in the pipeline as possible
+    5. Use take() before collect() when working with potentially infinite streams
+    6. Prefer for_each() over collect() when you don't need the final collection
+  ]]--
+  
   typ: {
     -- Core types
     Stream
@@ -384,26 +420,60 @@
 
   example: {
     --[[
-      Example 1: Data Transformation
-
+      Example 1: Log File Processing
+      
+      This example shows how to efficiently process a large log file:
+      1. Reads the file line by line (without loading it all in memory)
+      2. Filters for error messages
+      3. Extracts key information
+      4. Formats a report
+      
+      Perfect for server logs, application logs, or any large text file.
+    ]]--
+    process_log_file: S -> [S] [filepath ->
+      -- Read file as a stream of lines (memory efficient)
+      file_to_lines(filepath) |>
+        -- Only keep lines containing errors
+        [s -> filter(s, [line -> line |> contains("ERROR")])] |>
+        -- Parse out key information
+        [s -> map(s, [line -> 
+          let parts = line |> split(" ") in
+          {
+            timestamp: parts[0] + " " + parts[1],
+            error_type: parts |> find([p -> p |> starts_with("type=")]) |> 
+                         [p -> p |> substring(5)],
+            message: line |> substring(line |> index_of(": ") + 2)
+          }
+        ])] |>
+        -- Format for report
+        [s -> map(s, [entry -> 
+          entry.timestamp + " [" + entry.error_type + "]: " + entry.message
+        ])] |>
+        -- Get all results
+        collect
+    ],
+    
+    --[[
+      Example 2: Data Transformation Pipeline
+      
       This example shows a typical data processing pipeline that:
       1. Takes a range of numbers
-      2. Doubles each value
+      2. Doubles each value  
       3. Filters for values greater than 5
       4. Collects the results
-
+      
       This pattern is common for ETL processes, data cleaning, and transformations.
     ]]--
     data_transformation: () -> [Z] [->
-      from_range(1, 10, 1)
-        |> [s -> map(s, [x -> x * 2])]
-        |> [s -> filter(s, [x -> x > 5])]
-        |> collect
+      from_range(1, 10, 1) |>
+        [s -> map(s, [x -> x * 2])] |>
+        [s -> filter(s, [x -> x > 5])] |>
+        collect
       -- Returns [6, 8, 10, 12, 14, 16, 18, 20]
     ],
 
     --[[
-      Example 2: Data Joining
+      Example 3: Data Joining
 
       This example demonstrates combining related data from two different sources:
       1. Creates a stream of user names
@@ -422,7 +492,7 @@
     ],
 
     --[[
-      Example 3: Big Data Processing
+      Example 4: Big Data Processing
 
       This example shows how to efficiently work with large datasets:
       1. Creates a stream simulating millions of records
@@ -445,7 +515,7 @@
     ],
 
     --[[
-      Example 4: Infinite Data Sources
+      Example 5: Infinite Data Sources
 
       This example shows working with potentially infinite data:
       1. Creates a stream that theoretically never ends
@@ -463,7 +533,7 @@
     ],
 
     --[[
-      Example 5: Data Validation Pipeline
+      Example 6: Data Validation Pipeline
 
       This example demonstrates using streams for validation:
       1. Takes a collection of input data
@@ -501,6 +571,45 @@
         |> [s -> map(s, [result -> "ID " + result.id.to_string() + ": " + result.errors.join(", ")])]
         |> collect
       -- Returns validation failures with details
+    ],
+    
+    --[[
+      Example 7: Real-time Data Processing
+      
+      This example shows how to process a continuous stream of data in real-time:
+      1. Creates a stream from a real-time data source
+      2. Applies a sliding window calculation
+      3. Detects anomalies in the data
+      4. Triggers alerts when necessary
+      
+      This pattern is essential for monitoring systems, IoT data, and analytics.
+    ]]--
+    realtime_monitoring: () -> () [->
+      -- Create infinite data stream (sensor readings, log entries, etc.)
+      data_stream() |>
+        -- Apply sliding window to calculate moving averages
+        [s -> window(s, 60)] |>  -- Last 60 readings
+        -- Calculate statistics for each window
+        [s -> map(s, [window -> {
+          avg: window |> average,
+          max: window |> maximum,
+          min: window |> minimum,
+          trend: window |> calculate_trend
+        }])] |>
+        -- Process each result as it arrives
+        [s -> for_each(s, [stats ->
+          -- Update dashboard
+          update_metrics_display(stats)
+          
+          -- Check for anomalies that require attention
+          if stats.avg > THRESHOLD || stats.trend == :sharp_increase {
+            -- Alert on suspicious activity
+            trigger_alert("Anomaly detected", stats)
+          }
+          
+          -- Log for later analysis
+          append_to_history(stats)
+        ])]
     ]
   }
 }
