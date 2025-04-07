@@ -168,6 +168,75 @@ my_function(a, b, c)            -- Avoid this style for function application
 4. Utilize pattern matching to handle different cases clearly
 5. Use comments to explain complex operations or algorithms
 
+## Documentation and Comments
+
+Effective documentation helps users understand both how to use your code and the principles behind it.
+
+### Module Documentation
+
+Each module should begin with a multi-line comment block that:
+
+```borf
+--[[
+  Module Name - One-line description of primary purpose
+
+  This module provides tools for [functionality], letting you:
+
+  - Capability 1 with concrete benefit
+  - Capability 2 with concrete benefit
+  - Capability 3 with concrete benefit
+  - Capability 4 with concrete benefit
+
+  Additional context about when and how to use this module.
+]]--
+```
+
+### Function Documentation
+
+Each significant function should include a comment block that:
+
+```borf
+--[[
+  function_name - Brief description of what it does
+
+  Explains the practical use case for this function.
+  Focus on when and why a user would choose this function.
+
+  Example: argument1 argument2 function_name
+]]--
+```
+
+### Comment Style
+
+1. **Practical Focus**: Explain what the code accomplishes for the user rather than implementation theory
+2. **Examples**: Include code examples demonstrating proper usage
+3. **Consistent Format**: Use Lua-style comments (`--` for single line, `--[[ ]]--` for multi-line)
+4. **Contextual Comments**: Add inline comments at key decision points or complex operations
+5. **Sectioning**: Use comment separators to create logical sections in longer files:
+
+```borf
+--------------------------------------------------
+-- SECTION NAME
+--------------------------------------------------
+```
+
+### Documentation Patterns
+
+The most effective modules follow this pattern:
+
+1. **Introduction**: Clear explanation of purpose and capabilities
+2. **Type/Function Reference**: Well-organized declarations with descriptive comments
+3. **Guarantees/Principles**: Explanation of key design principles (if applicable)
+4. **Best Practices**: Guidance on proper usage patterns
+5. **Practical Examples**: Real-world usage examples showing common patterns
+
+Examples should:
+- Demonstrate complete workflows, not just isolated function calls
+- Include proper error handling
+- Show composition of multiple operations
+- Use the pipeline operator to make data flow clear
+- Include explanatory comments for each step
+
 ## Common Patterns
 
 ### Data Transformation Pipeline
