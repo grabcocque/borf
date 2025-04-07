@@ -1,15 +1,61 @@
 --[[
-  Stream Transformations
+  Stream Performance Optimizations and Transformations
 
-  This module defines transformations between stream categories,
-  providing compatibility with our naming conventions.
-
-  While streams are a user-friendly wrapper around generators,
-  maintaining a consistent naming pattern with dedicated transformation
-  modules is valuable for code organization and discoverability.
+  This module provides tools for optimizing stream processing performance, letting you:
+  
+  - Optimize data processing pipelines for maximum throughput
+  - Transform between different streaming implementations for performance
+  - Debug and analyze stream processing bottlenecks
+  - Adapt streams to work with other data processing paradigms
+  - Build custom stream processors for specific performance needs
+  
+  Use these tools when you need to improve the performance of data processing
+  pipelines, especially for large data sets, time-critical operations, or
+  when integrating streams with other components of your system.
 ]]--
 
 @StreamXf: {
+  --------------------------------------------------
+  -- STREAM OPTIMIZATION GUIDE
+  --------------------------------------------------
+  
+  --[[
+    WHEN TO OPTIMIZE YOUR STREAMS
+    
+    1. PERFORMANCE BOTTLENECKS
+       When stream processing is taking too long for large datasets
+       or consuming too much memory during processing.
+       
+    2. HIGH-THROUGHPUT REQUIREMENTS
+       For real-time data processing, analytics, or any scenario
+       where processing speed directly impacts user experience.
+       
+    3. RESOURCE CONSTRAINTS
+       When processing needs to happen on devices with limited
+       memory or CPU resources.
+       
+    4. INTEGRATION CHALLENGES
+       When streams need to communicate with different systems
+       that may use other data processing paradigms.
+    
+    OPTIMIZATION STRATEGIES:
+    
+    1. PIPELINE OPTIMIZATION
+       - Rearrange operations to filter early and map late
+       - Batch operations where possible to reduce overhead
+       - Use specialized functors for common operation sequences
+       
+    2. MEMORY USAGE OPTIMIZATION
+       - Avoid accumulating large intermediate results
+       - Process data in chunks rather than all at once
+       - Use flattening to keep memory footprint consistent
+       
+    3. PARALLELIZATION
+       - Use parallel processing for independent operations
+       - Split stream into sub-streams for parallel processing
+       - Recombine results efficiently using specialized combiners
+  ]]--
+  
   typ: {
     -- Core transformation types
     StreamFunctor
@@ -389,6 +435,203 @@
       let numbers = @Stream.from_range(1, 5, 1) in
       let doubled = apply_functor(double_functor, numbers) in
       apply_nat_transformation(double_to_square, doubled)
+    ]
+  }
+  
+  --------------------------------------------------
+  -- PRACTICAL EXAMPLES
+  --------------------------------------------------
+  
+  --[[
+    OPTIMIZING REAL-WORLD STREAM PROCESSING
+    
+    These examples demonstrate how to optimize stream processing
+    for different performance requirements and use cases.
+  ]]--
+  
+  example: {
+    --[[
+      Example 1: Log Analysis Performance Optimization
+      
+      This example shows how to transform a standard log processing
+      stream into a high-performance version for analyzing large log files.
+      
+      Perfect for DevOps tools, monitoring systems, or any application
+      dealing with large volumes of log data.
+    ]]--
+    optimize_log_analyzer: @Stream.Stream -> @Stream.Stream [stream ->
+      -- Profile the original stream to identify bottlenecks
+      let profile = profile_stream(stream) in
+      
+      -- Apply optimizations based on profile results
+      if profile.memory_bottleneck {
+        -- Apply memory optimizations first
+        stream |>
+          -- Convert to chunked processing to reduce memory pressure
+          convert_to_chunked_stream |>
+          -- Apply specialized log parsing functor
+          [s -> apply_functor(create_log_parser_functor(), s)] |>
+          -- Add early filtering to reduce processing volume
+          add_early_filter_optimization |>
+          -- Use field extraction optimization to avoid full parsing
+          add_lazy_field_extraction
+      } else if profile.cpu_bottleneck {
+        -- Apply CPU optimizations first
+        stream |>
+          -- Convert to parallel processing for CPU-intensive operations
+          [s -> parallelize_stream(s, processor_count())] |>
+          -- Apply specialized analysis functor
+          [s -> apply_functor(create_analysis_functor(), s)] |>
+          -- Use memoization for repeated pattern matching
+          add_pattern_memoization |>
+          -- Optimize regex operations with compiled patterns
+          add_regex_optimization
+      } else {
+        -- General optimizations for balanced performance
+        stream |>
+          -- Apply standard performance functor
+          [s -> apply_functor(create_performance_functor(), s)] |>
+          -- Add pipeline reorganization
+          optimize_pipeline_order |>
+          -- Apply batching where beneficial
+          add_batch_processing_where_optimal |>
+          -- Add memory management
+          add_memory_management_controls
+      }
+    ],
+
+    --[[
+      Example 2: Real-time Data Processing Optimization
+      
+      This example demonstrates optimizing streams for real-time data
+      processing scenarios where latency is critical.
+      
+      Essential for financial systems, monitoring, IoT applications,
+      or any system requiring immediate data processing.
+    ]]--
+    optimize_realtime_stream: @Stream.Stream * Z -> @Stream.Stream [stream, max_latency_ms ->
+      -- Create a latency-optimized stream
+      stream |>
+        -- Convert to low-latency mode (prioritizes processing speed over throughput)
+        convert_to_low_latency_mode |>
+        
+        -- Add latency monitoring
+        [s -> add_latency_monitor(s, [latency ->
+          -- Log when latency exceeds threshold
+          if latency > max_latency_ms * 0.8 {
+            "Warning: Stream latency approaching threshold: " + latency |> log_warning
+          }
+          
+          -- Apply backpressure when necessary
+          if latency > max_latency_ms {
+            apply_backpressure()
+          }
+        ])] |>
+        
+        -- Apply specialized time-critical functors
+        [s -> apply_functor(create_realtime_functor(), s)] |>
+        
+        -- Add circuit breaker for overload protection
+        [s -> add_circuit_breaker(s, max_latency_ms * 2, [-> 
+          "Stream processing circuit breaker triggered" |> log_alert
+          initiate_fallback_processing()
+        ])] |>
+        
+        -- Optimize for predictable performance
+        add_predictable_latency_controls
+    ],
+
+    --[[
+      Example 3: Memory-Efficient Large Dataset Processing
+      
+      This example shows how to transform streams to process extremely
+      large datasets with minimal memory footprint.
+      
+      Perfect for data mining, ETL processes, batch processing, or
+      any scenario dealing with datasets larger than available RAM.
+    ]]--
+    optimize_for_large_datasets: @Stream.Stream * Z -> @Stream.Stream [stream, chunk_size ->
+      -- Create memory-optimized stream for large datasets
+      stream |>
+        -- Convert to chunked processing
+        [s -> convert_to_chunked_processing(s, chunk_size)] |>
+        
+        -- Add memory monitoring
+        [s -> add_memory_monitor(s, [usage ->
+          -- Adjust chunk size dynamically based on memory pressure
+          if usage > 0.85 {  -- 85% memory utilization
+            decrease_chunk_size()
+            "Decreasing chunk size due to memory pressure" |> log_info
+          }
+          
+          -- Apply emergency measures if critically low
+          if usage > 0.95 {  -- Critical memory pressure
+            pause_processing()
+            trigger_gc()
+            "Pausing processing due to critical memory pressure" |> log_warning
+          }
+        ])] |>
+        
+        -- Apply specialized memory-efficient functors
+        [s -> apply_functor(create_memory_efficient_functor(), s)] |>
+        
+        -- Use specialized transformations for large datasets
+        add_sparse_index_optimization |>
+        add_streaming_aggregation |>
+        add_incremental_checkpointing |>
+        
+        -- Ensure proper cleanup
+        [s -> add_resource_cleanup(s, [-> 
+          "Releasing temporary resources from large dataset processing" |> log_info
+          cleanup_temp_storage()
+        ])]
+    ],
+
+    --[[
+      Example 4: Stream Debugging and Performance Analysis
+      
+      This example shows how to transform a stream for debugging
+      and performance analysis purposes.
+      
+      Invaluable during development, troubleshooting, or when
+      optimizing the performance of stream processing pipelines.
+    ]]--
+    create_debug_stream: @Stream.Stream -> @Stream.Stream [stream ->
+      -- Create an instrumented debug stream
+      stream |>
+        -- Add comprehensive instrumentation
+        [s -> add_instrumentation(s, {
+          timing: true,
+          memory: true,
+          operations: true,
+          elements: true
+        })] |>
+        
+        -- Add operation tracing
+        [s -> add_operation_tracing(s, [op, data, result, metrics ->
+          {
+            "operation": op,
+            "input_sample": get_sample(data),
+            "output_sample": get_sample(result),
+            "duration_ms": metrics.duration,
+            "memory_delta": metrics.memory_change,
+            "elements_processed": metrics.count
+          } |> record_trace
+        ])] |>
+        
+        -- Add performance bottleneck detection
+        add_bottleneck_detector |>
+        
+        -- Create visualization helpers
+        [s -> add_visualization_support(s, [stats ->
+          -- Generate visualization of stream processing
+          let visualization = generate_processing_diagram(stats) in
+          visualization |> save_svg("stream_analysis.svg")
+          
+          -- Generate performance report
+          let report = generate_performance_report(stats) in
+          report |> save_json("stream_performance.json")
+        ])]
     ]
   }
 }
