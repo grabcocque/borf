@@ -1,20 +1,53 @@
 --[[
-  Core Language Prim
+  Core Primitives - Essential Building Blocks for Borf Programs
 
-  This module defines the fundamental primitive operations that form the foundation
-  of the Borf language. These primitives represent the core computational capabilities
-  that are directly implemented by the runtime system rather than being defined in
-  terms of other operations. They provide essential functionality for manipulating
-  data, performing logic, and interacting with the system.
+  This module provides the fundamental operations and types that form the
+  foundation of all Borf programs, letting you:
 
-  Notation:
-  - 'a -o> b' indicates a function that consumes its input (linear)
-  - '&a -> b' indicates a function that borrows but doesn't consume its input
-  - '?a' represents an optional type
-  - '!a' represents a linear type
+  - Work with basic data types (numbers, strings, booleans)
+  - Perform essential mathematical and logical operations
+  - Create and manipulate collections (lists, maps, sets)
+  - Convert between different data types
+  - Control program flow and handle conditionals
+  - Access system functionality and resources
+  
+  These primitives are optimized for performance and serve as the building blocks
+  for all higher-level abstractions in the language.
 ]]--
 
 @Prim: {
+  --------------------------------------------------
+  -- PRIMITIVES USAGE GUIDE
+  --------------------------------------------------
+  
+  --[[
+    WHEN TO USE PRIMITIVE OPERATIONS
+    
+    1. PERFORMANCE-CRITICAL CODE
+       Use primitives directly when you need maximum performance,
+       as they map directly to optimized runtime operations.
+       
+    2. LOW-LEVEL OPERATIONS
+       When working with basic data structures or performing
+       fundamental operations like arithmetic or string handling.
+       
+    3. IMPLEMENTING ABSTRACTIONS
+       Primitives form the foundation for building higher-level
+       abstractions and utilities.
+       
+    4. INTERFACING WITH SYSTEM RESOURCES
+       When you need to interact with the operating system or
+       external resources.
+       
+    BEST PRACTICES:
+    
+    1. Prefer high-level abstractions for most code
+    2. Use primitives directly when performance is critical
+    3. Chain primitive operations with the pipeline operator (|>)
+    4. Always check input types when using type-sensitive primitives
+    5. Use descriptive variable names to clarify primitive operations
+  ]]--
+  
   deps: {
     (@Prim, @Cat, true)        -- Add dependency on Category theory
   }
@@ -182,27 +215,111 @@
     }
   }
 
+  --------------------------------------------------
+  -- CORE OPERATIONS
+  --------------------------------------------------
+  
   --[[
-    Core Operations
+    Core Operations - Fundamental Language Capabilities
+    
+    These operations provide access to the language's runtime system
+    and fundamental capabilities.
   ]]--
 
-  -- Reflects a value to its runtime representation
+  --[[
+    rho - Get runtime representation of a value
+    
+    Returns the internal representation of a value.
+    Useful for debugging and understanding how values
+    are stored in memory.
+    
+    Example: 42 |> rho
+  ]]--
   rho: a -> Z
 
-  -- Returns the type of a value
+  --[[
+    typeof - Get the type of a value
+    
+    Returns the type of any value as a Type object.
+    Useful for dynamic type checking, reflection,
+    and implementing generic functions.
+    
+    Example: 
+    ```borf
+    "hello" |> typeof -> str_type
+    str_type "String" == |> println  -- Prints: true
+    ```
+  ]]--
   typeof: a -> T
 
-  -- Evaluates a string as code
+  --[[
+    eval - Evaluate code at runtime
+    
+    Evaluates a string as Borf code and returns the result.
+    Use with caution as it executes arbitrary code.
+    
+    Example:
+    ```borf
+    "2 + 3" |> eval -> result
+    result |> println  -- Prints: 5
+    ```
+  ]]--
   eval: S -> ?Net
 
-  -- Formats a value as a string representation
+  --[[
+    format - Convert a value to a string
+    
+    Creates a human-readable string representation of any value.
+    Perfect for logging, debugging, and user interfaces.
+    
+    Example:
+    ```borf
+    {name: "Alice", age: 30} |> format -> str
+    str |> println  -- Prints: {name: "Alice", age: 30}
+    ```
+  ]]--
   format: a -> ?S
 
-  -- Checks the state of a boolean condition
+  --[[
+    state - Check a boolean condition
+    
+    Evaluates a condition and returns its current state.
+    Used for conditional logic and flow control.
+    
+    Example:
+    ```borf
+    let x = 5 in
+    x 10 < |> state |> [condition ->
+      condition {
+        -- x is less than 10
+        "x is small" |> println
+      } {
+        -- x is not less than 10
+        "x is large" |> println
+      } if
+    ]
+    ```
+  ]]--
   state: B -> Bool
 
+  --------------------------------------------------
+  -- COLLECTION OPERATIONS
+  --------------------------------------------------
+  
   --[[
-    Collection Operations - Unified Interface
+    Collection Operations - Process Data Efficiently
+    
+    These operations provide a unified interface for working with
+    various collection types (lists, maps, sets). They let you:
+    
+    - Transform collections with map and fold operations
+    - Combine collections through concatenation and merging
+    - Extract specific elements or slices of collections
+    - Create new collections from existing ones
+    - Query collections for properties or contents
+    
+    The operations follow consistent patterns across different
+    collection types, making your code more predictable and readable.
   ]]--
 
   -- Higher-order function that applies a function to each element of a collection
@@ -440,4 +557,102 @@
 
   -- Safely handles a result
   match_result: !Result(a) * (a -o> b) * (S -o> b) -o> b
+  
+  --------------------------------------------------
+  -- PRACTICAL EXAMPLES
+  --------------------------------------------------
+  
+  --[[
+    SOLVING REAL PROBLEMS WITH PRIMITIVES
+    
+    These examples demonstrate how to combine primitive operations
+    to solve common programming tasks efficiently.
+  ]]--
+  
+  example: {
+    --[[
+      Example 1: Data Processing Pipeline
+      
+      This example shows how to process a collection of data
+      using a chain of primitive operations.
+    ]]--
+    process_user_data: [User] -> [S] [users ->
+      users |>
+        -- Filter out inactive users
+        [users -> users [user -> user.active] filter] |>
+        
+        -- Extract and format names to uppercase
+        [users -> users [user -> 
+          user.name |> to_upper + " (" + user.role + ")"
+        ] map] |>
+        
+        -- Sort alphabetically
+        [names -> names [a, b -> a b string_compare] sort]
+    ],
+    
+    --[[
+      Example 2: Working with Nested Data
+      
+      Shows how to extract and transform data from nested structures.
+    ]]--
+    extract_team_stats: {S: {S: Z}} -> {S: F} [team_data ->
+      team_data |> keys |> [team_names ->
+        -- Create a new map with team names and computed averages
+        team_names |> [result, team ->
+          let team_scores = team_data |> lookup(team) in
+          let total = team_scores |> values |> sum in
+          let count = team_scores |> values |> length in
+          let average = total count / in
+          
+          -- Add team with its average to results
+          result |> insert(team, average)
+        ] fold({})
+      ]
+    ],
+    
+    --[[
+      Example 3: Error Handling
+      
+      Demonstrates safe error handling with primitives.
+    ]]--
+    safe_divide: Z * Z -> Result(F) [a, b ->
+      b 0 == {
+        -- Error case: division by zero
+        "Cannot divide by zero" |> error
+      } {
+        -- Success case
+        a b / |> ok
+      } if
+    ],
+    
+    --[[
+      Example 4: Building a Configuration System
+      
+      Shows how to load, validate, and use configuration data.
+    ]]--
+    load_config: S -> Result({S: Any}) [config_path ->
+      -- Read configuration file
+      config_path |> read_file |> [content ->
+        -- Parse JSON content
+        content |> parse_json |> [config ->
+          -- Validate required fields
+          config "host" lookup null == ||
+          config "port" lookup null == ||
+          config "timeout" lookup null == {
+            "Missing required configuration fields" |> error
+          } {
+            -- Apply defaults for missing optional fields
+            let config = config "debug" lookup null == {
+              config "debug" false |> insert
+            } {
+              config
+            } if in
+            
+            -- Return valid configuration
+            config |> ok
+          } if
+        ]
+      ]
+    ]
+  }
 }
