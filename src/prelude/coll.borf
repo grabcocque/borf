@@ -22,6 +22,48 @@
 
 
 @Coll: {
+  --------------------------------------------------
+  -- COLLECTIONS USAGE GUIDE
+  --------------------------------------------------
+  
+  --[[
+    CHOOSING THE RIGHT COLLECTION
+    
+    1. MAPS - Key-Value Associations
+       Use when you need to:
+       - Look up values by a unique key
+       - Create dictionaries or associative arrays
+       - Implement caches or memoization tables
+       - Store configuration settings
+       
+    2. LISTS - Ordered Sequences
+       Use when you need to:
+       - Maintain items in a specific order
+       - Access elements by position (index)
+       - Add/remove items frequently
+       - Process items sequentially
+       
+    3. SETS - Unique Elements
+       Use when you need to:
+       - Ensure elements appear only once
+       - Check membership quickly
+       - Perform set operations (union, intersection)
+       - Remove duplicates from data
+       
+    4. QUEUES - Ordered Processing
+       Use when you need to:
+       - Process items in first-in-first-out order
+       - Implement work queues or task scheduling
+       - Manage data with arrival order importance
+       - Buffer between producer and consumer
+    
+    PERFORMANCE CONSIDERATIONS:
+    
+    - Maps: O(1) lookups, but more memory overhead
+    - Lists: O(1) append/prepend, but O(n) random access
+    - Sets: O(1) membership testing, removes duplicates
+    - Queues: O(1) enqueue/dequeue operations
+  ]]--
 
   --[[
     Core types defined in the collection library
@@ -609,5 +651,192 @@
       Returns the number of elements in the queue (non-consuming)
     ]]--
     size: _list_type[a] -> Z [q -> q |> List.size]
+  }
+
+  --------------------------------------------------
+  -- PRACTICAL EXAMPLES
+  --------------------------------------------------
+  
+  --[[
+    SOLVING REAL PROBLEMS WITH COLLECTIONS
+    
+    These examples demonstrate how to use collections to solve common programming tasks.
+  ]]--
+  
+  example: {
+    --[[
+      Example 1: Building a Configuration System with Maps
+      
+      This example shows how to use Maps for storing and managing
+      application configuration, with hierarchical settings,
+      defaults, and overrides.
+    ]]--
+    config_manager: () -> Map [->
+      -- Create base configuration with defaults
+      {} |>
+        -- Add application settings
+        [config -> config "app_name" "My Application" Map.insert] |>
+        [config -> config "version" "1.0.0" Map.insert] |>
+        -- Add server configuration
+        [config -> config "server" ({
+          "host": "localhost",
+          "port": 8080,
+          "timeout": 30
+        }) Map.insert] |>
+        -- Add user preferences with nested maps
+        [config -> config "preferences" ({
+          "theme": "dark",
+          "notifications": {
+            "email": true,
+            "push": true,
+            "sms": false
+          }
+        }) Map.insert] -> base_config
+      
+      -- Load user overrides and merge them
+      let user_config = load_user_config() in
+      
+      -- Deep merge the configurations, with user settings taking precedence
+      base_config |> merge_configs(user_config)
+    ],
+    
+    --[[
+      Example 2: Data Processing Pipeline with Lists
+      
+      This example demonstrates using Lists to create a data processing
+      pipeline that transforms, filters, and aggregates information.
+    ]]--
+    process_user_data: [User] -> {S: Z} [users ->
+      users |>
+        -- Filter out inactive users
+        [users -> users [user -> user.active] List.filter] |>
+        -- Extract relevant information 
+        [users -> users [user -> {
+          "id": user.id,
+          "name": user.name,
+          "department": user.department,
+          "years": calculate_tenure(user.hire_date)
+        }] List.map] |>
+        -- Organize by department
+        [records -> 
+          -- Start with empty map for groups
+          {} |> [result, record ->
+            -- Get current department members or empty list
+            let dept = record.department in
+            let current = result dept List.map.get [] or in
+            
+            -- Add record to its department group
+            result dept (current [record] List.concat) Map.insert
+          ] records List.fold
+        ] |>
+        -- Calculate average tenure by department
+        [dept_map -> dept_map [dept, members ->
+          -- Calculate total years
+          let total_years = members [total, m -> 
+            total m.years +
+          ] 0 List.fold in
+          
+          -- Calculate average
+          total_years members List.size /
+        ] Map.map]
+    ],
+    
+    --[[
+      Example 3: Removing Duplicates with Sets
+      
+      This example shows how to use Sets to efficiently remove
+      duplicates and perform set operations on collections of data.
+    ]]--
+    analyze_log_entries: [S] -> {S: Z} [log_entries ->
+      -- Convert to Set to get unique entries
+      let unique_logs = log_entries Set.from_list in
+      
+      -- Create sets for different types of logs
+      let error_logs = log_entries [entry -> 
+        entry "ERROR" contains
+      ] List.filter Set.from_list in
+      
+      let warning_logs = log_entries [entry -> 
+        entry "WARNING" contains
+      ] List.filter Set.from_list in
+      
+      let info_logs = log_entries [entry -> 
+        entry "INFO" contains
+      ] List.filter Set.from_list in
+      
+      -- Perform set operations to analyze logs
+      let errors_only = error_logs (warning_logs info_logs Set.union) Set.difference in
+      let warnings_and_errors = warning_logs error_logs Set.intersection in
+      let all_categories = error_logs warning_logs info_logs Set.union Set.union in
+      let uncategorized = unique_logs all_categories Set.difference in
+      
+      -- Return analysis
+      {
+        "total": log_entries List.size,
+        "unique": unique_logs Set.size,
+        "errors": error_logs Set.size,
+        "warnings": warning_logs Set.size,
+        "info": info_logs Set.size,
+        "errors_only": errors_only Set.size,
+        "warnings_and_errors": warnings_and_errors Set.size,
+        "uncategorized": uncategorized Set.size
+      }
+    ],
+    
+    --[[
+      Example 4: Task Scheduling with Queues
+      
+      This example demonstrates using Queues to implement
+      a simple task scheduler with priorities and processing.
+    ]]--
+    task_scheduler: () -> () [->
+      -- Create queues for different priority levels
+      let high_priority = Queue.empty() in
+      let medium_priority = Queue.empty() in
+      let low_priority = Queue.empty() in
+      
+      -- Function to add a task with priority
+      let add_task = [task, priority ->
+        priority match {
+          "high" -> high_priority task Queue.enqueue,
+          "medium" -> medium_priority task Queue.enqueue,
+          "low" -> low_priority task Queue.enqueue,
+          _ -> medium_priority task Queue.enqueue  -- Default to medium
+        }
+      ] in
+      
+      -- Function to get next task respecting priorities
+      let get_next_task = [->
+        -- Check high priority queue first
+        high_priority Queue.is_empty not {
+          high_priority Queue.dequeue
+        }
+        -- Then check medium priority queue
+        medium_priority Queue.is_empty not {
+          medium_priority Queue.dequeue
+        }
+        -- Finally check low priority queue
+        low_priority Queue.is_empty not {
+          low_priority Queue.dequeue
+        }
+        -- Return null if all queues are empty
+        {
+          null
+        } if_else if_else
+      ] in
+      
+      -- Process tasks until all queues are empty
+      loop {
+        let next = get_next_task() in
+        
+        next null == {
+          -- No more tasks, we're done
+          break
+        } {
+          -- Process the task
+          process_task(next)
+        } if
+      }
+    ]
   }
 }
