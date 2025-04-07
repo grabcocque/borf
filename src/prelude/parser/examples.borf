@@ -1,8 +1,16 @@
 --[[
-  Parser Examples - Practical Parsing Demonstrations
+  Parser Examples - Building Robust Text Parsers with Ease
+
+  This module provides complete, practical examples for parsing common formats, letting you:
   
-  This module provides complete, practical examples of parsers built with
-  the parsing library. Use these as templates for your own parsers.
+  - Parse mathematical expressions with full operator precedence
+  - Process structured data formats like JSON with nested objects and arrays
+  - Handle CSV data with proper quoting and escaping rules
+  - Build custom parsers for your own data formats
+  - Create clear, maintainable parsing code with composable pieces
+  
+  Each example demonstrates key parsing patterns you can adapt for your own needs,
+  with step-by-step construction and clear comments explaining the approach.
 ]]--
 
 @Parser.Examples: {
@@ -25,23 +33,66 @@
     (@Parser.Examples, @T, true)
   }
   
+  --------------------------------------------------
+  -- PARSER DESIGN PATTERNS
+  --------------------------------------------------
+  
   --[[
-    PRACTICAL EXAMPLES
+    HOW TO BUILD EFFECTIVE PARSERS
     
-    These examples demonstrate building real-world parsers for common formats:
+    These examples demonstrate essential patterns for building parsers:
     
-    1. Calculator: Parse and evaluate mathematical expressions with precedence
-    2. JSON: Parse the complete JSON format with all data types
-    3. CSV: Parse comma-separated values with proper handling of quoted fields
+    PATTERN 1: COMPOSING SIMPLE PARSERS
+    Build complex parsers by combining smaller, focused parsers with
+    operators like 'then', 'or', and 'map'.
     
-    Study these examples to learn how to build your own parsers for various formats.
+    PATTERN 2: HANDLING RECURSION
+    Use lazy_parser() and set_parser() to create parsers for formats
+    with recursive structures like nested arrays or expressions.
+    
+    PATTERN 3: TRANSFORMATION PIPELINE
+    Use map() to transform parsed data into the desired output format,
+    building processing pipelines that are both readable and efficient.
+    
+    PATTERN 4: ERROR HANDLING
+    Create parsers that provide useful error messages through proper
+    parser composition and explicit error handling.
+    
+    BEST PRACTICES:
+    
+    1. Start with the smallest meaningful parsers and compose them
+    2. Use clear naming to make your parser structure self-documenting
+    3. Process parsed values immediately with map() for cleaner code
+    4. Handle edge cases explicitly (whitespace, empty structures, etc.)
+    5. Test your parsers with both valid and invalid inputs
   ]]--
 
+  --------------------------------------------------
+  -- EXAMPLE 1: CALCULATOR PARSER
+  --------------------------------------------------
+  
   --[[
-    Example 1: Building a Simple Calculator Parser
+    Building a Calculator Parser
     
-    This example shows how to create a parser for basic arithmetic expressions.
-    It demonstrates parser composition, operator precedence, and value conversion.
+    This example creates a parser for arithmetic expressions like "2 + 3 * 4".
+    It demonstrates how to:
+    
+    - Handle operator precedence (multiplication before addition)
+    - Process nested expressions with parentheses
+    - Transform text into calculated values
+    - Structure a parser with clear, logical components
+    
+    Usage example:
+    ```borf
+    let calc = calculator_example() in
+    let result = calc |> parse("2 + 3 * (4 - 1)") in
+    
+    result |> match_result(
+      [value -> "Result: " + value |> to_string |> println],
+      [error -> "Error: " + error.message |> println]
+    )
+    -- Output: Result: 11
+    ```
   ]]--
   calculator_example: () -> Parser [ ->
     -- Define basic parsers for numbers and operators
@@ -103,12 +154,47 @@
     ws |> then(expr) |> then(ws) |> map([_, e, _ -> e])
   ]
 
+  --------------------------------------------------
+  -- EXAMPLE 2: JSON PARSER
+  --------------------------------------------------
+  
   --[[
-    Example 2: JSON Parser
+    Building a Complete JSON Parser
     
-    This example demonstrates building a parser for the JSON format,
-    showing how to handle nested structures, different data types,
-    and recursive definitions.
+    This example creates a full JSON parser supporting all data types:
+    strings, numbers, booleans, null, arrays, and objects with nesting.
+    
+    Key techniques demonstrated:
+    
+    - Handling recursive data structures (objects can contain objects)
+    - Working with different data types in a single parser
+    - Managing whitespace in a format-agnostic way
+    - Converting text into structured data (strings to Borf values)
+    - Using lazy parsers to handle forward references
+    
+    Usage example:
+    ```borf
+    let json_parser = json_example() in
+    let config_text = read_file("config.json") in
+    
+    json_parser |> parse(config_text) |> match_result(
+      [config -> 
+        -- Access the parsed configuration
+        "Server port: " + config.server.port |> to_string |> println
+        -- Use the data in your application
+        start_server(config.server.host, config.server.port)
+      ],
+      [error -> 
+        "Failed to parse JSON: " + error.message |> println
+        -- Fall back to defaults
+        start_server("localhost", 8080)
+      ]
+    )
+    ```
+    
+    A JSON parser is one of the most useful practical tools to build,
+    as it lets you work with configuration files, API responses, and
+    data interchange formats.
   ]]--
   json_example: () -> Parser [ ->
     -- Forward declarations for recursive structures
@@ -210,11 +296,51 @@
     ws |> then(json_value) |> then(ws) |> map([_, val, _ -> val])
   ]
 
+  --------------------------------------------------
+  -- EXAMPLE 3: CSV PARSER
+  --------------------------------------------------
+  
   --[[
-    Example 3: Simple CSV Parser
+    Building a Robust CSV Parser
     
-    This example shows how to parse a common data format with 
-    clear, maintainable code, even handling edge cases.
+    This example creates a parser for comma-separated values (CSV) files,
+    properly handling quoted fields, escaped quotes, and multi-line values.
+    
+    Key techniques demonstrated:
+    
+    - Handling different field formats (quoted and unquoted)
+    - Managing special cases (escaped quotes as "")
+    - Building a parser in logical layers (cell → row → document)
+    - Converting raw parsed data into structured data
+    
+    Usage example:
+    ```borf
+    let csv_parser = csv_example() in
+    let data_text = read_file("data.csv") in
+    
+    csv_parser |> parse(data_text) |> match_result(
+      [rows -> 
+        -- Get headers from the first row
+        let headers = rows[0] in
+        
+        -- Process each data row (skip headers)
+        rows |> drop(1) |> for_each([row ->
+          -- Convert row to a record using headers as keys
+          let record = zip(headers, row) |> to_record in
+          
+          -- Process each record
+          "Processing " + record.name + " from " + record.location |> println
+          process_record(record)
+        ])
+      ],
+      [error -> 
+        "Failed to parse CSV: " + error.message |> println
+      ]
+    )
+    ```
+    
+    This pattern is extremely useful for data processing, report generation, 
+    and importing data from spreadsheets or exports from other systems.
   ]]--
   csv_example: () -> Parser [ ->
     -- Define basic parsers
@@ -297,4 +423,45 @@
     -- Joins an array of strings with a separator
     null  -- Placeholder
   ]
+  
+  --------------------------------------------------
+  -- COMMON PARSING PATTERNS
+  --------------------------------------------------
+  
+  --[[
+    APPLYING THESE EXAMPLES TO YOUR OWN PARSERS
+    
+    When building your own parsers, follow this general approach:
+    
+    1. ANALYZE THE FORMAT
+       - Identify the smallest meaningful units (tokens)
+       - Determine the structure and nesting patterns
+       - Note any special cases or edge conditions
+    
+    2. BUILD BOTTOM-UP
+       - Start with parsers for the simplest elements
+       - Combine them to create more complex parsers
+       - Use clear naming to make the structure obvious
+    
+    3. HANDLE WHITESPACE EXPLICITLY
+       - Most formats have specific whitespace rules
+       - Make whitespace handling part of your parser design
+       - Be consistent about where whitespace is consumed
+       
+    4. TRANSFORM AS YOU GO
+       - Use map() to convert parsed text into useful data structures
+       - Process data at the most appropriate level
+       - Build a pipeline of transformations for complex processing
+       
+    5. TEST THOROUGHLY
+       - Verify with valid inputs of various complexity
+       - Ensure invalid inputs produce helpful error messages
+       - Test edge cases and special conditions
+       
+    These patterns will help you build parsers that are:
+    - Easy to understand and maintain
+    - Robust against unexpected inputs
+    - Efficient in both development and execution time
+    - Adaptable to changing format requirements
+  ]]--
 }
