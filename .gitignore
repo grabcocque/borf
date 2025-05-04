@@ -1,0 +1,32 @@
+# Rust build artifacts
+target
+.env
+
+# If you wish to commit lockfile for binaries, remove this; for libraries it's usually ignored
+# Cargo.lock
+
+# Backup files created by rustfmt
+**/*.rs.bk
+
+# IDE/editor files
+.idea/
+.vscode/
+*.swp
+*~
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Generated documentation
+/doc/**
+
+# Optional coverage files
+*.profdata
+coverage/
