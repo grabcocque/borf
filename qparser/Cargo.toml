@@ -1,0 +1,8 @@
+ [package]
+name = "qparser"
+version = "0.1.0"
+edition = "2024"
+
+  [dependencies]
+chumsky = "0.7"
+bumpalo = "3.9"

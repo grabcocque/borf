@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "qparser",
+    "qstorage",
+    "repl",
+]
+resolver = "2"
